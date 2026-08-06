@@ -1,0 +1,129 @@
+{
+  "_comment": "Modular fantasy parts bolted onto a socket when an 'after' word matches 'trigger'. Part positions are relative to the socket. Selection is deterministic: the same three sentences always grow the same creature.",
+  "parts": [
+    {
+      "id": "frost_crest", "display_name": "Frost Crest", "trigger": "cold", "socket": "back",
+      "parts": [
+        {"id": "ice_a", "shape": "cone", "size": [0.22, 0.75, 0.22], "pos": [0, 0, 0.18],  "rot": [-14, 0, 0], "off": [0, 0.38, 0], "role": "ice"},
+        {"id": "ice_b", "shape": "cone", "size": [0.26, 0.95, 0.26], "pos": [0, 0.02, -0.1], "rot": [6, 0, 0],  "off": [0, 0.48, 0], "role": "ice"},
+        {"id": "ice_c", "shape": "cone", "size": [0.2, 0.6, 0.2],    "pos": [0, 0, -0.4],   "rot": [22, 0, 0], "off": [0, 0.3, 0],  "role": "ice"}
+      ]
+    },
+    {
+      "id": "flame_crown", "display_name": "Flame Crown", "trigger": "hot", "socket": "head_top",
+      "parts": [
+        {"id": "fl_a", "shape": "cone", "size": [0.26, 0.62, 0.26], "pos": [0, 0, 0],       "off": [0, 0.31, 0], "role": "fire"},
+        {"id": "fl_b", "shape": "cone", "size": [0.2, 0.42, 0.2],   "pos": [-0.24, -0.04, 0], "rot": [0, 0, -22], "off": [0, 0.21, 0], "role": "fire"},
+        {"id": "fl_c", "shape": "cone", "size": [0.2, 0.42, 0.2],   "pos": [0.24, -0.04, 0],  "rot": [0, 0, 22],  "off": [0, 0.21, 0], "role": "fire"}
+      ]
+    },
+    {
+      "id": "great_horns", "display_name": "Great Horns", "trigger": "big", "socket": "head_top",
+      "parts": [
+        {"id": "hn_l", "shape": "cone", "size": [0.24, 0.85, 0.24], "pos": [-0.3, -0.06, 0], "rot": [-16, 0, -34], "off": [0, 0.43, 0], "role": "horn"},
+        {"id": "hn_r", "shape": "cone", "size": [0.24, 0.85, 0.24], "pos": [0.3, -0.06, 0],  "rot": [-16, 0, 34],  "off": [0, 0.43, 0], "role": "horn"}
+      ]
+    },
+    {
+      "id": "pixie_wings", "display_name": "Pixie Wings", "trigger": "small", "socket": "back",
+      "parts": [
+        {"id": "pw_l", "shape": "box", "size": [0.05, 0.7, 0.42], "pos": [-0.2, 0.28, -0.1], "rot": [0, -28, -22], "role": "wing"},
+        {"id": "pw_r", "shape": "box", "size": [0.05, 0.7, 0.42], "pos": [0.2, 0.28, -0.1],  "rot": [0, 28, 22],   "role": "wing"}
+      ]
+    },
+    {
+      "id": "crown_spire", "display_name": "Crown Spire", "trigger": "tall", "socket": "head_top",
+      "parts": [
+        {"id": "cs_a", "shape": "cone",     "size": [0.2, 1.15, 0.2],  "pos": [0, 0, 0], "off": [0, 0.58, 0], "role": "crystal"},
+        {"id": "cs_b", "shape": "cylinder", "size": [0.34, 0.12, 0.34], "pos": [0, 0.06, 0], "role": "horn"}
+      ]
+    },
+    {
+      "id": "stub_horns", "display_name": "Stub Horns", "trigger": "short", "socket": "head_top",
+      "parts": [
+        {"id": "sh_l", "shape": "cone", "size": [0.22, 0.28, 0.22], "pos": [-0.22, -0.02, 0.02], "rot": [0, 0, -18], "off": [0, 0.14, 0], "role": "horn"},
+        {"id": "sh_r", "shape": "cone", "size": [0.22, 0.28, 0.22], "pos": [0.22, -0.02, 0.02],  "rot": [0, 0, 18],  "off": [0, 0.14, 0], "role": "horn"}
+      ]
+    },
+    {
+      "id": "ribbon_tail", "display_name": "Ribbon Tail", "trigger": "long", "socket": "rear",
+      "parts": [
+        {"id": "rb_a", "shape": "box", "size": [0.28, 0.06, 0.5], "pos": [0, 0.1, -0.3],  "rot": [12, 0, 0], "role": "wing"},
+        {"id": "rb_b", "shape": "box", "size": [0.22, 0.06, 0.5], "pos": [0, 0.24, -0.72], "rot": [24, 0, 0], "role": "wing"},
+        {"id": "rb_c", "shape": "box", "size": [0.16, 0.06, 0.44],"pos": [0, 0.44, -1.06], "rot": [36, 0, 0], "role": "crystal"}
+      ]
+    },
+    {
+      "id": "swift_wings", "display_name": "Swift Wings", "trigger": "fast", "socket": "back",
+      "parts": [
+        {"id": "sw_l", "shape": "box", "size": [0.06, 0.34, 1.2], "pos": [-0.42, 0.2, -0.15], "rot": [0, 0, -16], "role": "wing"},
+        {"id": "sw_r", "shape": "box", "size": [0.06, 0.34, 1.2], "pos": [0.42, 0.2, -0.15],  "rot": [0, 0, 16],  "role": "wing"}
+      ]
+    },
+    {
+      "id": "moss_plates", "display_name": "Moss Plates", "trigger": "slow", "socket": "back",
+      "parts": [
+        {"id": "mp_a", "shape": "box", "size": [0.7, 0.14, 0.4], "pos": [0, 0.06, 0.24],  "rot": [-10, 0, 0], "role": "leaf"},
+        {"id": "mp_b", "shape": "box", "size": [0.8, 0.14, 0.4], "pos": [0, 0.1, -0.14],  "role": "leaf"},
+        {"id": "mp_c", "shape": "box", "size": [0.6, 0.14, 0.36],"pos": [0, 0.06, -0.5],  "rot": [12, 0, 0], "role": "leaf"}
+      ]
+    },
+    {
+      "id": "war_spikes", "display_name": "War Spikes", "trigger": "strong", "socket": "back",
+      "parts": [
+        {"id": "ws_a", "shape": "cone", "size": [0.24, 0.44, 0.24], "pos": [-0.3, 0, 0.16], "rot": [0, 0, -26], "off": [0, 0.22, 0], "role": "horn"},
+        {"id": "ws_b", "shape": "cone", "size": [0.24, 0.44, 0.24], "pos": [0.3, 0, 0.16],  "rot": [0, 0, 26],  "off": [0, 0.22, 0], "role": "horn"},
+        {"id": "ws_c", "shape": "cone", "size": [0.26, 0.52, 0.26], "pos": [0, 0.02, -0.24], "off": [0, 0.26, 0], "role": "horn"}
+      ]
+    },
+    {
+      "id": "antennae", "display_name": "Antennae", "trigger": "weak", "socket": "head_top",
+      "parts": [
+        {"id": "an_l", "shape": "capsule", "size": [0.05, 0.5, 0.05], "pos": [-0.16, 0, 0], "rot": [0, 0, -20], "off": [0, 0.25, 0], "role": "dark"},
+        {"id": "an_r", "shape": "capsule", "size": [0.05, 0.5, 0.05], "pos": [0.16, 0, 0],  "rot": [0, 0, 20],  "off": [0, 0.25, 0], "role": "dark"},
+        {"id": "an_bl","shape": "sphere",  "size": [0.14, 0.14, 0.14],"pos": [-0.32, 0.47, 0], "role": "glow"},
+        {"id": "an_br","shape": "sphere",  "size": [0.14, 0.14, 0.14],"pos": [0.32, 0.47, 0],  "role": "glow"}
+      ]
+    },
+    {
+      "id": "crystal_shards", "display_name": "Crystal Shards", "trigger": "hard", "socket": "back",
+      "parts": [
+        {"id": "cr_a", "shape": "box", "size": [0.2, 0.62, 0.2], "pos": [-0.22, 0.24, 0.1],  "rot": [-12, 20, -18], "role": "crystal"},
+        {"id": "cr_b", "shape": "box", "size": [0.24, 0.8, 0.24], "pos": [0.08, 0.34, -0.16], "rot": [8, -14, 12],  "role": "crystal"},
+        {"id": "cr_c", "shape": "box", "size": [0.16, 0.46, 0.16], "pos": [0.3, 0.18, 0.22],  "rot": [16, 8, 26],   "role": "crystal"}
+      ]
+    },
+    {
+      "id": "fluff_puffs", "display_name": "Fluff Puffs", "trigger": "soft", "socket": "back",
+      "parts": [
+        {"id": "fp_a", "shape": "sphere", "size": [0.44, 0.44, 0.44], "pos": [0, 0.14, 0.22]},
+        {"id": "fp_b", "shape": "sphere", "size": [0.5, 0.5, 0.5],    "pos": [-0.24, 0.2, -0.12]},
+        {"id": "fp_c", "shape": "sphere", "size": [0.46, 0.46, 0.46], "pos": [0.26, 0.16, -0.2]},
+        {"id": "fp_d", "shape": "sphere", "size": [0.36, 0.36, 0.36], "pos": [0, 0.26, -0.46]}
+      ]
+    },
+    {
+      "id": "elder_beard", "display_name": "Elder Beard", "trigger": "old", "socket": "face",
+      "parts": [
+        {"id": "eb_a", "shape": "capsule", "size": [0.3, 0.62, 0.3], "pos": [0, -0.1, 0.02], "off": [0, -0.31, 0], "role": "belly"},
+        {"id": "eb_b", "shape": "box",     "size": [0.5, 0.09, 0.14], "pos": [0, 0.1, 0.04], "role": "belly"}
+      ]
+    },
+    {
+      "id": "aura_orbs", "display_name": "Aura Orbs", "trigger": "new", "socket": "back",
+      "parts": [
+        {"id": "ao_a", "shape": "sphere", "size": [0.2, 0.2, 0.2], "pos": [-0.5, 0.5, 0.1],  "role": "glow"},
+        {"id": "ao_b", "shape": "sphere", "size": [0.26, 0.26, 0.26], "pos": [0.1, 0.75, -0.2], "role": "glow"},
+        {"id": "ao_c", "shape": "sphere", "size": [0.18, 0.18, 0.18], "pos": [0.52, 0.42, 0.16], "role": "glow"}
+      ]
+    },
+    {
+      "id": "spring_sprout", "display_name": "Spring Sprout", "trigger": "young", "socket": "head_top",
+      "parts": [
+        {"id": "sp_a", "shape": "capsule", "size": [0.06, 0.34, 0.06], "pos": [0, 0, 0], "off": [0, 0.17, 0], "role": "leaf"},
+        {"id": "sp_b", "shape": "sphere",  "size": [0.34, 0.16, 0.24], "pos": [-0.16, 0.34, 0], "rot": [0, 0, 24], "role": "leaf"},
+        {"id": "sp_c", "shape": "sphere",  "size": [0.3, 0.14, 0.2],   "pos": [0.16, 0.4, 0.02], "rot": [0, 0, -30], "role": "leaf"}
+      ]
+    }
+  ]
+}

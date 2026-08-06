@@ -1,0 +1,14 @@
+{
+  "_comment": "Opposite pairs. Add a pair here and it appears in the Word Lab with no code changes. 'modifier' selects the visual effect (see scripts/creature/trait_visuals.gd); value_a / value_b are that effect's strength for each word.",
+  "pairs": [
+    {"id": "size",        "category": "SIZE",        "word_a": "big",    "word_b": "small", "modifier": "SCALE_UNIFORM", "value_a": 1.45, "value_b": 0.58},
+    {"id": "height",      "category": "HEIGHT",      "word_a": "tall",   "word_b": "short", "modifier": "SCALE_Y",       "value_a": 1.55, "value_b": 0.62},
+    {"id": "length",      "category": "LENGTH",      "word_a": "long",   "word_b": "short", "modifier": "SCALE_FEATURE", "value_a": 2.30, "value_b": 0.40},
+    {"id": "age",         "category": "AGE",         "word_a": "young",  "word_b": "old",   "modifier": "AGE",           "value_a": 0.00, "value_b": 1.00},
+    {"id": "condition",   "category": "CONDITION",   "word_a": "old",    "word_b": "new",   "modifier": "SURFACE",       "value_a": 1.00, "value_b": 0.00},
+    {"id": "hardness",    "category": "HARDNESS",    "word_a": "hard",   "word_b": "soft",  "modifier": "MATERIAL",      "value_a": 1.00, "value_b": 0.00},
+    {"id": "strength",    "category": "STRENGTH",    "word_a": "strong", "word_b": "weak",  "modifier": "BULK",          "value_a": 1.35, "value_b": 0.72},
+    {"id": "speed",       "category": "SPEED",       "word_a": "fast",   "word_b": "slow",  "modifier": "TEMPO",         "value_a": 2.00, "value_b": 0.45},
+    {"id": "temperature", "category": "TEMPERATURE", "word_a": "hot",    "word_b": "cold",  "modifier": "THERMAL",       "value_a": 1.00, "value_b": -1.00}
+  ]
+}
