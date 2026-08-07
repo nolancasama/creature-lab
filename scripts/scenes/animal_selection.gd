@@ -1,22 +1,75 @@
 extends Node3D
-## Pick the animal that will be programmed. One live 3D preview rather than ten small
-## ones: it costs a tenth as much to render and it shows the child what they are choosing.
+## Pick an animal, then record its three sentences - all without ever leaving this
+## screen. Picking and speaking are one continuous action, not two different places to
+## be: the animal keeps rotating throughout, and only once "Now it is..." is fully
+## programmed does the game cut to the transformation chamber.
+##
+## Two local UI sub-states, not global FSM phases (the FSM only sees one
+## Phase.ANIMAL_SELECTION for all of it):
+##   PICKING   - grid of animal buttons, live rotating preview, a confirm button.
+##   RECORDING - DNA Log on the left, Word Lab + Say It stacked on the right.
 
 const PREVIEW_SPIN := 0.45
+const SUCCESS_PAUSE := 1.1
 
-var _selected := ""
-var _preview: CreatureRig = null
+const PLATFORM_POS := Vector3(0.4, 0.0, 0.6)
+const CAMERA_POS := Vector3(2.2, 2.9, 7.8)
+const CAMERA_AIM := Vector3(0.4, 1.0, 0.0)
+
+const DNA_PANEL_WIDTH := 380
+const RIGHT_PANEL_WIDTH := 480
+
+enum Mode { PICKING, RECORDING }
+
+var _mode: Mode = Mode.PICKING
+
+# Stage
 var _preview_root: Node3D = null
+var _rig: CreatureRig = null
+
+# Picking UI
+var _picking_panel: Control = null
 var _buttons := {}
 var _name_label: Label = null
+var _selected := ""
+
+# Recording UI
+var _root: Control = null
+var _top_bar: Control = null
+var _progress: Label = null
+var _dna_log: DnaLog = null
+var _word_lab: WordLab = null
+var _speech: SpeechPanel = null
+
+var _pending := {}
+var _attempts := 0
+var _busy := false
 
 
 func _ready() -> void:
+	# This screen is quiet - no chamber hum until the player actually reaches the
+	# chamber. Title's looping ambience would otherwise keep playing underneath it.
+	Audio.play_ambience(false)
+
 	_build_stage()
-	_build_ui()
+	_build_root()
+	_build_picking_panel()
+
 	var ids := Content.animal_ids()
-	if not ids.is_empty():
-		_select(ids[0])
+	if Game.current == null and not ids.is_empty():
+		_preview(ids[0])
+
+	Speech.heard.connect(_on_heard)
+	Game.debug_action.connect(_on_debug_action)
+
+	# Re-entering with a creature already begun - a debug jump, or returning from
+	# Teacher Settings mid-round - skips straight to recording with progress intact.
+	if Game.current != null:
+		_enter_recording()
+
+
+func _exit_tree() -> void:
+	Speech.stop()
 
 
 func _process(delta: float) -> void:
@@ -24,39 +77,46 @@ func _process(delta: float) -> void:
 		_preview_root.rotation.y += delta * PREVIEW_SPIN
 
 
+# --- Stage ---------------------------------------------------------------------
+
 func _build_stage() -> void:
 	add_child(StageKit.environment(Color("#16243c"), Color("#2b4a72"), 0.5))
 	add_child(StageKit.key_light())
 	add_child(StageKit.fill_light(UiKit.ACCENT, Vector3(-3.0, 3.2, 3.2), 2.4, 14.0))
 	add_child(StageKit.ground(9.0, Color("#141d2c")))
 
-	var platform := StageKit.platform(1.9, Color("#22304a"), UiKit.ACCENT)
+	var platform := StageKit.platform(1.8, Color("#22304a"), UiKit.ACCENT)
+	platform.position = PLATFORM_POS
 	add_child(platform)
 
 	_preview_root = Node3D.new()
 	_preview_root.name = "PreviewRoot"
-	_preview_root.position.y = 0.28
+	_preview_root.position = PLATFORM_POS + Vector3(0, 0.28, 0)
 	add_child(_preview_root)
 
-	add_child(StageKit.camera(Vector3(3.4, 2.6, 6.4), Vector3(0.9, 1.2, 0.0), 48.0))
+	add_child(StageKit.camera(CAMERA_POS, CAMERA_AIM, 48.0))
 
 
-func _build_ui() -> void:
+func _build_root() -> void:
 	var layer := StageKit.ui_layer()
 	add_child(layer)
+	_root = Control.new()
+	_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	layer.add_child(_root)
 
-	var root := Control.new()
-	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	layer.add_child(root)
 
+# --- Picking sub-state -----------------------------------------------------------
+
+func _build_picking_panel() -> void:
 	var panel := UiKit.panel(Color(0.06, 0.1, 0.16, 0.92), 18, 2, UiKit.PANEL_HI)
 	panel.set_anchors_and_offsets_preset(Control.PRESET_RIGHT_WIDE)
 	panel.offset_left = -680
 	panel.offset_right = -32
 	panel.offset_top = 40
 	panel.offset_bottom = -40
-	root.add_child(panel)
+	_root.add_child(panel)
+	_picking_panel = panel
 
 	var column := UiKit.vbox(14)
 	panel.add_child(column)
@@ -71,7 +131,7 @@ func _build_ui() -> void:
 	for def in Content.animals:
 		var b := UiKit.button(def.display_name, UiKit.H3)
 		b.custom_minimum_size = Vector2(196, 62)
-		b.pressed.connect(_select.bind(def.id))
+		b.pressed.connect(_preview.bind(def.id))
 		grid.add_child(b)
 		_buttons[def.id] = b
 
@@ -92,23 +152,23 @@ func _build_ui() -> void:
 
 	row.add_child(UiKit.expander())
 
-	var go := UiKit.button("Take to the Lab  →", UiKit.H3, true)
+	var go := UiKit.button("Start Creating  →", UiKit.H3, true)
 	go.custom_minimum_size = Vector2(300, 58)
 	go.pressed.connect(_confirm)
 	row.add_child(go)
 
 
-func _select(animal_id: String) -> void:
+func _preview(animal_id: String) -> void:
 	if animal_id == _selected:
 		return
 	_selected = animal_id
 	Audio.play("select")
 
-	if _preview != null:
-		_preview.queue_free()
-	_preview = CreatureFactory.build_plain(animal_id)
-	if _preview != null:
-		_preview_root.add_child(_preview)
+	if _rig != null:
+		_rig.queue_free()
+	_rig = CreatureFactory.build_plain(animal_id)
+	if _rig != null:
+		_preview_root.add_child(_rig)
 	_preview_root.rotation.y = -0.7
 
 	var def := Content.animal(animal_id)
@@ -120,8 +180,252 @@ func _select(animal_id: String) -> void:
 
 
 func _confirm() -> void:
-	if _selected.is_empty():
+	if _selected.is_empty() or _mode != Mode.PICKING:
 		return
 	Audio.play("charge")
 	Game.begin_creature(_selected)
-	Game.set_phase(Game.Phase.CREATURE_LAB)
+	_enter_recording()
+
+
+# --- Recording sub-state -----------------------------------------------------------
+
+## Swaps the picking panel for the DNA Log / Word Lab / Say It layout in place - the
+## screen never changes, only what is shown on top of it.
+func _enter_recording() -> void:
+	_mode = Mode.RECORDING
+	if _picking_panel != null:
+		_picking_panel.queue_free()
+		_picking_panel = null
+
+	_build_recording_ui()
+	_refresh_rig()
+	_sync_ui()
+
+
+func _build_recording_ui() -> void:
+	_top_bar = _build_top_bar()
+	_root.add_child(_top_bar)
+
+	_dna_log = DnaLog.new()
+	_dna_log.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
+	_dna_log.offset_left = 24
+	_dna_log.offset_top = 78
+	_dna_log.offset_right = 24 + DNA_PANEL_WIDTH
+	_dna_log.offset_bottom = 78 + 320
+	_root.add_child(_dna_log)
+
+	var right := UiKit.vbox(12)
+	right.set_anchors_and_offsets_preset(Control.PRESET_RIGHT_WIDE)
+	right.offset_left = -(RIGHT_PANEL_WIDTH + 24)
+	right.offset_right = -24
+	right.offset_top = 78
+	right.offset_bottom = -24
+	_root.add_child(right)
+
+	# Word Lab has more content than a narrow column can always guarantee height for;
+	# it scrolls if needed so Say It below it never gets squeezed off-screen.
+	var word_scroll := ScrollContainer.new()
+	word_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	word_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	right.add_child(word_scroll)
+
+	_word_lab = WordLab.new()
+	_word_lab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_word_lab.pair_selected.connect(_on_pair_selected)
+	word_scroll.add_child(_word_lab)
+
+	_speech = SpeechPanel.new()
+	_speech.custom_minimum_size = Vector2(0, 340)
+	_speech.change_requested.connect(_cancel_pending)
+	_speech.accepted_by_teacher.connect(func() -> void: _commit(true))
+	right.add_child(_speech)
+
+
+func _build_top_bar() -> Control:
+	var bar := UiKit.panel(Color(0.05, 0.09, 0.15, 0.9), 0)
+	bar.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
+	bar.offset_bottom = 62
+
+	var row := UiKit.hbox(14)
+	bar.add_child(row)
+
+	var def: AnimalDefinition = null
+	if Game.current != null:
+		def = Content.animal(Game.current.animal_id)
+	row.add_child(UiKit.label("CREATURE LAB", UiKit.H3, UiKit.ACCENT))
+	row.add_child(UiKit.label("•", UiKit.H3, UiKit.MUTED))
+	row.add_child(UiKit.label(def.display_name if def != null else "-", UiKit.H3, UiKit.TEXT))
+
+	_progress = UiKit.label("", UiKit.BODY, UiKit.GOLD)
+	row.add_child(_progress)
+	row.add_child(UiKit.expander())
+
+	var settings := UiKit.button("Teacher", UiKit.SMALL)
+	settings.pressed.connect(func() -> void: Game.open_settings())
+	row.add_child(settings)
+
+	var quit := UiKit.button("Menu", UiKit.SMALL)
+	quit.pressed.connect(func() -> void: Game.set_phase(Game.Phase.TITLE))
+	row.add_child(quit)
+
+	return bar
+
+
+func _sync_ui() -> void:
+	if Game.current == null:
+		return
+	var assigned := _assigned_category()
+	var text := "Sentence %d of %d" % [mini(Game.current.slots_filled() + 1, CreatureState.SLOTS), CreatureState.SLOTS]
+	if not assigned.is_empty():
+		var pair := Content.pair_for_category(assigned)
+		text += "  •  use %s" % ("colours" if pair == null else "%s ↔ %s" % [pair.word_a, pair.word_b])
+	if _progress != null:
+		_progress.text = text
+
+	_dna_log.sync(Game.current)
+	_word_lab.set_used(Game.current.used_categories())
+	_word_lab.set_restriction(assigned)
+	_word_lab.set_locked(not _pending.is_empty() or _busy)
+
+
+## Guided mode hands the student one pair per sentence instead of the whole board. The
+## choice is fixed for the round (seeded from this creature) so it does not shuffle
+## under the student between redraws.
+func _assigned_category() -> String:
+	if Settings.choice_mode != Settings.CHOICE_GUIDED or Game.current == null:
+		return ""
+	var remaining := PackedStringArray()
+	var used := Game.current.used_categories()
+	for pair in Content.enabled_pairs():
+		if not used.has(pair.category):
+			remaining.append(pair.category)
+	if not Content.enabled_colors().is_empty() and not used.has(Content.COLOR_CATEGORY):
+		remaining.append(Content.COLOR_CATEGORY)
+	if remaining.is_empty():
+		return ""
+	var round_seed: int = absi(("%s%d" % [Game.current.animal_id, Game.current.created_unix]).hash())
+	return remaining[(round_seed + Game.current.slots_filled() * 7) % remaining.size()]
+
+
+## Rebuild the animal from the committed "It was" traits plus whatever card is
+## currently selected but not yet spoken.
+func _refresh_rig() -> void:
+	if Game.current == null:
+		return
+	var pending_traits := {}
+	if not _pending.is_empty():
+		pending_traits[str(_pending["category"])] = str(_pending["before"])
+	if _rig != null:
+		_rig.queue_free()
+	_rig = CreatureFactory.build_lab_animal(Game.current, pending_traits)
+	if _rig != null:
+		_preview_root.add_child(_rig)
+
+
+## A short pop so a newly applied "It was..." trait is felt, not just seen.
+func _punch() -> void:
+	if _rig == null:
+		return
+	var tween := create_tween()
+	tween.tween_property(_rig, "scale", Vector3.ONE * 1.07, 0.12).set_trans(Tween.TRANS_SINE)
+	tween.tween_property(_rig, "scale", Vector3.ONE, 0.3).set_trans(Tween.TRANS_BACK)
+	Fx.burst(_preview_root, Vector3(0, 0.3, 0), "sparkle", UiKit.ACCENT, 1.4)
+
+
+func _on_pair_selected(category: String, before: String, after: String) -> void:
+	if _busy or not _pending.is_empty() or Game.current == null or Game.current.is_complete():
+		return
+	_pending = {"category": category, "before": before, "after": after}
+	_attempts = 0
+	_refresh_rig()
+	_punch()
+	_word_lab.set_locked(true)
+	_speech.show_target(before, after)
+
+
+func _cancel_pending() -> void:
+	if _busy or _pending.is_empty():
+		return
+	_pending = {}
+	_attempts = 0
+	_refresh_rig()
+	_word_lab.set_locked(false)
+	_speech.show_idle("Pick another card.")
+
+
+func _on_heard(alternatives: PackedStringArray, is_final: bool) -> void:
+	if _mode != Mode.RECORDING or not is_final or _busy or _pending.is_empty() or not _speech.is_armed():
+		return
+	_evaluate(alternatives)
+
+
+## Every alternative the recogniser offered gets a chance; the first that passes wins,
+## otherwise the best-diagnosed failure is what the student is shown.
+func _evaluate(alternatives: PackedStringArray) -> void:
+	var before := str(_pending["before"])
+	var after := str(_pending["after"])
+	var best := {}
+	for alternative in alternatives:
+		var result := GrammarValidator.validate(alternative, before, after, Settings.strictness)
+		if bool(result["ok"]):
+			_commit(false)
+			return
+		if best.is_empty() or _score(result) > _score(best):
+			best = result
+	if best.is_empty():
+		best = GrammarValidator.validate("", before, after, Settings.strictness)
+	_attempts += 1
+	_speech.show_failure(best, _attempts)
+
+
+## How close a failed attempt got, so the most useful diagnosis is the one shown.
+static func _score(result: Dictionary) -> int:
+	var value := 0
+	if bool(result.get("said_before", false)):
+		value += 1
+	if bool(result.get("said_after", false)):
+		value += 1
+	if bool(result.get("frame_before", false)):
+		value += 2
+	if bool(result.get("frame_after", false)):
+		value += 2
+	return value
+
+
+func _commit(assisted: bool) -> void:
+	if _pending.is_empty() or _busy:
+		return
+	_busy = true
+	var category := str(_pending["category"])
+	var before := str(_pending["before"])
+	var after := str(_pending["after"])
+	_pending = {}
+
+	Game.record_sentence(category, before, after, assisted)
+	var index := Game.current.slots_filled() - 1
+	_dna_log.set_slot(index, str(Game.current.entries[index]["sentence"]))
+	Audio.play("success")
+	Fx.burst(_preview_root, Vector3(0, 0.4, 0), "sparkle", UiKit.OK, 1.6)
+	_speech.show_success()
+	# The rig is NOT rebuilt here: the BEFORE word is already applied, and the AFTER
+	# word must not appear until the chamber runs on the next screen.
+	_finish_sentence()
+
+
+func _finish_sentence() -> void:
+	await get_tree().create_timer(SUCCESS_PAUSE).timeout
+	if not is_inside_tree():
+		return
+	_busy = false
+	if Game.current != null and Game.current.is_complete():
+		Game.set_phase(Game.Phase.CREATURE_LAB)
+	else:
+		_word_lab.set_locked(false)
+		_speech.show_idle("Choose your next card.")
+		_sync_ui()
+
+
+func _on_debug_action(action: String) -> void:
+	if action == "auto_answer" and not _pending.is_empty():
+		Speech.submit_typed(GrammarValidator.expected_sentence(
+			str(_pending["before"]), str(_pending["after"])))

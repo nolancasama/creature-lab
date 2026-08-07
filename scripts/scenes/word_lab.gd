@@ -8,8 +8,12 @@ extends PanelContainer
 
 signal pair_selected(category: String, before: String, after: String)
 
-const CARD_SIZE := Vector2(190, 44)
-const SWATCH_SIZE := Vector2(92, 44)
+## Sized for a narrow vertical side panel rather than a wide horizontal strip - this
+## sits stacked above the Say It panel now, not spanning the bottom of the screen.
+const CARD_SIZE := Vector2(140, 44)
+const SWATCH_SIZE := Vector2(82, 44)
+const PAIR_COLUMNS := 3
+const COLOR_COLUMNS := 4
 
 var _pair_buttons := {} ## "category|word" -> Button
 var _color_buttons := {} ## word -> Button
@@ -23,16 +27,12 @@ var _restriction := "" ## Guided mode: only this category may be chosen. Empty =
 
 
 func _ready() -> void:
-	add_theme_stylebox_override("panel", UiKit.stylebox(Color(0.06, 0.1, 0.16, 0.92), 16, 2, UiKit.PANEL_HI))
-	var column := UiKit.vbox(8)
+	add_theme_stylebox_override("panel", UiKit.stylebox(Color(0.06, 0.1, 0.16, 0.92), 16, 2, UiKit.PANEL_HI, 10))
+	var column := UiKit.vbox(6)
 	add_child(column)
 
-	var header := UiKit.hbox(10)
-	column.add_child(header)
-	header.add_child(UiKit.label("WORD LAB", UiKit.H3, UiKit.ACCENT))
-	header.add_child(UiKit.expander())
-	header.add_child(UiKit.label("Tap the word it WAS.", UiKit.SMALL, UiKit.GOLD))
-
+	column.add_child(UiKit.label("WORD LAB", UiKit.H3, UiKit.ACCENT))
+	column.add_child(UiKit.label("Tap the word it WAS.", UiKit.SMALL, UiKit.GOLD))
 	column.add_child(_build_pairs())
 	column.add_child(UiKit.spacer(2))
 
@@ -43,9 +43,9 @@ func _ready() -> void:
 
 func _build_pairs() -> Control:
 	var grid := GridContainer.new()
-	grid.columns = 5
-	grid.add_theme_constant_override("h_separation", 8)
-	grid.add_theme_constant_override("v_separation", 8)
+	grid.columns = PAIR_COLUMNS
+	grid.add_theme_constant_override("h_separation", 6)
+	grid.add_theme_constant_override("v_separation", 6)
 
 	for pair in Content.enabled_pairs():
 		var card := UiKit.panel(Color("#101a2b"), 10, 0, Color.TRANSPARENT, 6)
@@ -63,8 +63,8 @@ func _build_pairs() -> Control:
 
 
 func _word_button(pair: TraitDefinition, word: String) -> Button:
-	var b := UiKit.button(word, UiKit.BODY)
-	b.custom_minimum_size = Vector2(76, 40)
+	var b := UiKit.button(word, UiKit.SMALL)
+	b.custom_minimum_size = Vector2(48, 40)
 	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	b.pressed.connect(func() -> void: _choose_pair(pair, word))
 	# A long press reads the pair aloud without selecting anything.
@@ -77,12 +77,12 @@ func _word_button(pair: TraitDefinition, word: String) -> Button:
 
 func _build_colors() -> Control:
 	var grid := GridContainer.new()
-	grid.columns = 10
-	grid.add_theme_constant_override("h_separation", 8)
-	grid.add_theme_constant_override("v_separation", 8)
+	grid.columns = COLOR_COLUMNS
+	grid.add_theme_constant_override("h_separation", 6)
+	grid.add_theme_constant_override("v_separation", 6)
 
 	for swatch in Content.enabled_colors():
-		var b := UiKit.button(swatch.word, UiKit.BODY)
+		var b := UiKit.button(swatch.word, UiKit.SMALL)
 		b.custom_minimum_size = SWATCH_SIZE
 		UiKit.style_button(b, swatch.color)
 		b.add_theme_color_override("font_color", swatch.label_color())

@@ -95,7 +95,12 @@ static func _goto(phase: String) -> void:
 		"select":
 			Game.set_phase(Game.Phase.ANIMAL_SELECTION)
 		"lab":
+			# The recording sub-state of ANIMAL_SELECTION: Game.current already begun,
+			# so the scene's _ready() skips the picking grid and goes straight there.
 			Game.begin_creature("elephant" if ids.has("elephant") else ids[0])
+			Game.set_phase(Game.Phase.ANIMAL_SELECTION)
+		"chamber":
+			_seed_full_creature(ids)
 			Game.set_phase(Game.Phase.ANIMAL_SELECTION)
 			Game.set_phase(Game.Phase.CREATURE_LAB)
 		"naming":

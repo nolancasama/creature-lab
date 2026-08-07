@@ -120,7 +120,7 @@ static func burst(parent: Node3D, at: Vector3, kind: String, tint: Color, radius
 	particles.position = at
 	parent.add_child(particles)
 	particles.emitting = true
-	var timer := parent.get_tree().create_timer(particles.lifetime + 0.4)
-	timer.timeout.connect(func() -> void:
-		if is_instance_valid(particles):
-			particles.queue_free())
+	# `finished` is a signal on the particle node itself, so the queue_free connection
+	# is self-contained - unlike an external SceneTreeTimer capturing `particles` as a
+	# closure upvalue, there is no way for this reference to go stale.
+	particles.finished.connect(particles.queue_free)
