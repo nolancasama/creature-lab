@@ -36,7 +36,7 @@ func _ready() -> void:
 	column.add_child(_build_pairs())
 	column.add_child(UiKit.spacer(2))
 
-	_color_hint = UiKit.label("Colours — tap the colour it WAS.", UiKit.SMALL, UiKit.MUTED)
+	_color_hint = UiKit.label("Colours - tap the colour it WAS.", UiKit.SMALL, UiKit.MUTED)
 	column.add_child(_color_hint)
 	column.add_child(_build_colors())
 
@@ -53,7 +53,11 @@ func _build_pairs() -> Control:
 		var row := UiKit.hbox(4)
 		card.add_child(row)
 		row.add_child(_word_button(pair, pair.word_a))
-		var swap := UiKit.label("↔", UiKit.SMALL, UiKit.MUTED)
+		# Plain ASCII, not a unicode arrow glyph: the web export's font atlas doesn't
+		# carry every symbol the desktop editor renders fine, and "/" is guaranteed
+		# to exist in any font.
+		var swap := UiKit.label("/", UiKit.SMALL, UiKit.MUTED)
+		swap.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		swap.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		row.add_child(swap)
 		row.add_child(_word_button(pair, pair.word_b))
@@ -174,10 +178,10 @@ func _refresh_colors() -> void:
 	if _color_hint == null:
 		return
 	if colors_done:
-		_color_hint.text = "Colours — already used this round."
+		_color_hint.text = "Colours - already used this round."
 	elif colors_blocked:
-		_color_hint.text = "Colours — not this time."
+		_color_hint.text = "Colours - not this time."
 	elif _color_before.is_empty():
-		_color_hint.text = "Colours — tap the colour it WAS."
+		_color_hint.text = "Colours - tap the colour it WAS."
 	else:
-		_color_hint.text = "It was %s… now tap the colour it is NOW." % _color_before
+		_color_hint.text = "It was %s... now tap the colour it is NOW." % _color_before

@@ -18,6 +18,7 @@ const CAMERA_AIM := Vector3(0.4, 1.0, 0.0)
 
 const DNA_PANEL_WIDTH := 380
 const RIGHT_PANEL_WIDTH := 480
+const RIGHT_MARGIN := 44 ## Wider than the left margin - a 24px gap read as hugging the edge.
 
 enum Mode { PICKING, RECORDING }
 
@@ -152,7 +153,7 @@ func _build_picking_panel() -> void:
 
 	row.add_child(UiKit.expander())
 
-	var go := UiKit.button("Start Creating  →", UiKit.H3, true)
+	var go := UiKit.button("Start Creating  ->", UiKit.H3, true)
 	go.custom_minimum_size = Vector2(300, 58)
 	go.pressed.connect(_confirm)
 	row.add_child(go)
@@ -216,8 +217,8 @@ func _build_recording_ui() -> void:
 
 	var right := UiKit.vbox(12)
 	right.set_anchors_and_offsets_preset(Control.PRESET_RIGHT_WIDE)
-	right.offset_left = -(RIGHT_PANEL_WIDTH + 24)
-	right.offset_right = -24
+	right.offset_left = -(RIGHT_PANEL_WIDTH + RIGHT_MARGIN)
+	right.offset_right = -RIGHT_MARGIN
 	right.offset_top = 78
 	right.offset_bottom = -24
 	_root.add_child(right)
@@ -253,7 +254,7 @@ func _build_top_bar() -> Control:
 	if Game.current != null:
 		def = Content.animal(Game.current.animal_id)
 	row.add_child(UiKit.label("CREATURE LAB", UiKit.H3, UiKit.ACCENT))
-	row.add_child(UiKit.label("•", UiKit.H3, UiKit.MUTED))
+	row.add_child(UiKit.label("-", UiKit.H3, UiKit.MUTED))
 	row.add_child(UiKit.label(def.display_name if def != null else "-", UiKit.H3, UiKit.TEXT))
 
 	_progress = UiKit.label("", UiKit.BODY, UiKit.GOLD)
@@ -278,7 +279,7 @@ func _sync_ui() -> void:
 	var text := "Sentence %d of %d" % [mini(Game.current.slots_filled() + 1, CreatureState.SLOTS), CreatureState.SLOTS]
 	if not assigned.is_empty():
 		var pair := Content.pair_for_category(assigned)
-		text += "  •  use %s" % ("colours" if pair == null else "%s ↔ %s" % [pair.word_a, pair.word_b])
+		text += "  -  use %s" % ("colours" if pair == null else "%s / %s" % [pair.word_a, pair.word_b])
 	if _progress != null:
 		_progress.text = text
 

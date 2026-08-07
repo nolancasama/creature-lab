@@ -96,7 +96,7 @@ func _build_ui() -> void:
 
 	var column := UiKit.vbox(10)
 	panel.add_child(column)
-	column.add_child(UiKit.title("You created…", UiKit.H3, UiKit.MUTED))
+	column.add_child(UiKit.title("You created...", UiKit.H3, UiKit.MUTED))
 
 	_entry = UiKit.line_edit("Name your creature")
 	_entry.text = Game.current.generated_name
@@ -129,7 +129,7 @@ func _build_ui() -> void:
 			Tts.speak("%s. %s" % [_current_name(), " ".join(Game.current.sentences())]))
 		row.add_child(listen)
 
-	var send := UiKit.button("Send to my Zoo  →", UiKit.H3, true)
+	var send := UiKit.button("Send to my Zoo  ->", UiKit.H3, true)
 	send.custom_minimum_size = Vector2(300, 54)
 	send.pressed.connect(_send_to_zoo)
 	row.add_child(send)
@@ -144,11 +144,11 @@ func _build_captions() -> Control:
 	bar.offset_left = 60
 	bar.offset_right = -60
 
-	var was := UiKit.title("It was…", UiKit.H2, UiKit.MUTED)
+	var was := UiKit.title("It was...", UiKit.H2, UiKit.MUTED)
 	was.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	bar.add_child(was)
 
-	var now := UiKit.title("Now it is…", UiKit.H2, UiKit.GOLD)
+	var now := UiKit.title("Now it is...", UiKit.H2, UiKit.GOLD)
 	now.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	bar.add_child(now)
 	return bar

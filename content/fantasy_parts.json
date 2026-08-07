@@ -110,14 +110,6 @@
       ]
     },
     {
-      "id": "aura_orbs", "display_name": "Aura Orbs", "trigger": "new", "socket": "back",
-      "parts": [
-        {"id": "ao_a", "shape": "sphere", "size": [0.2, 0.2, 0.2], "pos": [-0.5, 0.5, 0.1],  "role": "glow"},
-        {"id": "ao_b", "shape": "sphere", "size": [0.26, 0.26, 0.26], "pos": [0.1, 0.75, -0.2], "role": "glow"},
-        {"id": "ao_c", "shape": "sphere", "size": [0.18, 0.18, 0.18], "pos": [0.52, 0.42, 0.16], "role": "glow"}
-      ]
-    },
-    {
       "id": "spring_sprout", "display_name": "Spring Sprout", "trigger": "young", "socket": "head_top",
       "parts": [
         {"id": "sp_a", "shape": "capsule", "size": [0.06, 0.34, 0.06], "pos": [0, 0, 0], "off": [0, 0.17, 0], "role": "leaf"},

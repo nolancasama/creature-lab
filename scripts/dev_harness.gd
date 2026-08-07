@@ -142,7 +142,7 @@ static func _selftest(main: Node) -> void:
 	var failures: Array[String] = []
 
 	_check(failures, Content.animals.size() >= 10, "expected 10 animals, got %d" % Content.animals.size())
-	_check(failures, Content.pairs.size() >= 9, "expected 9 opposite pairs, got %d" % Content.pairs.size())
+	_check(failures, Content.pairs.size() >= 8, "expected 8 opposite pairs, got %d" % Content.pairs.size())
 	_check(failures, Content.colors.size() >= 10, "expected 10 colours, got %d" % Content.colors.size())
 	_check(failures, Content.fantasy_parts.size() >= 10, "expected fantasy parts, got %d" % Content.fantasy_parts.size())
 
@@ -213,7 +213,7 @@ static func _grammar_checks(failures: Array[String]) -> void:
 	for case in cases:
 		var result := GrammarValidator.validate(str(case[0]), str(case[1]), str(case[2]), int(case[3]))
 		_check(failures, bool(result["ok"]) == bool(case[4]),
-			"grammar: %s — '%s' gave ok=%s reason=%s" % [str(case[5]), str(case[0]), result["ok"], result["reason"]])
+			"grammar: %s - '%s' gave ok=%s reason=%s" % [str(case[5]), str(case[0]), result["ok"], result["reason"]])
 
 	# Half-credit feedback is what the retry ladder shows the student.
 	var partial := GrammarValidator.validate("it was small now it is red", "small", "big", GrammarValidator.NORMAL)

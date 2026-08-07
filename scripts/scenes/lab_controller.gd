@@ -73,7 +73,7 @@ func _build_top_bar() -> Control:
 	if Game.current != null:
 		def = Content.animal(Game.current.animal_id)
 	row.add_child(UiKit.label("CREATURE LAB", UiKit.H3, UiKit.ACCENT))
-	row.add_child(UiKit.label("•", UiKit.H3, UiKit.MUTED))
+	row.add_child(UiKit.label("-", UiKit.H3, UiKit.MUTED))
 	row.add_child(UiKit.label(def.display_name if def != null else "-", UiKit.H3, UiKit.TEXT))
 	row.add_child(UiKit.expander())
 

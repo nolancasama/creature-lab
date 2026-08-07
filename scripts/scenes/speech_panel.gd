@@ -78,7 +78,7 @@ func _build() -> void:
 	_feedback.custom_minimum_size = Vector2(0, 44)
 	column.add_child(_feedback)
 
-	_override_button = UiKit.button("That was right — accept it", UiKit.SMALL)
+	_override_button = UiKit.button("That was right - accept it", UiKit.SMALL)
 	_override_button.visible = false
 	_override_button.pressed.connect(func() -> void:
 		Audio.play("success")
@@ -187,7 +187,7 @@ func _set_chips(words: Array) -> void:
 	if words.is_empty():
 		return
 	_chips.add_child(_chip("was", str(words[0])))
-	_chips.add_child(UiKit.label("→", UiKit.H3, UiKit.MUTED))
+	_chips.add_child(UiKit.label("->", UiKit.H3, UiKit.MUTED))
 	_chips.add_child(_chip("now", str(words[1])))
 	_chips.add_child(UiKit.expander())
 
@@ -233,7 +233,7 @@ func _on_mic_up() -> void:
 func _on_listening_changed(listening: bool) -> void:
 	if not Speech.uses_microphone():
 		return
-	_mic_button.text = "Listening…" if listening else "Hold to speak  (Space)"
+	_mic_button.text = "Listening..." if listening else "Hold to speak  (Space)"
 	UiKit.style_button(_mic_button, UiKit.OK if listening else UiKit.ACCENT, true)
 
 
@@ -256,13 +256,13 @@ func _message_for(result: Dictionary) -> String:
 		"empty":
 			return "I didn't hear anything. Try again!"
 		"nothing":
-			return "Try again — I heard \"%s\"." % heard
+			return "Try again - I heard \"%s\"." % heard
 		"no_after":
 			return "Good start! I heard \"It was %s\". Now say: Now it is %s." % [_before, _after]
 		"no_before":
-			return "Almost! Start with: It was %s…" % _before
+			return "Almost! Start with: It was %s..." % _before
 		"swapped":
-			return "Nearly — say the OLD word first: It was %s. Now it is %s." % [_before, _after]
+			return "Nearly - say the OLD word first: It was %s. Now it is %s." % [_before, _after]
 		"frame_before":
 			return "Remember the whole frame: It was %s." % _before
 		"frame_after":

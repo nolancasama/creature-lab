@@ -118,7 +118,7 @@ func _vocabulary_section() -> Control:
 	pairs.add_theme_constant_override("v_separation", 8)
 	column.add_child(pairs)
 	for pair in Content.pairs:
-		var b := UiKit.button("%s ↔ %s" % [pair.word_a, pair.word_b], UiKit.SMALL)
+		var b := UiKit.button("%s / %s" % [pair.word_a, pair.word_b], UiKit.SMALL)
 		b.custom_minimum_size = Vector2(200, 40)
 		b.toggle_mode = true
 		b.button_pressed = Settings.is_pair_enabled(pair.id)

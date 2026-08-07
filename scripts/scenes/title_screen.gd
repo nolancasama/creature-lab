@@ -17,7 +17,7 @@ func _build() -> void:
 	add_child(centre)
 
 	centre.add_child(UiKit.title("CREATURE LAB", UiKit.H1, UiKit.ACCENT))
-	centre.add_child(UiKit.title("It was… Now it is…", UiKit.H2, UiKit.GOLD))
+	centre.add_child(UiKit.title("It was... Now it is...", UiKit.H2, UiKit.GOLD))
 	centre.add_child(UiKit.spacer(6))
 	centre.add_child(UiKit.title(
 		"Choose an animal. Say three sentences. Watch it change.", UiKit.BODY, UiKit.MUTED))
@@ -57,5 +57,5 @@ func _menu_button(text: String, action: Callable, accent := false) -> Button:
 ## them to type.
 func _input_summary() -> String:
 	if Speech.uses_microphone():
-		return "Microphone ready  •  hold SPACE to speak"
-	return "No microphone on this build — students type their sentence instead"
+		return "Microphone ready  -  hold SPACE to speak"
+	return "No microphone on this build - students type their sentence instead"

@@ -15,7 +15,7 @@ func _ready() -> void:
 	column.add_child(header)
 	header.add_child(UiKit.label("DNA LOG", UiKit.H3, UiKit.ACCENT))
 	header.add_child(UiKit.expander())
-	header.add_child(UiKit.label("It was… Now it is…", UiKit.SMALL, UiKit.MUTED))
+	header.add_child(UiKit.label("It was... Now it is...", UiKit.SMALL, UiKit.MUTED))
 
 	for i in CreatureState.SLOTS:
 		column.add_child(_build_row(i))
@@ -55,7 +55,7 @@ func _refresh_row(index: int) -> void:
 	var panel: PanelContainer = row["panel"]
 
 	if sentence.is_empty():
-		text.text = "— — —"
+		text.text = "- - -"
 		text.add_theme_color_override("font_color", UiKit.MUTED.darkened(0.25))
 		number.add_theme_color_override("font_color", UiKit.MUTED.darkened(0.25))
 		listen.visible = false

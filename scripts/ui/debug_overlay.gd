@@ -46,7 +46,7 @@ func _build() -> void:
 
 	var typed_row := UiKit.hbox(6)
 	column.add_child(typed_row)
-	var entry := UiKit.line_edit("type a transcript…")
+	var entry := UiKit.line_edit("type a transcript...")
 	entry.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	typed_row.add_child(entry)
 	var send := UiKit.button("Send", UiKit.SMALL)
@@ -120,5 +120,5 @@ func _refresh() -> void:
 		lines.append("[b]animal[/b] %s" % Game.current.animal_id)
 		lines.append("[b]slots[/b] %d/%d" % [Game.current.slots_filled(), CreatureState.SLOTS])
 		for entry in Game.current.entries:
-			lines.append("  %s — %s" % [str(entry["category"]), str(entry["sentence"])])
+			lines.append("  %s - %s" % [str(entry["category"]), str(entry["sentence"])])
 	_state_view.text = "\n".join(lines)

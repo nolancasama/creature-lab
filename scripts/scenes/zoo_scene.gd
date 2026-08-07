@@ -76,10 +76,10 @@ func _build_ui() -> void:
 	bar.add_child(row)
 	_header = UiKit.label("", UiKit.H3, UiKit.ACCENT)
 	row.add_child(_header)
-	row.add_child(UiKit.label("Drag to look around  •  scroll to zoom  •  click a creature", UiKit.SMALL, UiKit.MUTED))
+	row.add_child(UiKit.label("Drag to look around  -  scroll to zoom  -  click a creature", UiKit.SMALL, UiKit.MUTED))
 	row.add_child(UiKit.expander())
 
-	var again := UiKit.button("Make another  →", UiKit.SMALL, true)
+	var again := UiKit.button("Make another  ->", UiKit.SMALL, true)
 	again.pressed.connect(func() -> void:
 		Audio.play("select")
 		Game.set_phase(Game.Phase.ANIMAL_SELECTION))
@@ -109,7 +109,7 @@ func _build_ui() -> void:
 func _populate() -> void:
 	for child in _creatures.get_children():
 		child.queue_free()
-	_header.text = "MY ZOO  •  %d creature%s" % [Game.zoo.size(), "" if Game.zoo.size() == 1 else "s"]
+	_header.text = "MY ZOO  -  %d creature%s" % [Game.zoo.size(), "" if Game.zoo.size() == 1 else "s"]
 
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 7717
