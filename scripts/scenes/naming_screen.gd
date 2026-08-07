@@ -35,7 +35,7 @@ func _process(delta: float) -> void:
 func _build_stage() -> void:
 	add_child(StageKit.environment(Color("#152238"), Color("#31527d"), 0.55))
 	add_child(StageKit.key_light(Vector3(-50, -30, 0), 1.0))
-	add_child(StageKit.fill_light(UiKit.GOLD, Vector3(2.4, 3.4, 3.4), 2.6, 14.0))
+	add_child(StageKit.fill_light(Color("#fff2d0"), Vector3(2.4, 3.4, 3.4), 0.9, 14.0))
 	add_child(StageKit.ground(11.0, Color("#111a2a")))
 
 	var ghost_platform := StageKit.platform(1.5, Color("#1b2438"), UiKit.MUTED)

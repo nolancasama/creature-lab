@@ -1,233 +1,101 @@
 {
-  "_comment": "Animals are assembled from primitive shapes at runtime - no 3D model files needed. Each part is a pivot (pos/rot) with a mesh offset by 'off'. 'feature_parts' is what the LENGTH modifier stretches (trunk / ears / tail...); 'feature_followers' slide along 'feature_dir' so attached parts keep up. Facing is +Z, ground is y=0.",
+  "_comment": "Animals are skinned models from res://models/animals.glb (ITHappy 'Animals FREE' pack, free for commercial use). Each entry names the node inside that GLB plus the bones the trait system drives. 'stand_height' is the display height every animal is normalised to, so wildly different source scales sit together. Socket offsets are in those same normalised units, Y up.",
   "roles": {
-    "_comment": "Shared colours for roles that are not animal-specific.",
+    "_comment": "Colours for fantasy add-on parts, which are still built from primitives.",
     "dark": "#26262e", "ice": "#9fe4ff", "fire": "#ff8a3c", "horn": "#efe3c8",
     "wing": "#cfe8ff", "crystal": "#b48cff", "glow": "#b7ffdf", "leaf": "#7ed957"
   },
   "animals": [
     {
-      "id": "elephant", "display_name": "Elephant", "fantasy_noun": "Mammoth",
-      "skin": "#98a0aa", "accent": "#828a95", "belly": "#b6bbc3",
-      "stand_height": 2.6, "walk_speed": 1.0, "voice_pitch": 0.7,
-      "feature_parts": ["trunk"], "feature_dir": [0, -1, 0], "feature_length": 1.1, "feature_followers": [],
-      "bulk_parts": ["body", "leg_fl", "leg_fr", "leg_bl", "leg_br"],
-      "sockets": {"head_top": [0, 2.62, 1.5], "back": [0, 2.45, -0.2], "rear": [0, 1.7, -1.5], "side_l": [-1.05, 1.7, 0], "side_r": [1.05, 1.7, 0], "face": [0, 2.0, 2.1]},
-      "parts": [
-        {"id": "body",   "shape": "sphere",   "size": [2.0, 1.85, 2.8],   "pos": [0, 1.62, -0.35]},
-        {"id": "head",   "shape": "sphere",   "size": [1.02, 0.98, 0.95], "pos": [0, 1.94, 1.28]},
-        {"id": "trunk",  "shape": "capsule",  "size": [0.31, 1.15, 0.31], "pos": [0, 1.72, 1.7], "off": [0, -0.58, 0], "axis": "y"},
-        {"id": "ear_l",  "shape": "sphere",   "size": [0.12, 0.98, 1.02], "pos": [-0.5, 1.94, 0.86], "rot": [0, 40, -16], "role": "accent"},
-        {"id": "ear_r",  "shape": "sphere",   "size": [0.12, 0.98, 1.02], "pos": [0.5, 1.94, 0.86],  "rot": [0, -40, 16], "role": "accent"},
-        {"id": "tusk_l", "shape": "cone",     "size": [0.12, 0.5, 0.12],  "pos": [-0.3, 1.6, 1.58], "rot": [118, 0, -8], "off": [0, 0.25, 0], "role": "horn"},
-        {"id": "tusk_r", "shape": "cone",     "size": [0.12, 0.5, 0.12],  "pos": [0.3, 1.6, 1.58],  "rot": [118, 0, 8],  "off": [0, 0.25, 0], "role": "horn"},
-        {"id": "leg_fl", "shape": "cylinder", "size": [0.52, 1.15, 0.52], "pos": [-0.62, 1.15, 0.8],  "off": [0, -0.575, 0]},
-        {"id": "leg_fr", "shape": "cylinder", "size": [0.52, 1.15, 0.52], "pos": [0.62, 1.15, 0.8],   "off": [0, -0.575, 0]},
-        {"id": "leg_bl", "shape": "cylinder", "size": [0.52, 1.15, 0.52], "pos": [-0.66, 1.15, -1.0], "off": [0, -0.575, 0]},
-        {"id": "leg_br", "shape": "cylinder", "size": [0.52, 1.15, 0.52], "pos": [0.66, 1.15, -1.0],  "off": [0, -0.575, 0]},
-        {"id": "tail",   "shape": "capsule",  "size": [0.13, 0.6, 0.13],  "pos": [0, 1.78, -1.38], "rot": [-25, 0, 0], "off": [0, -0.3, 0], "role": "accent"},
-        {"id": "eye_l",  "shape": "sphere",   "size": [0.14, 0.14, 0.14], "pos": [-0.33, 2.05, 1.7], "role": "eye"},
-        {"id": "eye_r",  "shape": "sphere",   "size": [0.14, 0.14, 0.14], "pos": [0.33, 2.05, 1.7],  "role": "eye"}
-      ]
+      "id": "dog", "display_name": "Dog", "fantasy_noun": "Hound", "model": "dog_0012",
+      "skin": "#c9ced6", "stand_height": 1.55, "walk_speed": 1.6, "voice_pitch": 1.0,
+      "feature_bones": ["ear.R", "ear.L"], "feature_label": "ears",
+      "bulk_bones": ["spine.005", "spine.006"],
+      "leg_bones": ["thigh.R", "thigh.L", "front_thigh.R", "front_thigh.L"],
+      "sockets": {
+        "head_top": {"bone": "scull", "off": [0, 0.24, 0]},
+        "back":     {"bone": "spine.006", "off": [0, 0.30, 0]},
+        "rear":     {"bone": "spine.003", "off": [0, 0.10, 0]},
+        "face":     {"bone": "scull", "off": [0, 0.02, 0.24]}
+      }
     },
     {
-      "id": "dog", "display_name": "Dog", "fantasy_noun": "Hound",
-      "skin": "#b0763f", "accent": "#8a5a2e", "belly": "#e0c39a",
-      "stand_height": 1.7, "walk_speed": 1.6, "voice_pitch": 1.0,
-      "feature_parts": ["tail"], "feature_dir": [0, 0.77, -0.64], "feature_length": 0.6, "feature_followers": [],
-      "bulk_parts": ["body", "leg_fl", "leg_fr", "leg_bl", "leg_br"],
-      "sockets": {"head_top": [0, 1.72, 0.95], "back": [0, 1.42, -0.1], "rear": [0, 1.1, -0.95], "side_l": [-0.5, 1.0, 0], "side_r": [0.5, 1.0, 0], "face": [0, 1.3, 1.6]},
-      "parts": [
-        {"id": "body",   "shape": "capsule",  "size": [0.85, 1.7, 0.85],  "pos": [0, 0.98, 0], "rot": [90, 0, 0]},
-        {"id": "head",   "shape": "sphere",   "size": [0.75, 0.7, 0.7],   "pos": [0, 1.36, 0.95]},
-        {"id": "snout",  "shape": "box",      "size": [0.36, 0.3, 0.46],  "pos": [0, 1.22, 1.42], "role": "belly"},
-        {"id": "nose",   "shape": "sphere",   "size": [0.16, 0.13, 0.13], "pos": [0, 1.28, 1.64], "role": "dark"},
-        {"id": "ear_l",  "shape": "box",      "size": [0.08, 0.44, 0.3],  "pos": [-0.32, 1.6, 0.86], "rot": [10, 0, -18], "off": [0, -0.22, 0], "role": "accent"},
-        {"id": "ear_r",  "shape": "box",      "size": [0.08, 0.44, 0.3],  "pos": [0.32, 1.6, 0.86],  "rot": [10, 0, 18],  "off": [0, -0.22, 0], "role": "accent"},
-        {"id": "leg_fl", "shape": "cylinder", "size": [0.22, 0.76, 0.22], "pos": [-0.3, 0.76, 0.55],  "off": [0, -0.38, 0]},
-        {"id": "leg_fr", "shape": "cylinder", "size": [0.22, 0.76, 0.22], "pos": [0.3, 0.76, 0.55],   "off": [0, -0.38, 0]},
-        {"id": "leg_bl", "shape": "cylinder", "size": [0.22, 0.76, 0.22], "pos": [-0.3, 0.76, -0.55], "off": [0, -0.38, 0]},
-        {"id": "leg_br", "shape": "cylinder", "size": [0.22, 0.76, 0.22], "pos": [0.3, 0.76, -0.55],  "off": [0, -0.38, 0]},
-        {"id": "tail",   "shape": "capsule",  "size": [0.15, 0.6, 0.15],  "pos": [0, 1.15, -0.82], "rot": [-40, 0, 0], "off": [0, 0.3, 0], "role": "accent", "axis": "y"},
-        {"id": "eye_l",  "shape": "sphere",   "size": [0.12, 0.12, 0.12], "pos": [-0.24, 1.46, 1.28], "role": "eye"},
-        {"id": "eye_r",  "shape": "sphere",   "size": [0.12, 0.12, 0.12], "pos": [0.24, 1.46, 1.28],  "role": "eye"}
-      ]
+      "id": "cat", "display_name": "Cat", "fantasy_noun": "Lynx", "model": "kitty_0012",
+      "skin": "#3a3a42", "stand_height": 1.25, "walk_speed": 1.8, "voice_pitch": 1.25,
+      "feature_bones": ["spine.004"], "feature_label": "tail",
+      "bulk_bones": ["spine.006", "spine.007"],
+      "leg_bones": ["thigh.R", "thigh.L", "front_thigh.R", "front_thigh.L"],
+      "sockets": {
+        "head_top": {"bone": "scull", "off": [0, 0.20, 0]},
+        "back":     {"bone": "spine.007", "off": [0, 0.24, 0]},
+        "rear":     {"bone": "spine.004", "off": [0, 0.10, 0]},
+        "face":     {"bone": "scull", "off": [0, 0.02, 0.20]}
+      }
     },
     {
-      "id": "cat", "display_name": "Cat", "fantasy_noun": "Lynx",
-      "skin": "#d98b3e", "accent": "#b06c26", "belly": "#f0d8b0",
-      "stand_height": 1.55, "walk_speed": 1.8, "voice_pitch": 1.25,
-      "feature_parts": ["tail"], "feature_dir": [0, 0.87, -0.5], "feature_length": 0.9, "feature_followers": [],
-      "bulk_parts": ["body", "leg_fl", "leg_fr", "leg_bl", "leg_br"],
-      "sockets": {"head_top": [0, 1.62, 0.75], "back": [0, 1.28, -0.1], "rear": [0, 0.98, -0.78], "side_l": [-0.4, 0.92, 0], "side_r": [0.4, 0.92, 0], "face": [0, 1.24, 1.15]},
-      "parts": [
-        {"id": "body",   "shape": "capsule",  "size": [0.6, 1.4, 0.6],    "pos": [0, 0.9, 0], "rot": [90, 0, 0]},
-        {"id": "head",   "shape": "sphere",   "size": [0.6, 0.56, 0.56],  "pos": [0, 1.26, 0.76]},
-        {"id": "muzzle", "shape": "sphere",   "size": [0.32, 0.22, 0.22], "pos": [0, 1.16, 1.04], "role": "belly"},
-        {"id": "ear_l",  "shape": "cone",     "size": [0.24, 0.34, 0.24], "pos": [-0.24, 1.48, 0.72], "rot": [0, 0, -12], "off": [0, 0.17, 0], "role": "accent"},
-        {"id": "ear_r",  "shape": "cone",     "size": [0.24, 0.34, 0.24], "pos": [0.24, 1.48, 0.72],  "rot": [0, 0, 12],  "off": [0, 0.17, 0], "role": "accent"},
-        {"id": "leg_fl", "shape": "cylinder", "size": [0.16, 0.72, 0.16], "pos": [-0.22, 0.72, 0.45],  "off": [0, -0.36, 0]},
-        {"id": "leg_fr", "shape": "cylinder", "size": [0.16, 0.72, 0.16], "pos": [0.22, 0.72, 0.45],   "off": [0, -0.36, 0]},
-        {"id": "leg_bl", "shape": "cylinder", "size": [0.16, 0.72, 0.16], "pos": [-0.22, 0.72, -0.45], "off": [0, -0.36, 0]},
-        {"id": "leg_br", "shape": "cylinder", "size": [0.16, 0.72, 0.16], "pos": [0.22, 0.72, -0.45],  "off": [0, -0.36, 0]},
-        {"id": "tail",   "shape": "capsule",  "size": [0.12, 0.9, 0.12],  "pos": [0, 1.05, -0.7], "rot": [-30, 0, 0], "off": [0, 0.45, 0], "role": "accent", "axis": "y"},
-        {"id": "eye_l",  "shape": "sphere",   "size": [0.11, 0.11, 0.11], "pos": [-0.2, 1.33, 1.04], "role": "eye"},
-        {"id": "eye_r",  "shape": "sphere",   "size": [0.11, 0.11, 0.11], "pos": [0.2, 1.33, 1.04],  "role": "eye"}
-      ]
+      "id": "tiger", "display_name": "Tiger", "fantasy_noun": "Sabertooth", "model": "tiger",
+      "skin": "#e08a3c", "stand_height": 1.85, "walk_speed": 1.4, "voice_pitch": 0.8,
+      "feature_bones": ["spine.006"], "feature_label": "tail",
+      "bulk_bones": ["spine.008", "spine.009"],
+      "leg_bones": ["thigh.R", "thigh.L", "front_thigh.R", "front_thigh.L"],
+      "sockets": {
+        "head_top": {"bone": "spine.012", "off": [0, 0.26, 0]},
+        "back":     {"bone": "spine.009", "off": [0, 0.32, 0]},
+        "rear":     {"bone": "spine.006", "off": [0, 0.10, 0]},
+        "face":     {"bone": "jaw", "off": [0, 0.02, 0.22]}
+      }
     },
     {
-      "id": "rabbit", "display_name": "Rabbit", "fantasy_noun": "Jackalope",
-      "skin": "#d8d3cc", "accent": "#b8b0a6", "belly": "#fdfbf7",
-      "stand_height": 1.7, "walk_speed": 1.7, "voice_pitch": 1.4,
-      "feature_parts": ["ear_l", "ear_r"], "feature_dir": [0, 1, 0], "feature_length": 0.75, "feature_followers": [],
-      "bulk_parts": ["body"],
-      "sockets": {"head_top": [0, 1.32, 0.42], "back": [0, 1.02, -0.2], "rear": [0, 0.7, -0.6], "side_l": [-0.42, 0.7, 0], "side_r": [0.42, 0.7, 0], "face": [0, 1.02, 0.85]},
-      "parts": [
-        {"id": "body",   "shape": "sphere",   "size": [0.78, 0.82, 0.98], "pos": [0, 0.62, 0]},
-        {"id": "head",   "shape": "sphere",   "size": [0.55, 0.52, 0.52], "pos": [0, 1.06, 0.42]},
-        {"id": "ear_l",  "shape": "capsule",  "size": [0.17, 0.75, 0.17], "pos": [-0.17, 1.26, 0.34], "rot": [-8, 0, -9], "off": [0, 0.38, 0], "role": "accent", "axis": "y"},
-        {"id": "ear_r",  "shape": "capsule",  "size": [0.17, 0.75, 0.17], "pos": [0.17, 1.26, 0.34],  "rot": [-8, 0, 9],  "off": [0, 0.38, 0], "role": "accent", "axis": "y"},
-        {"id": "leg_fl", "shape": "cylinder", "size": [0.16, 0.34, 0.16], "pos": [-0.25, 0.34, 0.32], "off": [0, -0.17, 0]},
-        {"id": "leg_fr", "shape": "cylinder", "size": [0.16, 0.34, 0.16], "pos": [0.25, 0.34, 0.32],  "off": [0, -0.17, 0]},
-        {"id": "foot_l", "shape": "box",      "size": [0.23, 0.17, 0.52], "pos": [-0.27, 0.09, -0.08], "role": "belly"},
-        {"id": "foot_r", "shape": "box",      "size": [0.23, 0.17, 0.52], "pos": [0.27, 0.09, -0.08],  "role": "belly"},
-        {"id": "tail",   "shape": "sphere",   "size": [0.26, 0.26, 0.26], "pos": [0, 0.72, -0.54], "role": "belly"},
-        {"id": "nose",   "shape": "sphere",   "size": [0.11, 0.09, 0.09], "pos": [0, 1.0, 0.7], "role": "accent"},
-        {"id": "eye_l",  "shape": "sphere",   "size": [0.11, 0.11, 0.11], "pos": [-0.19, 1.12, 0.66], "role": "eye"},
-        {"id": "eye_r",  "shape": "sphere",   "size": [0.11, 0.11, 0.11], "pos": [0.19, 1.12, 0.66],  "role": "eye"}
-      ]
+      "id": "horse", "display_name": "Horse", "fantasy_noun": "Unicorn", "model": "horse_0012",
+      "skin": "#a9673f", "stand_height": 2.15, "walk_speed": 1.7, "voice_pitch": 0.9,
+      "feature_bones": ["ear.R", "ear.L"], "feature_label": "ears",
+      "bulk_bones": ["spine.006", "spine.007"],
+      "leg_bones": ["thigh.R", "thigh.L", "front_thigh.R", "front_thigh.L"],
+      "sockets": {
+        "head_top": {"bone": "scull", "off": [0, 0.30, 0]},
+        "back":     {"bone": "spine.007", "off": [0, 0.36, 0]},
+        "rear":     {"bone": "spine.004", "off": [0, 0.10, 0]},
+        "face":     {"bone": "scull", "off": [0, 0.02, 0.28]}
+      }
     },
     {
-      "id": "bird", "display_name": "Bird", "fantasy_noun": "Roc",
-      "skin": "#4f8fd6", "accent": "#2f5f9a", "belly": "#cfe3f7",
-      "stand_height": 1.8, "walk_speed": 1.5, "voice_pitch": 1.5,
-      "feature_parts": ["tail"], "feature_dir": [0, 0, -1], "feature_length": 0.62, "feature_followers": [],
-      "bulk_parts": ["body"],
-      "sockets": {"head_top": [0, 1.78, 0.2], "back": [0, 1.32, -0.25], "rear": [0, 0.95, -0.6], "side_l": [-0.45, 1.0, 0], "side_r": [0.45, 1.0, 0], "face": [0, 1.5, 0.5]},
-      "parts": [
-        {"id": "body",   "shape": "sphere",   "size": [0.72, 0.88, 0.82], "pos": [0, 0.98, 0]},
-        {"id": "belly",  "shape": "sphere",   "size": [0.55, 0.6, 0.5],   "pos": [0, 0.9, 0.3], "role": "belly"},
-        {"id": "head",   "shape": "sphere",   "size": [0.5, 0.48, 0.48],  "pos": [0, 1.52, 0.2]},
-        {"id": "beak",   "shape": "cone",     "size": [0.22, 0.36, 0.22], "pos": [0, 1.46, 0.42], "rot": [100, 0, 0], "off": [0, 0.18, 0], "role": "horn"},
-        {"id": "wing_l", "shape": "box",      "size": [0.09, 0.52, 0.72], "pos": [-0.37, 1.02, -0.02], "rot": [0, 0, -14], "role": "accent"},
-        {"id": "wing_r", "shape": "box",      "size": [0.09, 0.52, 0.72], "pos": [0.37, 1.02, -0.02],  "rot": [0, 0, 14],  "role": "accent"},
-        {"id": "tail",   "shape": "box",      "size": [0.42, 0.11, 0.62], "pos": [0, 0.96, -0.42], "rot": [12, 0, 0], "off": [0, 0, -0.31], "role": "accent", "axis": "z"},
-        {"id": "leg_l",  "shape": "cylinder", "size": [0.09, 0.46, 0.09], "pos": [-0.16, 0.46, 0.06], "off": [0, -0.23, 0], "role": "horn"},
-        {"id": "leg_r",  "shape": "cylinder", "size": [0.09, 0.46, 0.09], "pos": [0.16, 0.46, 0.06],  "off": [0, -0.23, 0], "role": "horn"},
-        {"id": "eye_l",  "shape": "sphere",   "size": [0.11, 0.11, 0.11], "pos": [-0.18, 1.57, 0.4], "role": "eye"},
-        {"id": "eye_r",  "shape": "sphere",   "size": [0.11, 0.11, 0.11], "pos": [0.18, 1.57, 0.4],  "role": "eye"}
-      ]
+      "id": "deer", "display_name": "Deer", "fantasy_noun": "Stag", "model": "deer",
+      "skin": "#9a6b43", "stand_height": 2.0, "walk_speed": 1.6, "voice_pitch": 1.1,
+      "feature_bones": ["ear.R", "ear.L"], "feature_label": "ears",
+      "bulk_bones": ["spine.004", "spine.005"],
+      "leg_bones": ["thigh.R", "thigh.L", "front_thigh.R", "front_thigh.L"],
+      "sockets": {
+        "head_top": {"bone": "scull", "off": [0, 0.32, 0]},
+        "back":     {"bone": "spine.005", "off": [0, 0.34, 0]},
+        "rear":     {"bone": "spine.002", "off": [0, 0.10, 0]},
+        "face":     {"bone": "scull", "off": [0, 0.02, 0.24]}
+      }
     },
     {
-      "id": "fish", "display_name": "Fish", "fantasy_noun": "Marlin",
-      "skin": "#e07b3a", "accent": "#b85a20", "belly": "#ffd9a8",
-      "stand_height": 1.7, "walk_speed": 1.4, "voice_pitch": 1.3, "hover": 1.0,
-      "feature_parts": ["tail"], "feature_dir": [0, 0, -1], "feature_length": 0.6, "feature_followers": [],
-      "bulk_parts": ["body"],
-      "sockets": {"head_top": [0, 1.55, 0.3], "back": [0, 1.5, -0.1], "rear": [0, 1.1, -0.8], "side_l": [-0.4, 1.1, 0], "side_r": [0.4, 1.1, 0], "face": [0, 1.1, 0.8]},
-      "parts": [
-        {"id": "body",   "shape": "sphere", "size": [0.72, 0.78, 1.45], "pos": [0, 1.1, 0]},
-        {"id": "belly",  "shape": "sphere", "size": [0.5, 0.4, 1.0],    "pos": [0, 0.88, 0], "role": "belly"},
-        {"id": "tail",   "shape": "box",    "size": [0.08, 0.72, 0.6],  "pos": [0, 1.1, -0.68], "off": [0, 0, -0.3], "role": "accent", "axis": "z"},
-        {"id": "fin_l",  "shape": "box",    "size": [0.06, 0.3, 0.36],  "pos": [-0.36, 1.04, 0.12], "rot": [0, 0, -28], "role": "accent"},
-        {"id": "fin_r",  "shape": "box",    "size": [0.06, 0.3, 0.36],  "pos": [0.36, 1.04, 0.12],  "rot": [0, 0, 28],  "role": "accent"},
-        {"id": "dorsal", "shape": "box",    "size": [0.07, 0.38, 0.55], "pos": [0, 1.52, -0.05], "role": "accent"},
-        {"id": "lips",   "shape": "sphere", "size": [0.26, 0.18, 0.18], "pos": [0, 1.04, 0.74], "role": "belly"},
-        {"id": "eye_l",  "shape": "sphere", "size": [0.15, 0.15, 0.15], "pos": [-0.29, 1.24, 0.52], "role": "eye"},
-        {"id": "eye_r",  "shape": "sphere", "size": [0.15, 0.15, 0.15], "pos": [0.29, 1.24, 0.52],  "role": "eye"}
-      ]
+      "id": "penguin", "display_name": "Penguin", "fantasy_noun": "Frostwing", "model": "pinguin_0012",
+      "skin": "#34343c", "stand_height": 1.4, "walk_speed": 0.9, "voice_pitch": 1.3,
+      "feature_bones": ["fin.R", "fin.L"], "feature_label": "flippers",
+      "bulk_bones": ["spine.003", "spine.004"],
+      "leg_bones": ["thigh.R", "thigh.L"],
+      "sockets": {
+        "head_top": {"bone": "scull", "off": [0, 0.24, 0]},
+        "back":     {"bone": "spine.004", "off": [0, 0.24, 0]},
+        "rear":     {"bone": "spine.001", "off": [0, 0.06, 0]},
+        "face":     {"bone": "scull", "off": [0, 0.02, 0.20]}
+      }
     },
     {
-      "id": "turtle", "display_name": "Turtle", "fantasy_noun": "Shellback",
-      "skin": "#6fa25a", "accent": "#3f6b34", "belly": "#d8c99a",
-      "stand_height": 1.2, "walk_speed": 0.7, "voice_pitch": 0.85,
-      "feature_parts": ["neck"], "feature_dir": [0, 0, 1], "feature_length": 0.5, "feature_followers": ["head", "eye_l", "eye_r"],
-      "bulk_parts": ["shell"],
-      "sockets": {"head_top": [0, 1.05, 1.1], "back": [0, 1.18, -0.1], "rear": [0, 0.55, -0.9], "side_l": [-0.8, 0.7, 0], "side_r": [0.8, 0.7, 0], "face": [0, 0.78, 1.35]},
-      "parts": [
-        {"id": "shell",   "shape": "sphere",   "size": [1.4, 0.9, 1.55],  "pos": [0, 0.72, 0], "role": "accent"},
-        {"id": "rim",     "shape": "cylinder", "size": [1.5, 0.16, 1.65], "pos": [0, 0.5, 0], "role": "belly"},
-        {"id": "body",    "shape": "sphere",   "size": [1.15, 0.42, 1.25],"pos": [0, 0.44, 0], "role": "belly"},
-        {"id": "neck",    "shape": "capsule",  "size": [0.3, 0.55, 0.3],  "pos": [0, 0.62, 0.62], "rot": [80, 0, 0], "off": [0, 0.28, 0], "axis": "y"},
-        {"id": "head",    "shape": "sphere",   "size": [0.44, 0.4, 0.44], "pos": [0, 0.74, 1.08]},
-        {"id": "leg_fl",  "shape": "capsule",  "size": [0.24, 0.46, 0.24],"pos": [-0.6, 0.36, 0.52], "rot": [65, 0, -25], "off": [0, 0.23, 0]},
-        {"id": "leg_fr",  "shape": "capsule",  "size": [0.24, 0.46, 0.24],"pos": [0.6, 0.36, 0.52],  "rot": [65, 0, 25],  "off": [0, 0.23, 0]},
-        {"id": "leg_bl",  "shape": "capsule",  "size": [0.24, 0.42, 0.24],"pos": [-0.58, 0.34, -0.5],"rot": [-65, 0, -25], "off": [0, 0.21, 0]},
-        {"id": "leg_br",  "shape": "capsule",  "size": [0.24, 0.42, 0.24],"pos": [0.58, 0.34, -0.5], "rot": [-65, 0, 25],  "off": [0, 0.21, 0]},
-        {"id": "tail",    "shape": "cone",     "size": [0.17, 0.32, 0.17],"pos": [0, 0.52, -0.86], "rot": [110, 0, 0], "off": [0, 0.16, 0]},
-        {"id": "eye_l",   "shape": "sphere",   "size": [0.1, 0.1, 0.1],   "pos": [-0.16, 0.84, 1.3], "role": "eye"},
-        {"id": "eye_r",   "shape": "sphere",   "size": [0.1, 0.1, 0.1],   "pos": [0.16, 0.84, 1.3],  "role": "eye"}
-      ]
-    },
-    {
-      "id": "frog", "display_name": "Frog", "fantasy_noun": "Leaper",
-      "skin": "#6cbf5a", "accent": "#4a8f3a", "belly": "#e6f2c8",
-      "stand_height": 1.25, "walk_speed": 1.2, "voice_pitch": 1.1,
-      "feature_parts": ["leg_bl", "leg_br"], "feature_dir": [0, -1, 0], "feature_length": 0.6, "feature_followers": [],
-      "bulk_parts": ["body"],
-      "sockets": {"head_top": [0, 1.05, 0.5], "back": [0, 0.85, -0.25], "rear": [0, 0.45, -0.7], "side_l": [-0.55, 0.5, 0], "side_r": [0.55, 0.5, 0], "face": [0, 0.72, 0.95]},
-      "parts": [
-        {"id": "body",     "shape": "sphere",  "size": [1.02, 0.72, 1.15], "pos": [0, 0.5, 0]},
-        {"id": "belly",    "shape": "sphere",  "size": [0.8, 0.4, 0.9],    "pos": [0, 0.3, 0.1], "role": "belly"},
-        {"id": "head",     "shape": "sphere",  "size": [0.92, 0.56, 0.7],  "pos": [0, 0.7, 0.5]},
-        {"id": "eye_l",    "shape": "sphere",  "size": [0.32, 0.32, 0.32], "pos": [-0.28, 1.0, 0.52], "role": "belly"},
-        {"id": "eye_r",    "shape": "sphere",  "size": [0.32, 0.32, 0.32], "pos": [0.28, 1.0, 0.52],  "role": "belly"},
-        {"id": "pupil_l",  "shape": "sphere",  "size": [0.17, 0.17, 0.17], "pos": [-0.29, 1.04, 0.68], "role": "eye"},
-        {"id": "pupil_r",  "shape": "sphere",  "size": [0.17, 0.17, 0.17], "pos": [0.29, 1.04, 0.68],  "role": "eye"},
-        {"id": "leg_bl",   "shape": "capsule", "size": [0.3, 0.6, 0.3],    "pos": [-0.5, 0.55, -0.22], "rot": [0, 0, -22], "off": [0, -0.3, 0], "axis": "y"},
-        {"id": "leg_br",   "shape": "capsule", "size": [0.3, 0.6, 0.3],    "pos": [0.5, 0.55, -0.22],  "rot": [0, 0, 22],  "off": [0, -0.3, 0], "axis": "y"},
-        {"id": "foot_bl",  "shape": "box",     "size": [0.34, 0.1, 0.5],   "pos": [-0.63, 0.06, 0.02], "role": "accent"},
-        {"id": "foot_br",  "shape": "box",     "size": [0.34, 0.1, 0.5],   "pos": [0.63, 0.06, 0.02],  "role": "accent"},
-        {"id": "arm_l",    "shape": "capsule", "size": [0.16, 0.42, 0.16], "pos": [-0.36, 0.36, 0.42], "rot": [12, 0, -12], "off": [0, -0.21, 0]},
-        {"id": "arm_r",    "shape": "capsule", "size": [0.16, 0.42, 0.16], "pos": [0.36, 0.36, 0.42],  "rot": [12, 0, 12],  "off": [0, -0.21, 0]}
-      ]
-    },
-    {
-      "id": "lion", "display_name": "Lion", "fantasy_noun": "Sphinx",
-      "skin": "#d2a24c", "accent": "#8a5a20", "belly": "#f0d69a",
-      "stand_height": 2.0, "walk_speed": 1.5, "voice_pitch": 0.8,
-      "feature_parts": ["tail"], "feature_dir": [0, 0.82, -0.57], "feature_length": 0.9, "feature_followers": ["tuft"],
-      "bulk_parts": ["body", "leg_fl", "leg_fr", "leg_bl", "leg_br"],
-      "sockets": {"head_top": [0, 2.05, 1.0], "back": [0, 1.5, -0.2], "rear": [0, 1.2, -1.05], "side_l": [-0.55, 1.05, 0], "side_r": [0.55, 1.05, 0], "face": [0, 1.45, 1.5]},
-      "parts": [
-        {"id": "body",   "shape": "capsule",  "size": [0.9, 1.8, 0.9],    "pos": [0, 1.02, 0], "rot": [90, 0, 0]},
-        {"id": "mane",   "shape": "sphere",   "size": [1.32, 1.28, 1.2],  "pos": [0, 1.44, 0.82], "role": "accent"},
-        {"id": "head",   "shape": "sphere",   "size": [0.74, 0.7, 0.7],   "pos": [0, 1.46, 1.08]},
-        {"id": "muzzle", "shape": "sphere",   "size": [0.42, 0.32, 0.3],  "pos": [0, 1.32, 1.42], "role": "belly"},
-        {"id": "ear_l",  "shape": "sphere",   "size": [0.22, 0.22, 0.12], "pos": [-0.32, 1.78, 1.02], "role": "accent"},
-        {"id": "ear_r",  "shape": "sphere",   "size": [0.22, 0.22, 0.12], "pos": [0.32, 1.78, 1.02],  "role": "accent"},
-        {"id": "leg_fl", "shape": "cylinder", "size": [0.28, 0.86, 0.28], "pos": [-0.36, 0.86, 0.62],  "off": [0, -0.43, 0]},
-        {"id": "leg_fr", "shape": "cylinder", "size": [0.28, 0.86, 0.28], "pos": [0.36, 0.86, 0.62],   "off": [0, -0.43, 0]},
-        {"id": "leg_bl", "shape": "cylinder", "size": [0.28, 0.86, 0.28], "pos": [-0.36, 0.86, -0.62], "off": [0, -0.43, 0]},
-        {"id": "leg_br", "shape": "cylinder", "size": [0.28, 0.86, 0.28], "pos": [0.36, 0.86, -0.62],  "off": [0, -0.43, 0]},
-        {"id": "tail",   "shape": "capsule",  "size": [0.12, 0.9, 0.12],  "pos": [0, 1.28, -0.92], "rot": [-35, 0, 0], "off": [0, 0.45, 0], "axis": "y"},
-        {"id": "tuft",   "shape": "sphere",   "size": [0.25, 0.25, 0.25], "pos": [0, 2.02, -1.44], "role": "accent"},
-        {"id": "eye_l",  "shape": "sphere",   "size": [0.11, 0.11, 0.11], "pos": [-0.22, 1.54, 1.38], "role": "eye"},
-        {"id": "eye_r",  "shape": "sphere",   "size": [0.11, 0.11, 0.11], "pos": [0.22, 1.54, 1.38],  "role": "eye"}
-      ]
-    },
-    {
-      "id": "monkey", "display_name": "Monkey", "fantasy_noun": "Trickster",
-      "skin": "#8a5f3a", "accent": "#5f3f26", "belly": "#e0bb8a",
-      "stand_height": 2.1, "walk_speed": 1.6, "voice_pitch": 1.35,
-      "feature_parts": ["tail"], "feature_dir": [0, 0.77, -0.64], "feature_length": 1.0, "feature_followers": [],
-      "bulk_parts": ["body", "arm_l", "arm_r", "leg_l", "leg_r"],
-      "sockets": {"head_top": [0, 2.02, 0.05], "back": [0, 1.42, -0.4], "rear": [0, 0.9, -0.5], "side_l": [-0.6, 1.3, 0], "side_r": [0.6, 1.3, 0], "face": [0, 1.7, 0.45]},
-      "parts": [
-        {"id": "body",   "shape": "capsule", "size": [0.72, 1.15, 0.72], "pos": [0, 1.05, 0]},
-        {"id": "belly",  "shape": "sphere",  "size": [0.5, 0.62, 0.42],  "pos": [0, 0.98, 0.24], "role": "belly"},
-        {"id": "head",   "shape": "sphere",  "size": [0.62, 0.6, 0.58],  "pos": [0, 1.74, 0.05]},
-        {"id": "face",   "shape": "sphere",  "size": [0.44, 0.38, 0.22], "pos": [0, 1.68, 0.3], "role": "belly"},
-        {"id": "ear_l",  "shape": "sphere",  "size": [0.23, 0.23, 0.1],  "pos": [-0.35, 1.76, 0.02], "role": "belly"},
-        {"id": "ear_r",  "shape": "sphere",  "size": [0.23, 0.23, 0.1],  "pos": [0.35, 1.76, 0.02],  "role": "belly"},
-        {"id": "arm_l",  "shape": "capsule", "size": [0.19, 0.78, 0.19], "pos": [-0.43, 1.4, 0], "rot": [0, 0, -14], "off": [0, -0.39, 0]},
-        {"id": "arm_r",  "shape": "capsule", "size": [0.19, 0.78, 0.19], "pos": [0.43, 1.4, 0],  "rot": [0, 0, 14],  "off": [0, -0.39, 0]},
-        {"id": "leg_l",  "shape": "capsule", "size": [0.23, 0.72, 0.23], "pos": [-0.24, 0.64, 0], "off": [0, -0.36, 0]},
-        {"id": "leg_r",  "shape": "capsule", "size": [0.23, 0.72, 0.23], "pos": [0.24, 0.64, 0],  "off": [0, -0.36, 0]},
-        {"id": "tail",   "shape": "capsule", "size": [0.12, 1.0, 0.12],  "pos": [0, 1.0, -0.38], "rot": [-40, 0, 0], "off": [0, 0.5, 0], "role": "accent", "axis": "y"},
-        {"id": "eye_l",  "shape": "sphere",  "size": [0.1, 0.1, 0.1],    "pos": [-0.17, 1.78, 0.37], "role": "eye"},
-        {"id": "eye_r",  "shape": "sphere",  "size": [0.1, 0.1, 0.1],    "pos": [0.17, 1.78, 0.37],  "role": "eye"}
-      ]
+      "id": "chicken", "display_name": "Chicken", "fantasy_noun": "Phoenix", "model": "chicken_0012",
+      "skin": "#a55f3a", "stand_height": 1.15, "walk_speed": 1.5, "voice_pitch": 1.45,
+      "feature_bones": ["Wing.R", "Wing.L"], "feature_label": "wings",
+      "bulk_bones": ["spine.003", "spine.004"],
+      "leg_bones": ["thigh.R", "thigh.L"],
+      "sockets": {
+        "head_top": {"bone": "scull", "off": [0, 0.20, 0]},
+        "back":     {"bone": "spine.004", "off": [0, 0.22, 0]},
+        "rear":     {"bone": "spine.001", "off": [0, 0.06, 0]},
+        "face":     {"bone": "scull", "off": [0, 0.02, 0.18]}
+      }
     }
   ]
 }

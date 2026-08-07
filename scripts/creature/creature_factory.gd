@@ -37,7 +37,7 @@ static func build_fantasy(state: CreatureState) -> CreatureRig:
 		return null
 	TraitVisuals.apply_all(rig, state.after_traits())
 	grow_fantasy_parts(rig, state)
-	_make_eyes_glow(rig)
+	_make_creature_glow(rig)
 	return rig
 
 
@@ -52,9 +52,14 @@ static func grow_fantasy_parts(rig: CreatureRig, state: CreatureState) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = state.fingerprint()
 
+	# Part sizes are authored in absolute units, so they have to be scaled to whatever
+	# animal is wearing them or a chicken ends up under a crown twice its own height.
+	var part_scale: float = clampf(rig.definition.stand_height / 2.2, 0.45, 1.2)
+
 	for definition in Content.fantasy_parts_for(words):
 		var group := Node3D.new()
 		group.name = definition.id
+		group.scale = Vector3.ONE * part_scale
 		group.rotation_degrees.y = rng.randf_range(-6.0, 6.0)
 		for spec in definition.parts:
 			var node := CreatureRig.build_part_node(spec, rig.material_for(spec.role))
@@ -65,12 +70,12 @@ static func grow_fantasy_parts(rig: CreatureRig, state: CreatureState) -> void:
 		rig.attach_to_socket(definition.socket, group)
 
 
-## Every creature that walks out of the chamber has living eyes - the one visual cue
-## that says "this is no longer an ordinary animal", regardless of which traits were used.
-static func _make_eyes_glow(rig: CreatureRig) -> void:
+## Every creature that walks out of the chamber gets a faint glow - the one visual cue
+## that says "this is no longer an ordinary animal", regardless of which traits were
+## used. The models have no separate eye material, so the glow sits on the whole body.
+static func _make_creature_glow(rig: CreatureRig) -> void:
 	var glow := Content.role_color("glow", Color("#b7ffdf"))
-	rig.set_role_color("eye", glow)
-	rig.set_emission("eye", glow, 1.4)
+	rig.set_emission("skin", glow, 0.07)
 
 
 ## A translucent copy used side by side with the finished creature, so the student can
@@ -81,10 +86,15 @@ static func build_before_ghost(state: CreatureState) -> CreatureRig:
 	if rig == null:
 		return null
 	TraitVisuals.apply_all(rig, state.before_traits())
-	rig.clear_fx()
-	for role in rig.materials:
-		var mat: StandardMaterial3D = rig.materials[role]
-		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		mat.albedo_color.a = 0.3
-		mat.emission_enabled = false
+	# A flat translucent silhouette reads better here than a dimmed texture, and keeps
+	# the eye on the finished creature beside it.
+	rig.make_ghost(_ghost_color(state, rig))
 	return rig
+
+
+## The ghost still has to show the "It was..." colour, since that is half the sentence.
+static func _ghost_color(state: CreatureState, rig: CreatureRig) -> Color:
+	var before: Dictionary = state.before_traits()
+	if before.has(Content.COLOR_CATEGORY):
+		return Content.color_of(str(before[Content.COLOR_CATEGORY]), rig.definition.skin_color)
+	return rig.definition.skin_color

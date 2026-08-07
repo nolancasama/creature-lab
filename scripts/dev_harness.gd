@@ -97,7 +97,7 @@ static func _goto(phase: String) -> void:
 		"lab":
 			# The recording sub-state of ANIMAL_SELECTION: Game.current already begun,
 			# so the scene's _ready() skips the picking grid and goes straight there.
-			Game.begin_creature("elephant" if ids.has("elephant") else ids[0])
+			Game.begin_creature("dog" if ids.has("dog") else ids[0])
 			Game.set_phase(Game.Phase.ANIMAL_SELECTION)
 		"chamber":
 			_seed_full_creature(ids)
@@ -118,7 +118,7 @@ static func _goto(phase: String) -> void:
 
 
 static func _seed_full_creature(ids: PackedStringArray) -> void:
-	Game.begin_creature("elephant" if ids.has("elephant") else ids[0])
+	Game.begin_creature("dog" if ids.has("dog") else ids[0])
 	Game.record_sentence("SIZE", "small", "big")
 	Game.record_sentence("TEMPERATURE", "hot", "cold")
 	Game.record_sentence(Content.COLOR_CATEGORY, "red", "blue")
@@ -141,23 +141,41 @@ static func _selftest(main: Node) -> void:
 	# appends inside _check() would never reach the caller.
 	var failures: Array[String] = []
 
-	_check(failures, Content.animals.size() >= 10, "expected 10 animals, got %d" % Content.animals.size())
+	_check(failures, Content.animals.size() >= 7, "expected 7 animals, got %d" % Content.animals.size())
 	_check(failures, Content.pairs.size() >= 8, "expected 8 opposite pairs, got %d" % Content.pairs.size())
 	_check(failures, Content.colors.size() >= 10, "expected 10 colours, got %d" % Content.colors.size())
 	_check(failures, Content.fantasy_parts.size() >= 10, "expected fantasy parts, got %d" % Content.fantasy_parts.size())
 
-	# Every animal must assemble, and every animal must be able to become a creature.
+	# Every animal must load its model, and every bone the data references must really
+	# exist in that model - a typo in animals.json is otherwise invisible until a trait
+	# silently does nothing.
 	for def in Content.animals:
 		var rig := CreatureFactory.build_plain(def.id)
-		_check(failures, rig != null and rig.pivots.size() == def.parts.size(),
-			"%s did not assemble" % def.id)
-		_check(failures, not def.feature_parts.is_empty(), "%s has no LENGTH feature part" % def.id)
-		for feature in def.feature_parts:
-			_check(failures, rig.pivots.has(feature), "%s: feature part '%s' missing" % [def.id, feature])
+		_check(failures, rig != null, "%s did not build" % def.id)
+		if rig == null:
+			continue
+		_check(failures, rig.skeleton != null, "%s: no skeleton in model '%s'" % [def.id, def.model])
+		_check(failures, rig.mesh_instance != null, "%s: no mesh in model '%s'" % [def.id, def.model])
+		_check(failures, not def.feature_bones.is_empty(), "%s has no LENGTH feature bone" % def.id)
+
+		if rig.skeleton != null:
+			var all_bones: Array[String] = []
+			all_bones.append_array(Array(def.feature_bones))
+			all_bones.append_array(Array(def.bulk_bones))
+			all_bones.append_array(Array(def.leg_bones))
+			for socket in def.sockets:
+				all_bones.append(def.socket_bone(str(socket)))
+			for bone in all_bones:
+				_check(failures, rig.skeleton.find_bone(bone) != -1,
+					"%s: bone '%s' not in model" % [def.id, bone])
+
 		for socket in ["head_top", "back", "rear", "face"]:
 			_check(failures, def.sockets.has(socket), "%s: socket '%s' missing" % [def.id, socket])
-		if rig != null:
-			rig.free()
+
+		# Height normalisation is what lets a chicken and a horse share a camera.
+		_check(failures, absf(rig.crown_height() - def.stand_height) < 0.01,
+			"%s: normalised to %.2f, expected %.2f" % [def.id, rig.crown_height(), def.stand_height])
+		rig.free()
 
 	# Traits and fantasy assembly, exercised across every pair and both directions.
 	for def in Content.animals:

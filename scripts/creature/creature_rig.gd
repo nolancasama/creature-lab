@@ -1,11 +1,20 @@
 class_name CreatureRig
 extends Node3D
-## A creature assembled at runtime from the primitives listed in its AnimalDefinition.
+## A skinned animal model from res://models/animals.glb, wired so the trait system can
+## drive it.
 ##
-## No 3D model files exist for this project, and building bodies out of described parts
-## is what makes the data-driven promise real: "Length Modifier -> trunk / ears / tail"
-## is a field in JSON, not a switch statement. Each part is a pivot holding a mesh, so
-## modifiers grow limbs away from where they attach instead of around their middle.
+## Traits used to transform primitive shapes; now they pose bones. Same public surface
+## either way - TraitVisuals, CreatureFactory and CreatureBrain never learn the
+## difference. What changed underneath:
+##   long/short  -> scale the feature bones (ears, tail, wings) along their own axis
+##   strong/weak -> scale the bulk bones on X/Z
+##   colour      -> a shader that re-lights the target colour with the texture's own
+##                  light/dark pattern (see shaders/creature.gdshader for why)
+##
+## Fantasy add-on parts are still primitives, so BodyPartSpec and build_part_node stay.
+
+const MODEL_PATH := "res://models/animals.glb"
+const SHADER_PATH := "res://shaders/creature.gdshader"
 
 const ROLE_FALLBACKS := {
 	"eye": Color("#1a1a22"),
@@ -20,19 +29,22 @@ const ROLE_FALLBACKS := {
 }
 
 var definition: AnimalDefinition = null
-var body: Node3D = null
+var body: Node3D = null ## Trait scaling lives here.
 var fx_root: Node3D = null
+var skeleton: Skeleton3D = null
+var mesh_instance: MeshInstance3D = null
+var material: ShaderMaterial = null
 
-var pivots := {} ## part id -> Node3D
-var materials := {} ## role -> StandardMaterial3D
 var sockets := {} ## socket name -> Node3D
+var part_materials := {} ## role -> StandardMaterial3D, for fantasy add-ons
 
 var tempo := 1.0 ## Idle animation speed; the SPEED modifier drives this.
 var moving := false ## Zoo creatures set this to swing their legs.
 
-var _base_pivots := {} ## part id -> base position
+var _model_root: Node3D = null
+var _normal_scale := 1.0
 var _clock := 0.0
-var _last_swing := 0.0
+var _posed_bones := {} ## bone index -> true, so reset only touches what we changed
 
 
 static func create(def: AnimalDefinition) -> CreatureRig:
@@ -51,122 +63,114 @@ func _build(def: AnimalDefinition) -> void:
 	fx_root.name = "Fx"
 	add_child(fx_root)
 
-	for spec in def.parts:
-		var pivot := build_part_node(spec, _material(spec.role))
-		body.add_child(pivot)
-		pivots[spec.id] = pivot
-		_base_pivots[spec.id] = spec.pivot
+	_model_root = _instantiate_model(def.model)
+	if _model_root == null:
+		push_error("Animal '%s': no node named '%s' in %s" % [def.id, def.model, MODEL_PATH])
+		return
+	body.add_child(_model_root)
 
-	for socket_name in def.sockets:
+	skeleton = _first_of_class(_model_root, "Skeleton3D")
+	mesh_instance = _first_of_class(_model_root, "MeshInstance3D")
+	if mesh_instance == null:
+		push_error("Animal '%s': model has no MeshInstance3D" % def.id)
+		return
+
+	_normalise_height()
+	_setup_material()
+	_build_sockets()
+
+
+## Pull one animal out of the shared GLB and discard the other six. The PackedScene
+## itself is cached by Godot's resource loader, so this stays cheap.
+static func _instantiate_model(model_name: String) -> Node3D:
+	var packed: PackedScene = load(MODEL_PATH)
+	if packed == null:
+		return null
+	var scene := packed.instantiate()
+	var wanted := scene.get_node_or_null(NodePath(model_name))
+	if wanted == null:
+		scene.free()
+		return null
+	scene.remove_child(wanted)
+	scene.free()
+	wanted.name = "Model"
+	return wanted
+
+
+## Source models range from 0.5 to 2.0 units tall. Scale every one to its declared
+## stand_height and sit it on the floor, so trait maths and camera framing can assume
+## a predictable size.
+func _normalise_height() -> void:
+	var box := mesh_instance.get_aabb()
+	var height: float = maxf(box.size.y, 0.001)
+	_normal_scale = definition.stand_height / height
+	_model_root.scale = Vector3.ONE * _normal_scale
+	_model_root.position.y = -box.position.y * _normal_scale
+
+
+func _setup_material() -> void:
+	var shader: Shader = load(SHADER_PATH)
+	var base: BaseMaterial3D = mesh_instance.mesh.surface_get_material(0)
+	material = ShaderMaterial.new()
+	material.shader = shader
+	if base != null and base.albedo_texture != null:
+		material.set_shader_parameter("base_tex", base.albedo_texture)
+	_reset_material()
+	mesh_instance.material_override = material
+
+
+func _reset_material() -> void:
+	if material == null:
+		return
+	material.set_shader_parameter("tint", Color.WHITE)
+	material.set_shader_parameter("tint_amount", 0.0)
+	material.set_shader_parameter("wash", Color.WHITE)
+	material.set_shader_parameter("wash_amount", 0.0)
+	material.set_shader_parameter("emission_colour", Color.BLACK)
+	material.set_shader_parameter("emission_energy", 0.0)
+	material.set_shader_parameter("roughness_value", 0.85)
+	material.set_shader_parameter("metallic_value", 0.0)
+
+
+## Sockets sit in normalised space under Body, so their offsets read the same on a
+## chicken and a horse. They do not follow bone animation, which is fine - the idle
+## motion is a gentle bob, not a gallop.
+func _build_sockets() -> void:
+	for socket_name in definition.sockets:
 		var node := Node3D.new()
 		node.name = "socket_%s" % socket_name
-		node.position = def.sockets[socket_name]
+		node.position = _socket_position(str(socket_name))
 		body.add_child(node)
 		sockets[str(socket_name)] = node
 
 
-## Build one pivot-plus-mesh pair. Shared with the fantasy part builder so add-on horns
-## and wings are constructed exactly like body parts.
-static func build_part_node(spec: BodyPartSpec, material: StandardMaterial3D) -> Node3D:
-	var pivot := Node3D.new()
-	pivot.name = spec.id
-	pivot.position = spec.pivot
-	pivot.rotation_degrees = spec.rotation_deg
-
-	var mesh_instance := MeshInstance3D.new()
-	mesh_instance.name = "Mesh"
-	mesh_instance.mesh = _make_mesh(spec)
-	mesh_instance.position = spec.offset
-	# Round primitives take their depth from a node scale, since those mesh types only
-	# expose a single radius.
-	if spec.shape != "box" and not is_equal_approx(spec.size.x, spec.size.z) and spec.size.x > 0.0:
-		mesh_instance.scale = Vector3(1.0, 1.0, spec.size.z / spec.size.x)
-	mesh_instance.material_override = material
-	pivot.add_child(mesh_instance)
-	return pivot
-
-
-func material_for(role: String) -> StandardMaterial3D:
-	return _material(role)
-
-
-static func _make_mesh(spec: BodyPartSpec) -> Mesh:
-	match spec.shape:
-		"sphere":
-			var sphere := SphereMesh.new()
-			sphere.radius = maxf(spec.size.x * 0.5, 0.001)
-			sphere.height = maxf(spec.size.y, 0.002)
-			sphere.radial_segments = 18
-			sphere.rings = 9
-			return sphere
-		"capsule":
-			var capsule := CapsuleMesh.new()
-			capsule.radius = maxf(spec.size.x * 0.5, 0.001)
-			# CapsuleMesh height includes both hemispheres, so it can never be thinner
-			# than it is wide.
-			capsule.height = maxf(spec.size.y, spec.size.x * 1.02)
-			capsule.radial_segments = 14
-			capsule.rings = 4
-			return capsule
-		"cylinder", "cone":
-			var cylinder := CylinderMesh.new()
-			cylinder.top_radius = 0.0 if spec.shape == "cone" else maxf(spec.size.x * 0.5, 0.001)
-			cylinder.bottom_radius = maxf(spec.size.x * 0.5, 0.001)
-			cylinder.height = maxf(spec.size.y, 0.002)
-			cylinder.radial_segments = 14
-			return cylinder
-		_:
-			var box := BoxMesh.new()
-			box.size = spec.size
-			return box
-
-
-func _material(role: String) -> StandardMaterial3D:
-	if materials.has(role):
-		return materials[role]
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = base_role_color(role)
-	mat.roughness = 0.85
-	if role == "eye":
-		mat.roughness = 0.25
-	materials[role] = mat
-	return mat
-
-
-func base_role_color(role: String) -> Color:
-	match role:
-		"skin":
-			return definition.skin_color
-		"accent":
-			return definition.accent_color
-		"belly":
-			return definition.belly_color
-	if ROLE_FALLBACKS.has(role):
-		return Content.role_color(role, ROLE_FALLBACKS[role])
-	return definition.skin_color
+func _socket_position(socket_name: String) -> Vector3:
+	var offset := definition.socket_offset(socket_name)
+	var bone := definition.socket_bone(socket_name)
+	if skeleton == null or bone.is_empty():
+		return Vector3(0, definition.stand_height, 0) + offset
+	var idx := skeleton.find_bone(bone)
+	if idx == -1:
+		return Vector3(0, definition.stand_height, 0) + offset
+	var rest := skeleton.get_bone_global_rest(idx).origin * _normal_scale
+	rest.y += _model_root.position.y
+	return rest + offset
 
 
 # --- Modifier surface --------------------------------------------------------
 
-## Return every part and material to the state described by the AnimalDefinition.
-## Trait modifiers always recompute from this baseline, so applying them is idempotent
-## and order-independent.
+## Return every bone and material to its authored state. Trait modifiers always
+## recompute from this baseline, so applying them is idempotent and order-independent.
 func reset_modifiers() -> void:
-	for id in pivots:
-		var pivot: Node3D = pivots[id]
-		pivot.scale = Vector3.ONE
-		pivot.position = _base_pivots[id]
+	if skeleton != null:
+		for idx in _posed_bones:
+			skeleton.set_bone_pose_scale(idx, Vector3.ONE)
+			skeleton.set_bone_pose_rotation(idx, skeleton.get_bone_rest(idx).basis.get_rotation_quaternion())
+		_posed_bones.clear()
 	body.scale = Vector3.ONE
 	body.position = Vector3.ZERO
 	tempo = 1.0
-	for role in materials:
-		var mat: StandardMaterial3D = materials[role]
-		mat.albedo_color = base_role_color(role)
-		mat.emission_enabled = false
-		mat.emission_energy_multiplier = 1.0
-		mat.metallic = 0.0
-		mat.roughness = 0.25 if role == "eye" else 0.85
-		mat.rim_enabled = false
+	_reset_material()
 	clear_fx()
 
 
@@ -174,57 +178,82 @@ func scale_body(factor: Vector3) -> void:
 	body.scale *= factor
 
 
+## The colour trait. Repaints via the shader rather than multiplying, so dark animals
+## still change colour legibly.
+func recolor(color: Color) -> void:
+	if material == null:
+		return
+	material.set_shader_parameter("tint", color)
+	material.set_shader_parameter("tint_amount", 1.0)
+
+
 func set_role_color(role: String, color: Color) -> void:
-	_material(role).albedo_color = color
+	# "skin" is the animal itself; other roles belong to fantasy add-on parts.
+	if role == "skin":
+		recolor(color)
+	elif part_materials.has(role):
+		part_materials[role].albedo_color = color
+
+
+## A partial colour shift, used by hot/cold/old rather than a full repaint.
+func tint_role(role: String, color: Color, amount: float) -> void:
+	if role != "skin" or material == null:
+		return
+	material.set_shader_parameter("wash", color)
+	material.set_shader_parameter("wash_amount", clampf(amount, 0.0, 1.0))
 
 
 func set_emission(role: String, color: Color, energy: float) -> void:
-	var mat := _material(role)
-	mat.emission_enabled = energy > 0.001
-	mat.emission = color
-	mat.emission_energy_multiplier = energy
+	if role != "skin" or material == null:
+		return
+	material.set_shader_parameter("emission_colour", color)
+	material.set_shader_parameter("emission_energy", maxf(energy, 0.0))
 
 
 func set_surface(role: String, roughness: float, metallic: float) -> void:
-	var mat := _material(role)
-	mat.roughness = roughness
-	mat.metallic = metallic
-
-
-func tint_role(role: String, color: Color, amount: float) -> void:
-	var mat := _material(role)
-	mat.albedo_color = mat.albedo_color.lerp(color, clampf(amount, 0.0, 1.0))
-
-
-func scale_parts(ids: PackedStringArray, factor: Vector3) -> void:
-	for id in ids:
-		if pivots.has(id):
-			var pivot: Node3D = pivots[id]
-			pivot.scale *= factor
-
-
-## Stretch the animal's signature feature (trunk, ears, tail, neck) along its own axis,
-## then slide anything attached to its tip so the silhouette stays coherent.
-func stretch_feature(factor: float) -> void:
-	if definition.feature_parts.is_empty():
+	if role != "skin" or material == null:
 		return
-	for spec in definition.parts:
-		if not definition.feature_parts.has(spec.id):
+	material.set_shader_parameter("roughness_value", clampf(roughness, 0.0, 1.0))
+	material.set_shader_parameter("metallic_value", clampf(metallic, 0.0, 1.0))
+
+
+## STRENGTH: thicken or thin the body. `ids` is ignored - the bones come from the
+## animal definition - but the signature matches what TraitVisuals already calls.
+func scale_parts(_ids: PackedStringArray, factor: Vector3) -> void:
+	_scale_bones(definition.bulk_bones, Vector3(factor.x, 1.0, factor.z))
+
+
+## LENGTH: stretch whatever this animal's signature feature is, along the bone's own
+## axis. Bone scale propagates down the chain, so scaling the first tail bone
+## lengthens the whole tail.
+func stretch_feature(factor: float) -> void:
+	_scale_bones(definition.feature_bones, Vector3(1.0, factor, 1.0))
+
+
+func _scale_bones(bones: PackedStringArray, factor: Vector3) -> void:
+	if skeleton == null:
+		return
+	for bone in bones:
+		var idx := skeleton.find_bone(bone)
+		if idx == -1:
 			continue
-		var pivot: Node3D = pivots[spec.id]
-		var axis_scale := Vector3.ONE
-		axis_scale[spec.axis_index()] = factor
-		pivot.scale *= axis_scale
-	var slide := definition.feature_dir.normalized() * definition.feature_length * (factor - 1.0)
-	for id in definition.feature_followers:
-		if pivots.has(id):
-			var follower: Node3D = pivots[id]
-			follower.position = _base_pivots[id] + slide
+		skeleton.set_bone_pose_scale(idx, factor)
+		_posed_bones[idx] = true
 
 
 func attach_to_socket(socket_name: String, node: Node3D) -> void:
 	var host: Node3D = sockets.get(socket_name, body)
 	host.add_child(node)
+
+
+func material_for(role: String) -> StandardMaterial3D:
+	if part_materials.has(role):
+		return part_materials[role]
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Content.role_color(role, ROLE_FALLBACKS.get(role, definition.skin_color))
+	mat.roughness = 0.8
+	part_materials[role] = mat
+	return mat
 
 
 func add_fx(node: Node3D, at := Vector3.ZERO) -> void:
@@ -244,27 +273,99 @@ func crown_height() -> float:
 	return definition.stand_height * body.scale.y
 
 
+## Used by the naming screen's ghost: a flat translucent silhouette instead of the
+## textured model.
+func make_ghost(color: Color, alpha := 0.3) -> void:
+	if mesh_instance == null:
+		return
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(color.r, color.g, color.b, alpha)
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.roughness = 0.9
+	mesh_instance.material_override = mat
+	clear_fx()
+
+
 # --- Idle life ---------------------------------------------------------------
 
 func _process(delta: float) -> void:
 	_clock += delta * tempo
-	var breathe := sin(_clock * 1.8) * 0.02
-	body.position.y = breathe + (sin(_clock * 1.1) * 0.05 * definition.hover)
-	body.rotation.z = sin(_clock * 0.9) * 0.012
-	if moving:
-		_swing_limbs(sin(_clock * 6.0) * 0.42)
-	elif not is_zero_approx(_last_swing):
-		_swing_limbs(0.0)
+	body.position.y = sin(_clock * 1.8) * 0.02 + sin(_clock * 1.1) * 0.05 * definition.hover
+	body.rotation.z = sin(_clock * 0.9) * 0.01
+	_swing_legs(sin(_clock * 5.0) * 0.5 if moving else 0.0)
 
 
-func _swing_limbs(amount: float) -> void:
-	_last_swing = amount
+## No walk cycles ship with these models, so the legs are posed procedurally: opposite
+## legs swing out of phase around the bone's rest pose.
+func _swing_legs(amount: float) -> void:
+	if skeleton == null or definition.leg_bones.is_empty():
+		return
 	var index := 0
-	for spec in definition.parts:
-		if not (spec.id.begins_with("leg") or spec.id.begins_with("arm")):
-			continue
-		var pivot: Node3D = pivots[spec.id]
-		# Alternate the phase so opposite limbs move in opposite directions.
-		var phase := 1.0 if index % 2 == 0 else -1.0
-		pivot.rotation_degrees.x = spec.rotation_deg.x + rad_to_deg(amount) * phase * 0.35
+	for bone in definition.leg_bones:
+		var idx := skeleton.find_bone(bone)
 		index += 1
+		if idx == -1:
+			continue
+		var phase := 1.0 if index % 2 == 0 else -1.0
+		var rest := skeleton.get_bone_rest(idx).basis.get_rotation_quaternion()
+		skeleton.set_bone_pose_rotation(idx, rest * Quaternion(Vector3.RIGHT, amount * phase))
+		_posed_bones[idx] = true
+
+
+# --- Fantasy add-on parts (still primitives) ---------------------------------
+
+## Build one pivot-plus-mesh pair for a fantasy add-on (horns, wings, crystals).
+static func build_part_node(spec: BodyPartSpec, mat: StandardMaterial3D) -> Node3D:
+	var pivot := Node3D.new()
+	pivot.name = spec.id
+	pivot.position = spec.pivot
+	pivot.rotation_degrees = spec.rotation_deg
+
+	var mi := MeshInstance3D.new()
+	mi.name = "Mesh"
+	mi.mesh = _make_mesh(spec)
+	mi.position = spec.offset
+	if spec.shape != "box" and not is_equal_approx(spec.size.x, spec.size.z) and spec.size.x > 0.0:
+		mi.scale = Vector3(1.0, 1.0, spec.size.z / spec.size.x)
+	mi.material_override = mat
+	pivot.add_child(mi)
+	return pivot
+
+
+static func _make_mesh(spec: BodyPartSpec) -> Mesh:
+	match spec.shape:
+		"sphere":
+			var sphere := SphereMesh.new()
+			sphere.radius = maxf(spec.size.x * 0.5, 0.001)
+			sphere.height = maxf(spec.size.y, 0.002)
+			sphere.radial_segments = 18
+			sphere.rings = 9
+			return sphere
+		"capsule":
+			var capsule := CapsuleMesh.new()
+			capsule.radius = maxf(spec.size.x * 0.5, 0.001)
+			capsule.height = maxf(spec.size.y, spec.size.x * 1.02)
+			capsule.radial_segments = 14
+			capsule.rings = 4
+			return capsule
+		"cylinder", "cone":
+			var cylinder := CylinderMesh.new()
+			cylinder.top_radius = 0.0 if spec.shape == "cone" else maxf(spec.size.x * 0.5, 0.001)
+			cylinder.bottom_radius = maxf(spec.size.x * 0.5, 0.001)
+			cylinder.height = maxf(spec.size.y, 0.002)
+			cylinder.radial_segments = 14
+			return cylinder
+		_:
+			var box := BoxMesh.new()
+			box.size = spec.size
+			return box
+
+
+func _first_of_class(node: Node, cls: String) -> Node:
+	if node.is_class(cls):
+		return node
+	for c in node.get_children():
+		var found := _first_of_class(c, cls)
+		if found != null:
+			return found
+	return null

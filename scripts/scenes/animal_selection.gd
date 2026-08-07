@@ -13,8 +13,8 @@ const PREVIEW_SPIN := 0.45
 const SUCCESS_PAUSE := 1.1
 
 const PLATFORM_POS := Vector3(0.4, 0.0, 0.6)
-const CAMERA_POS := Vector3(2.2, 2.9, 7.8)
-const CAMERA_AIM := Vector3(0.4, 1.0, 0.0)
+const CAMERA_POS := Vector3(1.9, 2.4, 6.5)
+const CAMERA_AIM := Vector3(0.4, 0.95, 0.0)
 
 const DNA_PANEL_WIDTH := 380
 const RIGHT_PANEL_WIDTH := 480
@@ -83,7 +83,7 @@ func _process(delta: float) -> void:
 func _build_stage() -> void:
 	add_child(StageKit.environment(Color("#16243c"), Color("#2b4a72"), 0.5))
 	add_child(StageKit.key_light())
-	add_child(StageKit.fill_light(UiKit.ACCENT, Vector3(-3.0, 3.2, 3.2), 2.4, 14.0))
+	add_child(StageKit.fill_light(Color("#cfe6ff"), Vector3(-3.0, 3.2, 3.2), 1.1, 14.0))
 	add_child(StageKit.ground(9.0, Color("#141d2c")))
 
 	var platform := StageKit.platform(1.8, Color("#22304a"), UiKit.ACCENT)

@@ -27,10 +27,9 @@ static func apply_all(rig: CreatureRig, traits: Dictionary) -> void:
 
 
 static func _apply_color(rig: CreatureRig, word: String) -> void:
-	var base := Content.color_of(word, rig.definition.skin_color)
-	rig.set_role_color("skin", base)
-	rig.set_role_color("accent", base.darkened(0.28))
-	rig.set_role_color("belly", base.lightened(0.38))
+	# One call: the shader re-lights this colour with the model's own light/dark
+	# pattern, so markings survive the repaint.
+	rig.recolor(Content.color_of(word, rig.definition.skin_color))
 
 
 static func _apply_pair(rig: CreatureRig, category: String, word: String) -> void:
@@ -50,7 +49,7 @@ static func _apply_pair(rig: CreatureRig, category: String, word: String) -> voi
 		"SCALE_FEATURE":
 			rig.stretch_feature(value)
 		"BULK":
-			rig.scale_parts(rig.definition.bulk_parts, Vector3(value, 1.0, value))
+			rig.scale_parts(rig.definition.bulk_bones, Vector3(value, 1.0, value))
 		"TEMPO":
 			rig.tempo = value
 			if value > 1.0:
@@ -67,37 +66,34 @@ static func _apply_pair(rig: CreatureRig, category: String, word: String) -> voi
 
 static func _apply_thermal(rig: CreatureRig, value: float, mid: float) -> void:
 	if value > 0.0:
-		rig.tint_role("skin", HOT, 0.45)
-		rig.tint_role("accent", HOT, 0.3)
+		rig.tint_role("skin", HOT, 0.28)
 		rig.set_emission("skin", HOT, 0.55)
 		rig.add_fx(Fx.make("embers", HOT, 0.7), Vector3(0, mid, 0))
 	else:
-		rig.tint_role("skin", COLD, 0.5)
-		rig.tint_role("accent", COLD, 0.35)
-		rig.set_surface("skin", 0.25, 0.1)
+		rig.tint_role("skin", COLD, 0.28)
+		rig.set_surface("skin", 0.55, 0.05)
 		rig.add_fx(Fx.make("frost", COLD, 0.8), Vector3(0, mid * 1.4, 0))
 
 
 static func _apply_age(rig: CreatureRig, value: float, mid: float) -> void:
 	if value > 0.5: # old
-		rig.tint_role("skin", AGED, 0.5)
-		rig.tint_role("accent", AGED, 0.4)
+		rig.tint_role("skin", AGED, 0.32)
 		rig.scale_body(Vector3(1.0, 0.94, 1.0)) # a little stooped
 		rig.tempo *= 0.75
 		rig.add_fx(Fx.make("dust", Color("#c9c2b4"), 0.6), Vector3(0, mid * 0.5, 0))
 	else: # young
 		rig.scale_body(Vector3(0.92, 0.86, 0.92))
-		rig.tint_role("skin", rig.definition.belly_color, 0.28)
+		rig.tint_role("skin", rig.definition.skin_color.lightened(0.45), 0.28)
 		rig.tempo *= 1.25
 
 
 static func _apply_surface(rig: CreatureRig, value: float, mid: float) -> void:
 	if value > 0.5: # worn out
 		rig.set_surface("skin", 1.0, 0.0)
-		rig.tint_role("skin", Color("#6b6459"), 0.3)
+		rig.tint_role("skin", Color("#6b6459"), 0.22)
 		rig.add_fx(Fx.make("dust", Color("#b3a893"), 0.7), Vector3(0, mid * 0.6, 0))
 	else: # brand new
-		rig.set_surface("skin", 0.12, 0.15)
+		rig.set_surface("skin", 0.45, 0.1)
 		rig.set_emission("skin", Color.WHITE, 0.12)
 		rig.add_fx(Fx.make("sparkle", Color("#fff2b0"), 0.9), Vector3(0, mid, 0))
 
@@ -105,7 +101,6 @@ static func _apply_surface(rig: CreatureRig, value: float, mid: float) -> void:
 static func _apply_material(rig: CreatureRig, value: float) -> void:
 	if value > 0.5: # hard
 		rig.set_surface("skin", 0.15, 0.85)
-		rig.set_surface("accent", 0.2, 0.7)
 	else: # soft
 		rig.set_surface("skin", 1.0, 0.0)
 		rig.scale_body(Vector3(1.08, 0.95, 1.08)) # squashy

@@ -5,7 +5,7 @@ gameplay. A student picks an animal, programmes its DNA with three spoken senten
 the transformation chamber executes all three at once. The new creature goes to their zoo.
 
 The rule the whole design turns on: **the animal on the platform always shows the combined
-"It was…" state.** Choosing `small → big` makes the elephant shrink *now*; "big" is only
+"It was…" state.** Choosing `small → big` makes the dog shrink *now*; "big" is only
 recorded, never rendered, until the chamber runs. Past tense and present tense are two
 objects on screen at the same time.
 
@@ -48,9 +48,9 @@ Word Lab, the naming screen and the zoo are as specified.
 | *(nothing about mis-taps)* | "Change card" reverts the pending BEFORE trait; used categories lock out | A child who mis-taps was otherwise stuck with it. |
 | `TransformationSequence` as its own scene | TRANSFORMATION is a real FSM phase that routes back to the **same** lab scene | The animal is supposed to *walk into* the chamber standing in the lab. Cutting to a fresh scene at that exact moment breaks the one beat the design is built around. |
 | Zoo creatures use `NavigationAgent3D` | Steering wander inside `CreatureBrain` | The yard is flat and has no obstacles: a navmesh is bake time and per-frame agent cost for a problem that does not exist. Movement is contained in one class, so swapping the agent in later touches nothing else. |
-| Content as `Resources/*.tres` | Content as `content/*.json`, loaded into the same typed `Resource` classes | Ten animals of a dozen primitives each is unmaintainable as hand-authored `.tres`, and a teacher can edit JSON in Notepad. The Resource classes still exist, so `.tres` authoring stays possible. |
-| *(no art pipeline)* | Animals are **assembled at runtime from primitives described in data** | There are no model files. It is also what makes the data-driven promise real: "Length Modifier → trunk / ears / tail" is a JSON field, not a switch statement. |
-| Creature reveal, then a separate naming screen | The naming screen shows the **before-animal as a translucent ghost beside the finished creature**, with the three sentences underneath | The contrast *is* the grammar point, and a scene change was hiding it. Seeing a small red elephant next to a big blue frost mammoth is the moment the lesson lands. |
+| Content as `Resources/*.tres` | Content as `content/*.json`, loaded into the same typed `Resource` classes | Hand-authoring this much data as `.tres` is unmaintainable, and a teacher can edit JSON in Notepad. The Resource classes still exist, so `.tres` authoring stays possible. |
+| *(no art pipeline)* | Animals are **rigged models** from `models/animals.glb`, driven by **bone** names listed in data | Started as runtime-assembled primitives, since no art existed. Swapped to the ITHappy "Animals FREE" pack once it was available. The data-driven promise survived the swap: "Length Modifier → ears / tail / wings" is still a JSON field, now naming a bone instead of a shape. |
+| Creature reveal, then a separate naming screen | The naming screen shows the **before-animal as a translucent ghost beside the finished creature**, with the three sentences underneath | The contrast *is* the grammar point, and a scene change was hiding it. Seeing a small red dog next to a big blue horned hound is the moment the lesson lands. |
 
 ---
 
@@ -100,10 +100,12 @@ the Word Lab and in Teacher Settings immediately.
 
 **A new colour** → one row in `content/colors.json`.
 
-**A new animal** → one entry in `content/animals.json`: parts (primitive, size, pivot,
-rotation, role), `feature_parts` (what LENGTH stretches), `bulk_parts` (what STRENGTH
-thickens), and the four sockets fantasy parts attach to. `--selftest` will tell you if the
-sockets or feature parts are missing.
+**A new animal** → one entry in `content/animals.json` naming a node inside
+`models/animals.glb` plus the bones the traits drive: `feature_bones` (what LENGTH
+stretches), `bulk_bones` (what STRENGTH thickens), `leg_bones` (what the walk cycle
+swings), and four sockets for fantasy parts. `--selftest` verifies **every bone name
+against the real skeleton**, so a typo fails the build instead of silently doing nothing.
+Models are auto-scaled to `stand_height`, so source scale does not matter.
 
 **A new fantasy part** → one entry in `content/fantasy_parts.json` with the `trigger` word
 and a socket.
@@ -112,12 +114,16 @@ and a socket.
 
 ## Status
 
-**Phase 1 is complete and playable**: title → animal selection → laboratory → three spoken
-sentences → transformation → naming → zoo, plus Teacher Settings, the debug overlay (F3),
-procedural audio, and TTS. All ten animals, nine opposite pairs and ten colours ship as
-data, because that is what proves the extensibility claim rather than asserting it.
+**Phase 1 is complete and playable**: title → animal selection *and* sentence recording on
+one screen → transformation chamber → naming → zoo, plus Teacher Settings, the debug
+overlay (F3), procedural audio, and TTS. Seven animals, eight opposite pairs and ten
+colours ship as data.
 
-**Not done (Phase 2/3):** hand-tuned proportions for the nine non-elephant animals (they
-are assembled and playable but only the elephant has had a modelling pass), richer creature
-interactions in the zoo, camera moves, and a real art pass. The zoo is designed for 20–30
-creatures and caps at 30.
+**Art:** animal models are the [ITHappy "Animals FREE" pack](https://ithappystudios.com/free/animals-free/)
+(free for commercial and non-commercial use). Fantasy add-on parts — horns, crests, wings —
+are still generated from primitives at runtime.
+
+**Not done (Phase 2/3):** the pack ships **no animations**, so idle and walk are posed
+procedurally in `CreatureRig._swing_legs()`; a real animation set would look considerably
+better. Also outstanding: richer zoo interactions, camera moves, and a low-graphics
+toggle for weaker Chromebooks. The zoo is designed for 20–30 creatures and caps at 30.
