@@ -1,0 +1,39 @@
+name: Deploy Pages
+
+# GitHub's legacy (branch-based) Pages builder cannot process this site: the Godot web
+# export ships a ~37 MB index.wasm, and the legacy builder consistently exceeded its
+# 10-minute build timeout on it ("Page build failed"). Removing the wasm made the same
+# branch build in ~30s, which isolated it. This workflow uploads the site as an artifact
+# tarball and hands it straight to the Pages CDN, skipping that builder entirely.
+
+on:
+  push:
+    branches: [gh-pages]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
