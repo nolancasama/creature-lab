@@ -6,7 +6,8 @@ extends Node3D
 ## Traits used to transform primitive shapes; now they pose bones. Same public surface
 ## either way - TraitVisuals, CreatureFactory and CreatureBrain never learn the
 ## difference. What changed underneath:
-##   long/short  -> scale the feature bones (ears, tail, wings) along their own axis
+##   long/short  -> push the torso bones apart (see CreatureDeformer)
+##   tall/short  -> telescope the leg bones, one leg at a time
 ##   strong/weak -> scale the bulk bones on X/Z
 ##   colour      -> a shader that re-lights the target colour with the texture's own
 ##                  light/dark pattern (see shaders/creature.gdshader for why)
@@ -38,11 +39,15 @@ var material: ShaderMaterial = null
 var sockets := {} ## socket name -> Node3D
 var part_materials := {} ## role -> StandardMaterial3D, for fantasy add-ons
 
+var deformer: CreatureDeformer = null ## Body length and per-leg lengths.
+
 var tempo := 1.0 ## Idle animation speed; the SPEED modifier drives this.
 var moving := false ## Zoo creatures set this to swing their legs.
 
 var _model_root: Node3D = null
+var _base_model_pos := Vector3.ZERO
 var _normal_scale := 1.0
+var _trait_scale := Vector3.ONE ## SIZE/AGE scaling, kept apart from transient squash.
 var _clock := 0.0
 var _posed_bones := {} ## bone index -> true, so reset only touches what we changed
 
@@ -78,6 +83,7 @@ func _build(def: AnimalDefinition) -> void:
 	_normalise_height()
 	_setup_material()
 	_build_sockets()
+	deformer = CreatureDeformer.new(self)
 
 
 ## Pull one animal out of the shared GLB and discard the other six. The PackedScene
@@ -105,7 +111,8 @@ func _normalise_height() -> void:
 	var height: float = maxf(box.size.y, 0.001)
 	_normal_scale = definition.stand_height / height
 	_model_root.scale = Vector3.ONE * _normal_scale
-	_model_root.position.y = -box.position.y * _normal_scale
+	_base_model_pos = Vector3(0.0, -box.position.y * _normal_scale, 0.0)
+	_model_root.position = _base_model_pos
 
 
 func _setup_material() -> void:
@@ -166,16 +173,23 @@ func reset_modifiers() -> void:
 		for idx in _posed_bones:
 			skeleton.set_bone_pose_scale(idx, Vector3.ONE)
 			skeleton.set_bone_pose_rotation(idx, skeleton.get_bone_rest(idx).basis.get_rotation_quaternion())
+			skeleton.set_bone_pose_position(idx, skeleton.get_bone_rest(idx).origin)
 		_posed_bones.clear()
+	_trait_scale = Vector3.ONE
 	body.scale = Vector3.ONE
 	body.position = Vector3.ZERO
+	body.rotation = Vector3.ZERO
+	_model_root.position = _base_model_pos
 	tempo = 1.0
+	if deformer != null:
+		deformer.reset()
 	_reset_material()
 	clear_fx()
 
 
 func scale_body(factor: Vector3) -> void:
-	body.scale *= factor
+	_trait_scale *= factor
+	body.scale = _trait_scale
 
 
 ## The colour trait. Repaints via the shader rather than multiplying, so dark animals
@@ -223,13 +237,6 @@ func scale_parts(_ids: PackedStringArray, factor: Vector3) -> void:
 	_scale_bones(definition.bulk_bones, Vector3(factor.x, 1.0, factor.z))
 
 
-## LENGTH: stretch whatever this animal's signature feature is, along the bone's own
-## axis. Bone scale propagates down the chain, so scaling the first tail bone
-## lengthens the whole tail.
-func stretch_feature(factor: float) -> void:
-	_scale_bones(definition.feature_bones, Vector3(1.0, factor, 1.0))
-
-
 func _scale_bones(bones: PackedStringArray, factor: Vector3) -> void:
 	if skeleton == null:
 		return
@@ -239,6 +246,20 @@ func _scale_bones(bones: PackedStringArray, factor: Vector3) -> void:
 			continue
 		skeleton.set_bone_pose_scale(idx, factor)
 		_posed_bones[idx] = true
+
+
+func mark_posed(bone_index: int) -> void:
+	_posed_bones[bone_index] = true
+
+
+func normal_scale() -> float:
+	return _normal_scale
+
+
+## The deformer slides the model to keep a lengthened body centred on its platform.
+func set_model_offset(offset: Vector3) -> void:
+	if _model_root != null:
+		_model_root.position = _base_model_pos + offset
 
 
 func attach_to_socket(socket_name: String, node: Node3D) -> void:
@@ -270,7 +291,8 @@ func clear_fx() -> void:
 
 ## Roughly where the top of the creature is right now, for labels and camera framing.
 func crown_height() -> float:
-	return definition.stand_height * body.scale.y
+	var deform_lift: float = deformer.lift if deformer != null else 0.0
+	return definition.stand_height * _trait_scale.y + deform_lift
 
 
 ## Used by the naming screen's ghost: a flat translucent silhouette instead of the
@@ -290,8 +312,17 @@ func make_ghost(color: Color, alpha := 0.3) -> void:
 
 func _process(delta: float) -> void:
 	_clock += delta * tempo
-	body.position.y = sin(_clock * 1.8) * 0.02 + sin(_clock * 1.1) * 0.05 * definition.hover
+	# Idle motion is added on top of the deformation, never in place of it, so a
+	# transformed creature keeps its new proportions while it breathes and walks.
+	var lift := 0.0
+	var squash := Vector3.ONE
+	if deformer != null:
+		lift = deformer.lift + deformer.bounce
+		squash = deformer.squash
+
+	body.position.y = lift + sin(_clock * 1.8) * 0.02 + sin(_clock * 1.1) * 0.05 * definition.hover
 	body.rotation.z = sin(_clock * 0.9) * 0.01
+	body.scale = _trait_scale * squash
 	_swing_legs(sin(_clock * 5.0) * 0.5 if moving else 0.0)
 
 

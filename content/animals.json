@@ -1,101 +1,600 @@
 {
-  "_comment": "Animals are skinned models from res://models/animals.glb (ITHappy 'Animals FREE' pack, free for commercial use). Each entry names the node inside that GLB plus the bones the trait system drives. 'stand_height' is the display height every animal is normalised to, so wildly different source scales sit together. Socket offsets are in those same normalised units, Y up.",
+  "_comment": "Animals are skinned models from res://models/animals.glb (ITHappy 'Animals FREE' pack, free for commercial use). 'body_bones' are the torso segments the LONG/SHORT trait pushes apart - translating bones rather than scaling them is what stretches the torso without stretching the head, legs or tail. 'legs' lists each leg's telescoping segments in the order they pop out for TALL. 'stand_height' is the display height every animal is normalised to. Socket offsets are in those normalised units, Y up.",
   "roles": {
     "_comment": "Colours for fantasy add-on parts, which are still built from primitives.",
-    "dark": "#26262e", "ice": "#9fe4ff", "fire": "#ff8a3c", "horn": "#efe3c8",
-    "wing": "#cfe8ff", "crystal": "#b48cff", "glow": "#b7ffdf", "leaf": "#7ed957"
+    "dark": "#26262e",
+    "ice": "#9fe4ff",
+    "fire": "#ff8a3c",
+    "horn": "#efe3c8",
+    "wing": "#cfe8ff",
+    "crystal": "#b48cff",
+    "glow": "#b7ffdf",
+    "leaf": "#7ed957"
   },
   "animals": [
     {
-      "id": "dog", "display_name": "Dog", "fantasy_noun": "Hound", "model": "dog_0012",
-      "skin": "#c9ced6", "stand_height": 1.55, "walk_speed": 1.6, "voice_pitch": 1.0,
-      "feature_bones": ["ear.R", "ear.L"], "feature_label": "ears",
-      "bulk_bones": ["spine.005", "spine.006"],
-      "leg_bones": ["thigh.R", "thigh.L", "front_thigh.R", "front_thigh.L"],
+      "id": "dog",
+      "display_name": "Dog",
+      "fantasy_noun": "Hound",
+      "model": "dog_0012",
+      "skin": "#c9ced6",
+      "stand_height": 1.55,
+      "walk_speed": 1.6,
+      "voice_pitch": 1.0,
+      "bulk_bones": [
+        "spine.005",
+        "spine.006"
+      ],
+      "leg_bones": [
+        "thigh.R",
+        "thigh.L",
+        "front_thigh.R",
+        "front_thigh.L"
+      ],
       "sockets": {
-        "head_top": {"bone": "scull", "off": [0, 0.24, 0]},
-        "back":     {"bone": "spine.006", "off": [0, 0.30, 0]},
-        "rear":     {"bone": "spine.003", "off": [0, 0.10, 0]},
-        "face":     {"bone": "scull", "off": [0, 0.02, 0.24]}
-      }
+        "head_top": {
+          "bone": "scull",
+          "off": [
+            0,
+            0.24,
+            0
+          ]
+        },
+        "back": {
+          "bone": "spine.006",
+          "off": [
+            0,
+            0.3,
+            0
+          ]
+        },
+        "rear": {
+          "bone": "spine.003",
+          "off": [
+            0,
+            0.1,
+            0
+          ]
+        },
+        "face": {
+          "bone": "scull",
+          "off": [
+            0,
+            0.02,
+            0.24
+          ]
+        }
+      },
+      "body_bones": [
+        "spine.005",
+        "spine.006"
+      ],
+      "legs": [
+        {
+          "id": "front_left",
+          "bones": [
+            "front_shin.L",
+            "front_foot.L"
+          ]
+        },
+        {
+          "id": "front_right",
+          "bones": [
+            "front_shin.R",
+            "front_foot.R"
+          ]
+        },
+        {
+          "id": "rear_left",
+          "bones": [
+            "shin.L",
+            "foot.L"
+          ]
+        },
+        {
+          "id": "rear_right",
+          "bones": [
+            "shin.R",
+            "foot.R"
+          ]
+        }
+      ]
     },
     {
-      "id": "cat", "display_name": "Cat", "fantasy_noun": "Lynx", "model": "kitty_0012",
-      "skin": "#3a3a42", "stand_height": 1.25, "walk_speed": 1.8, "voice_pitch": 1.25,
-      "feature_bones": ["spine.004"], "feature_label": "tail",
-      "bulk_bones": ["spine.006", "spine.007"],
-      "leg_bones": ["thigh.R", "thigh.L", "front_thigh.R", "front_thigh.L"],
+      "id": "cat",
+      "display_name": "Cat",
+      "fantasy_noun": "Lynx",
+      "model": "kitty_0012",
+      "skin": "#3a3a42",
+      "stand_height": 1.25,
+      "walk_speed": 1.8,
+      "voice_pitch": 1.25,
+      "bulk_bones": [
+        "spine.006",
+        "spine.007"
+      ],
+      "leg_bones": [
+        "thigh.R",
+        "thigh.L",
+        "front_thigh.R",
+        "front_thigh.L"
+      ],
       "sockets": {
-        "head_top": {"bone": "scull", "off": [0, 0.20, 0]},
-        "back":     {"bone": "spine.007", "off": [0, 0.24, 0]},
-        "rear":     {"bone": "spine.004", "off": [0, 0.10, 0]},
-        "face":     {"bone": "scull", "off": [0, 0.02, 0.20]}
-      }
+        "head_top": {
+          "bone": "scull",
+          "off": [
+            0,
+            0.2,
+            0
+          ]
+        },
+        "back": {
+          "bone": "spine.007",
+          "off": [
+            0,
+            0.24,
+            0
+          ]
+        },
+        "rear": {
+          "bone": "spine.004",
+          "off": [
+            0,
+            0.1,
+            0
+          ]
+        },
+        "face": {
+          "bone": "scull",
+          "off": [
+            0,
+            0.02,
+            0.2
+          ]
+        }
+      },
+      "body_bones": [
+        "spine.006",
+        "spine.007"
+      ],
+      "legs": [
+        {
+          "id": "front_left",
+          "bones": [
+            "front_shin.L",
+            "front_foot.L"
+          ]
+        },
+        {
+          "id": "front_right",
+          "bones": [
+            "front_shin.R",
+            "front_foot.R"
+          ]
+        },
+        {
+          "id": "rear_left",
+          "bones": [
+            "shin.L",
+            "foot.L"
+          ]
+        },
+        {
+          "id": "rear_right",
+          "bones": [
+            "shin.R",
+            "foot.R"
+          ]
+        }
+      ]
     },
     {
-      "id": "tiger", "display_name": "Tiger", "fantasy_noun": "Sabertooth", "model": "tiger",
-      "skin": "#e08a3c", "stand_height": 1.85, "walk_speed": 1.4, "voice_pitch": 0.8,
-      "feature_bones": ["spine.006"], "feature_label": "tail",
-      "bulk_bones": ["spine.008", "spine.009"],
-      "leg_bones": ["thigh.R", "thigh.L", "front_thigh.R", "front_thigh.L"],
+      "id": "tiger",
+      "display_name": "Tiger",
+      "fantasy_noun": "Sabertooth",
+      "model": "tiger",
+      "skin": "#e08a3c",
+      "stand_height": 1.85,
+      "walk_speed": 1.4,
+      "voice_pitch": 0.8,
+      "bulk_bones": [
+        "spine.008",
+        "spine.009"
+      ],
+      "leg_bones": [
+        "thigh.R",
+        "thigh.L",
+        "front_thigh.R",
+        "front_thigh.L"
+      ],
       "sockets": {
-        "head_top": {"bone": "spine.012", "off": [0, 0.26, 0]},
-        "back":     {"bone": "spine.009", "off": [0, 0.32, 0]},
-        "rear":     {"bone": "spine.006", "off": [0, 0.10, 0]},
-        "face":     {"bone": "jaw", "off": [0, 0.02, 0.22]}
-      }
+        "head_top": {
+          "bone": "spine.012",
+          "off": [
+            0,
+            0.26,
+            0
+          ]
+        },
+        "back": {
+          "bone": "spine.009",
+          "off": [
+            0,
+            0.32,
+            0
+          ]
+        },
+        "rear": {
+          "bone": "spine.006",
+          "off": [
+            0,
+            0.1,
+            0
+          ]
+        },
+        "face": {
+          "bone": "jaw",
+          "off": [
+            0,
+            0.02,
+            0.22
+          ]
+        }
+      },
+      "body_bones": [
+        "spine.008",
+        "spine.009"
+      ],
+      "legs": [
+        {
+          "id": "front_left",
+          "bones": [
+            "front_shin.L",
+            "front_foot.L"
+          ]
+        },
+        {
+          "id": "front_right",
+          "bones": [
+            "front_shin.R",
+            "front_foot.R"
+          ]
+        },
+        {
+          "id": "rear_left",
+          "bones": [
+            "shin.L",
+            "foot.L"
+          ]
+        },
+        {
+          "id": "rear_right",
+          "bones": [
+            "shin.R",
+            "foot.R"
+          ]
+        }
+      ]
     },
     {
-      "id": "horse", "display_name": "Horse", "fantasy_noun": "Unicorn", "model": "horse_0012",
-      "skin": "#a9673f", "stand_height": 2.15, "walk_speed": 1.7, "voice_pitch": 0.9,
-      "feature_bones": ["ear.R", "ear.L"], "feature_label": "ears",
-      "bulk_bones": ["spine.006", "spine.007"],
-      "leg_bones": ["thigh.R", "thigh.L", "front_thigh.R", "front_thigh.L"],
+      "id": "horse",
+      "display_name": "Horse",
+      "fantasy_noun": "Unicorn",
+      "model": "horse_0012",
+      "skin": "#a9673f",
+      "stand_height": 2.15,
+      "walk_speed": 1.7,
+      "voice_pitch": 0.9,
+      "bulk_bones": [
+        "spine.006",
+        "spine.007"
+      ],
+      "leg_bones": [
+        "thigh.R",
+        "thigh.L",
+        "front_thigh.R",
+        "front_thigh.L"
+      ],
       "sockets": {
-        "head_top": {"bone": "scull", "off": [0, 0.30, 0]},
-        "back":     {"bone": "spine.007", "off": [0, 0.36, 0]},
-        "rear":     {"bone": "spine.004", "off": [0, 0.10, 0]},
-        "face":     {"bone": "scull", "off": [0, 0.02, 0.28]}
-      }
+        "head_top": {
+          "bone": "scull",
+          "off": [
+            0,
+            0.3,
+            0
+          ]
+        },
+        "back": {
+          "bone": "spine.007",
+          "off": [
+            0,
+            0.36,
+            0
+          ]
+        },
+        "rear": {
+          "bone": "spine.004",
+          "off": [
+            0,
+            0.1,
+            0
+          ]
+        },
+        "face": {
+          "bone": "scull",
+          "off": [
+            0,
+            0.02,
+            0.28
+          ]
+        }
+      },
+      "body_bones": [
+        "spine.006",
+        "spine.007"
+      ],
+      "legs": [
+        {
+          "id": "front_left",
+          "bones": [
+            "front_shin.L",
+            "front_foot.L"
+          ]
+        },
+        {
+          "id": "front_right",
+          "bones": [
+            "front_shin.R",
+            "front_foot.R"
+          ]
+        },
+        {
+          "id": "rear_left",
+          "bones": [
+            "shin.L",
+            "foot.L"
+          ]
+        },
+        {
+          "id": "rear_right",
+          "bones": [
+            "shin.R",
+            "foot.R"
+          ]
+        }
+      ]
     },
     {
-      "id": "deer", "display_name": "Deer", "fantasy_noun": "Stag", "model": "deer",
-      "skin": "#9a6b43", "stand_height": 2.0, "walk_speed": 1.6, "voice_pitch": 1.1,
-      "feature_bones": ["ear.R", "ear.L"], "feature_label": "ears",
-      "bulk_bones": ["spine.004", "spine.005"],
-      "leg_bones": ["thigh.R", "thigh.L", "front_thigh.R", "front_thigh.L"],
+      "id": "deer",
+      "display_name": "Deer",
+      "fantasy_noun": "Stag",
+      "model": "deer",
+      "skin": "#9a6b43",
+      "stand_height": 2.0,
+      "walk_speed": 1.6,
+      "voice_pitch": 1.1,
+      "bulk_bones": [
+        "spine.004",
+        "spine.005"
+      ],
+      "leg_bones": [
+        "thigh.R",
+        "thigh.L",
+        "front_thigh.R",
+        "front_thigh.L"
+      ],
       "sockets": {
-        "head_top": {"bone": "scull", "off": [0, 0.32, 0]},
-        "back":     {"bone": "spine.005", "off": [0, 0.34, 0]},
-        "rear":     {"bone": "spine.002", "off": [0, 0.10, 0]},
-        "face":     {"bone": "scull", "off": [0, 0.02, 0.24]}
-      }
+        "head_top": {
+          "bone": "scull",
+          "off": [
+            0,
+            0.32,
+            0
+          ]
+        },
+        "back": {
+          "bone": "spine.005",
+          "off": [
+            0,
+            0.34,
+            0
+          ]
+        },
+        "rear": {
+          "bone": "spine.002",
+          "off": [
+            0,
+            0.1,
+            0
+          ]
+        },
+        "face": {
+          "bone": "scull",
+          "off": [
+            0,
+            0.02,
+            0.24
+          ]
+        }
+      },
+      "body_bones": [
+        "spine.004",
+        "spine.005"
+      ],
+      "legs": [
+        {
+          "id": "front_left",
+          "bones": [
+            "front_shin.L",
+            "front_foot.L"
+          ]
+        },
+        {
+          "id": "front_right",
+          "bones": [
+            "front_shin.R",
+            "front_foot.R"
+          ]
+        },
+        {
+          "id": "rear_left",
+          "bones": [
+            "shin.L",
+            "foot.L"
+          ]
+        },
+        {
+          "id": "rear_right",
+          "bones": [
+            "shin.R",
+            "foot.R"
+          ]
+        }
+      ]
     },
     {
-      "id": "penguin", "display_name": "Penguin", "fantasy_noun": "Frostwing", "model": "pinguin_0012",
-      "skin": "#34343c", "stand_height": 1.4, "walk_speed": 0.9, "voice_pitch": 1.3,
-      "feature_bones": ["fin.R", "fin.L"], "feature_label": "flippers",
-      "bulk_bones": ["spine.003", "spine.004"],
-      "leg_bones": ["thigh.R", "thigh.L"],
+      "id": "penguin",
+      "display_name": "Penguin",
+      "fantasy_noun": "Frostwing",
+      "model": "pinguin_0012",
+      "skin": "#34343c",
+      "stand_height": 1.4,
+      "walk_speed": 0.9,
+      "voice_pitch": 1.3,
+      "bulk_bones": [
+        "spine.003",
+        "spine.004"
+      ],
+      "leg_bones": [
+        "thigh.R",
+        "thigh.L"
+      ],
       "sockets": {
-        "head_top": {"bone": "scull", "off": [0, 0.24, 0]},
-        "back":     {"bone": "spine.004", "off": [0, 0.24, 0]},
-        "rear":     {"bone": "spine.001", "off": [0, 0.06, 0]},
-        "face":     {"bone": "scull", "off": [0, 0.02, 0.20]}
-      }
+        "head_top": {
+          "bone": "scull",
+          "off": [
+            0,
+            0.24,
+            0
+          ]
+        },
+        "back": {
+          "bone": "spine.004",
+          "off": [
+            0,
+            0.24,
+            0
+          ]
+        },
+        "rear": {
+          "bone": "spine.001",
+          "off": [
+            0,
+            0.06,
+            0
+          ]
+        },
+        "face": {
+          "bone": "scull",
+          "off": [
+            0,
+            0.02,
+            0.2
+          ]
+        }
+      },
+      "body_bones": [
+        "spine.003",
+        "spine.004"
+      ],
+      "legs": [
+        {
+          "id": "rear_left",
+          "bones": [
+            "shin.L",
+            "foot.L"
+          ]
+        },
+        {
+          "id": "rear_right",
+          "bones": [
+            "shin.R",
+            "foot.R"
+          ]
+        }
+      ]
     },
     {
-      "id": "chicken", "display_name": "Chicken", "fantasy_noun": "Phoenix", "model": "chicken_0012",
-      "skin": "#a55f3a", "stand_height": 1.15, "walk_speed": 1.5, "voice_pitch": 1.45,
-      "feature_bones": ["Wing.R", "Wing.L"], "feature_label": "wings",
-      "bulk_bones": ["spine.003", "spine.004"],
-      "leg_bones": ["thigh.R", "thigh.L"],
+      "id": "chicken",
+      "display_name": "Chicken",
+      "fantasy_noun": "Phoenix",
+      "model": "chicken_0012",
+      "skin": "#a55f3a",
+      "stand_height": 1.15,
+      "walk_speed": 1.5,
+      "voice_pitch": 1.45,
+      "bulk_bones": [
+        "spine.003",
+        "spine.004"
+      ],
+      "leg_bones": [
+        "thigh.R",
+        "thigh.L"
+      ],
       "sockets": {
-        "head_top": {"bone": "scull", "off": [0, 0.20, 0]},
-        "back":     {"bone": "spine.004", "off": [0, 0.22, 0]},
-        "rear":     {"bone": "spine.001", "off": [0, 0.06, 0]},
-        "face":     {"bone": "scull", "off": [0, 0.02, 0.18]}
-      }
+        "head_top": {
+          "bone": "scull",
+          "off": [
+            0,
+            0.2,
+            0
+          ]
+        },
+        "back": {
+          "bone": "spine.004",
+          "off": [
+            0,
+            0.22,
+            0
+          ]
+        },
+        "rear": {
+          "bone": "spine.001",
+          "off": [
+            0,
+            0.06,
+            0
+          ]
+        },
+        "face": {
+          "bone": "scull",
+          "off": [
+            0,
+            0.02,
+            0.18
+          ]
+        }
+      },
+      "body_bones": [
+        "spine.003",
+        "spine.004"
+      ],
+      "legs": [
+        {
+          "id": "rear_left",
+          "bones": [
+            "shin.L",
+            "foot.L"
+          ]
+        },
+        {
+          "id": "rear_right",
+          "bones": [
+            "shin.R",
+            "foot.R"
+          ]
+        }
+      ]
     }
   ]
 }

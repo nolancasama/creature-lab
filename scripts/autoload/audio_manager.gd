@@ -54,6 +54,13 @@ func _build_library() -> void:
 	_library["reveal"] = _arpeggio([392.0, 523.25, 659.25, 1046.5], 0.16)
 	_library["pop"] = _blip(880.0, 440.0, 0.09, 0.5)
 	_library["ambience"] = _drone([110.0, 164.81, 220.0], 4.0)
+	# Cartoon transformation sounds: a rising glide for taffy stretch, a falling one
+	# for the accordion squish, a quick zip for a retracting leg, a soft thud for
+	# landing on stubby ones.
+	_library["stretch"] = _blip(210.0, 760.0, 1.10, 0.30)
+	_library["squish"] = _blip(700.0, 170.0, 0.55, 0.34)
+	_library["zip"] = _blip(880.0, 330.0, 0.14, 0.42)
+	_library["thud"] = _blip(150.0, 62.0, 0.26, 0.55)
 
 
 ## A decaying sine that glides from one pitch to another - the workhorse UI sound.

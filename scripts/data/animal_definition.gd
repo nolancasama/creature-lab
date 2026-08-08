@@ -13,10 +13,14 @@ extends Resource
 @export var model: String = "" ## Node name inside animals.glb.
 @export var skin_color: Color = Color("#9aa0a8") ## Representative colour, for UI and ghosts.
 
-## The LENGTH trait scales these bones along their own axis. Whatever reads best on
-## this animal: ears on a dog, tail on a cat, wings on a chicken.
-@export var feature_bones: PackedStringArray = PackedStringArray()
-@export var feature_label: String = "" ## "ears" / "tail" / "wings", for teacher-facing text.
+## The torso segments LONG/SHORT pushes apart. These are *translated*, not scaled, so
+## the torso lengthens while the head, legs and tail keep their own proportions.
+@export var body_bones: PackedStringArray = PackedStringArray()
+
+## One entry per leg, in the order they pop out during a TALL transformation:
+## {"id": String, "bones": PackedStringArray}. The bones are the telescoping segments
+## below the hip, so TALL/SHORT changes leg length without touching the torso.
+@export var legs: Array[Dictionary] = []
 
 @export var bulk_bones: PackedStringArray = PackedStringArray() ## Thickened by STRENGTH.
 @export var leg_bones: PackedStringArray = PackedStringArray() ## Swung by the walk cycle.
@@ -38,8 +42,12 @@ static func from_dict(d: Dictionary) -> AnimalDefinition:
 	a.fantasy_noun = str(d.get("fantasy_noun", a.display_name))
 	a.model = str(d.get("model", ""))
 	a.skin_color = Color.html(str(d.get("skin", "#9aa0a8")))
-	a.feature_bones = PackedStringArray(d.get("feature_bones", []))
-	a.feature_label = str(d.get("feature_label", "tail"))
+	a.body_bones = PackedStringArray(d.get("body_bones", []))
+	for leg in d.get("legs", []):
+		a.legs.append({
+			"id": str(leg.get("id", "leg")),
+			"bones": PackedStringArray(leg.get("bones", [])),
+		})
 	a.bulk_bones = PackedStringArray(d.get("bulk_bones", []))
 	a.leg_bones = PackedStringArray(d.get("leg_bones", []))
 	for socket_name in d.get("sockets", {}):

@@ -43,8 +43,8 @@ static func _autoplay(main: Node) -> void:
 	await tree.create_timer(1.4).timeout
 
 	var picks := [
-		["SIZE", "small", "big"],
-		["TEMPERATURE", "hot", "cold"],
+		["LENGTH", "long", "short"],
+		["HEIGHT", "tall", "short"],
 		[Content.COLOR_CATEGORY, "red", "blue"],
 	]
 	for pick in picks:
@@ -56,7 +56,7 @@ static func _autoplay(main: Node) -> void:
 		word_lab.pair_selected.emit(str(pick[0]), str(pick[1]), str(pick[2]))
 		await tree.create_timer(0.7).timeout
 		Speech.submit_typed(GrammarValidator.expected_sentence(str(pick[1]), str(pick[2])))
-		await tree.create_timer(1.8).timeout
+		await tree.create_timer(2.6).timeout
 		print("[autoplay] slot %d recorded" % Game.current.slots_filled())
 
 	# The chamber sequence plus the fade into the naming screen.
@@ -119,8 +119,8 @@ static func _goto(phase: String) -> void:
 
 static func _seed_full_creature(ids: PackedStringArray) -> void:
 	Game.begin_creature("dog" if ids.has("dog") else ids[0])
-	Game.record_sentence("SIZE", "small", "big")
-	Game.record_sentence("TEMPERATURE", "hot", "cold")
+	Game.record_sentence("LENGTH", "long", "short")
+	Game.record_sentence("HEIGHT", "tall", "short")
 	Game.record_sentence(Content.COLOR_CATEGORY, "red", "blue")
 	Game.current.generated_name = NameGenerator.candidates(Game.current)[0]
 
@@ -156,13 +156,16 @@ static func _selftest(main: Node) -> void:
 			continue
 		_check(failures, rig.skeleton != null, "%s: no skeleton in model '%s'" % [def.id, def.model])
 		_check(failures, rig.mesh_instance != null, "%s: no mesh in model '%s'" % [def.id, def.model])
-		_check(failures, not def.feature_bones.is_empty(), "%s has no LENGTH feature bone" % def.id)
+		_check(failures, not def.body_bones.is_empty(), "%s has no LONG/SHORT body bones" % def.id)
+		_check(failures, def.legs.size() >= 2, "%s has fewer than 2 legs configured" % def.id)
 
 		if rig.skeleton != null:
 			var all_bones: Array[String] = []
-			all_bones.append_array(Array(def.feature_bones))
+			all_bones.append_array(Array(def.body_bones))
 			all_bones.append_array(Array(def.bulk_bones))
 			all_bones.append_array(Array(def.leg_bones))
+			for leg in def.legs:
+				all_bones.append_array(Array(leg["bones"] as PackedStringArray))
 			for socket in def.sockets:
 				all_bones.append(def.socket_bone(str(socket)))
 			for bone in all_bones:
@@ -175,6 +178,29 @@ static func _selftest(main: Node) -> void:
 		# Height normalisation is what lets a chicken and a horse share a camera.
 		_check(failures, absf(rig.crown_height() - def.stand_height) < 0.01,
 			"%s: normalised to %.2f, expected %.2f" % [def.id, rig.crown_height(), def.stand_height])
+
+		# LONG must actually move the torso, TALL must actually lift the body, and both
+		# must return to exactly rest - otherwise a cancelled card leaves a dent.
+		# Local pose, not global: a skeleton outside the scene tree never recomputes its
+		# global pose, and the selftest builds rigs unparented.
+		var tip := rig.skeleton.find_bone(def.body_bones[def.body_bones.size() - 1])
+		var rest_tip: Vector3 = rig.skeleton.get_bone_rest(tip).origin
+		rig.deformer.set_state(1.95, 1.0)
+		var long_tip: Vector3 = rig.skeleton.get_bone_pose_position(tip)
+		_check(failures, long_tip.distance_to(rest_tip) > 0.01,
+			"%s: LONG did not move the torso" % def.id)
+
+		rig.deformer.set_state(1.0, 2.2)
+		_check(failures, rig.deformer.lift > 0.01,
+			"%s: TALL did not lift the body (feet would sink)" % def.id)
+		rig.deformer.set_state(1.0, 0.45)
+		_check(failures, rig.deformer.lift < -0.005,
+			"%s: SHORT legs did not lower the body" % def.id)
+
+		rig.deformer.reset()
+		var back_tip: Vector3 = rig.skeleton.get_bone_pose_position(tip)
+		_check(failures, back_tip.distance_to(rest_tip) < 0.001,
+			"%s: deformation did not return to rest" % def.id)
 		rig.free()
 
 	# Traits and fantasy assembly, exercised across every pair and both directions.

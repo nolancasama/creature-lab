@@ -5,25 +5,59 @@ extends RefCounted
 ## Always applied as a whole set from a clean baseline rather than incrementally, so the
 ## result never depends on the order the student picked their cards, and "undo the card
 ## I mis-tapped" is just another call with one fewer entry.
+##
+## Body length and leg length are handled apart from the rest: they are collected into
+## target values and handed to the deformer, which either snaps to them or plays a
+## cartoon transition into them. Everything else applies instantly either way.
 
 const HOT := Color("#ff7a2f")
 const COLD := Color("#8fd6ff")
 const AGED := Color("#8f8c86")
 
 
-static func apply_all(rig: CreatureRig, traits: Dictionary) -> void:
+## `animate` plays the transition into the new shape; without it the creature simply
+## starts out transformed, which is what the zoo, the ghost and the finished creature
+## want.
+static func apply_all(rig: CreatureRig, traits: Dictionary, animate := false) -> void:
 	if rig == null or rig.definition == null:
 		return
+
+	# Deformation has to survive the reset below, so remember where it currently is.
+	var from_body := 1.0
+	var from_leg := 1.0
+	if rig.deformer != null:
+		from_body = rig.deformer.body_length
+		from_leg = rig.deformer.leg_target
+
 	rig.reset_modifiers()
+
+	var body_target := 1.0
+	var leg_target := 1.0
 	# Colour last: it repaints roles that other modifiers may have tinted.
 	var color_word := ""
 	for category in traits:
+		var word := str(traits[category])
 		if str(category) == Content.COLOR_CATEGORY:
-			color_word = str(traits[category])
+			color_word = word
+			continue
+		var pair := Content.pair_for_category(str(category))
+		if pair == null:
+			continue
+		if pair.modifier == "BODY_LENGTH":
+			body_target = pair.value_for(word)
+		elif pair.modifier == "LEG_LENGTH":
+			leg_target = pair.value_for(word)
 		else:
-			_apply_pair(rig, str(category), str(traits[category]))
+			_apply_pair(rig, str(category), word)
 	if not color_word.is_empty():
 		_apply_color(rig, color_word)
+
+	if rig.deformer != null:
+		if animate:
+			rig.deformer.set_state(from_body, from_leg)
+			rig.deformer.animate_to(body_target, leg_target)
+		else:
+			rig.deformer.set_state(body_target, leg_target)
 
 
 static func _apply_color(rig: CreatureRig, word: String) -> void:
@@ -42,12 +76,6 @@ static func _apply_pair(rig: CreatureRig, category: String, word: String) -> voi
 	match pair.modifier:
 		"SCALE_UNIFORM":
 			rig.scale_body(Vector3.ONE * value)
-		"SCALE_Y":
-			# Keep the volume believable: a tall creature also gets a little narrower.
-			var cross: float = pow(value, -0.25)
-			rig.scale_body(Vector3(cross, value, cross))
-		"SCALE_FEATURE":
-			rig.stretch_feature(value)
 		"BULK":
 			rig.scale_parts(rig.definition.bulk_bones, Vector3(value, 1.0, value))
 		"TEMPO":

@@ -101,9 +101,10 @@ the Word Lab and in Teacher Settings immediately.
 **A new colour** → one row in `content/colors.json`.
 
 **A new animal** → one entry in `content/animals.json` naming a node inside
-`models/animals.glb` plus the bones the traits drive: `feature_bones` (what LENGTH
-stretches), `bulk_bones` (what STRENGTH thickens), `leg_bones` (what the walk cycle
-swings), and four sockets for fantasy parts. `--selftest` verifies **every bone name
+`models/animals.glb` plus the bones the traits drive: `body_bones` (the torso segments
+LONG/SHORT pushes apart), `legs` (each leg's telescoping segments, listed in the order
+they pop out for TALL), `bulk_bones` (what STRENGTH thickens), `leg_bones` (what the
+walk cycle swings), and four sockets for fantasy parts. `--selftest` verifies **every bone name
 against the real skeleton**, so a typo fails the build instead of silently doing nothing.
 Models are auto-scaled to `stand_height`, so source scale does not matter.
 
@@ -122,6 +123,13 @@ colours ship as data.
 **Art:** animal models are the [ITHappy "Animals FREE" pack](https://ithappystudios.com/free/animals-free/)
 (free for commercial and non-commercial use). Fantasy add-on parts — horns, crests, wings —
 are still generated from primitives at runtime.
+
+**Transformations are cartoon animations, not scale changes.** `long/short` stretches
+only the torso (bones are *translated* apart, so the head, legs and tail keep their own
+shape) with a taffy overshoot and rebound; `tall/short` floats the body to its new height
+and then drops each leg to the ground one at a time. The two "short"s are deliberately
+different — one squashes the body, the other retracts the legs. See
+`scripts/creature/creature_deformer.gd`.
 
 **Not done (Phase 2/3):** the pack ships **no animations**, so idle and walk are posed
 procedurally in `CreatureRig._swing_legs()`; a real animation set would look considerably

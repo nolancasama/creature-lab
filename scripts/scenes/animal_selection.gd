@@ -33,6 +33,7 @@ var _picking_panel: Control = null
 var _buttons := {}
 var _name_label: Label = null
 var _selected := ""
+var _rig_animal := "" ## Which animal the live rig was built for.
 
 # Recording UI
 var _root: Control = null
@@ -165,11 +166,7 @@ func _preview(animal_id: String) -> void:
 	_selected = animal_id
 	Audio.play("select")
 
-	if _rig != null:
-		_rig.queue_free()
-	_rig = CreatureFactory.build_plain(animal_id)
-	if _rig != null:
-		_preview_root.add_child(_rig)
+	_build_rig(animal_id)
 	_preview_root.rotation.y = -0.7
 
 	var def := Content.animal(animal_id)
@@ -199,7 +196,7 @@ func _enter_recording() -> void:
 		_picking_panel = null
 
 	_build_recording_ui()
-	_refresh_rig()
+	_apply_traits(false)
 	_sync_ui()
 
 
@@ -308,19 +305,38 @@ func _assigned_category() -> String:
 	return remaining[(round_seed + Game.current.slots_filled() * 7) % remaining.size()]
 
 
-## Rebuild the animal from the committed "It was" traits plus whatever card is
-## currently selected but not yet spoken.
-func _refresh_rig() -> void:
+## Show the committed "It was" traits plus whatever card is currently selected but not
+## yet spoken.
+##
+## The rig is deliberately NOT rebuilt here. Rebuilding would reset the deformer every
+## time a card is tapped, so a body could never be seen stretching - it would only ever
+## pop into its new shape. Keeping one rig alive lets the transition animate from
+## wherever the creature currently is, and lets the finished shape persist afterwards.
+func _apply_traits(animate: bool) -> void:
 	if Game.current == null:
 		return
-	var pending_traits := {}
+	if _rig == null or _rig_animal != Game.current.animal_id:
+		_build_rig(Game.current.animal_id)
+	if _rig == null:
+		return
+	var traits := Game.current.before_traits()
 	if not _pending.is_empty():
-		pending_traits[str(_pending["category"])] = str(_pending["before"])
+		traits[str(_pending["category"])] = str(_pending["before"])
+	TraitVisuals.apply_all(_rig, traits, animate)
+
+
+func _build_rig(animal_id: String) -> void:
 	if _rig != null:
 		_rig.queue_free()
-	_rig = CreatureFactory.build_lab_animal(Game.current, pending_traits)
+	_rig = CreatureFactory.build_plain(animal_id)
+	_rig_animal = animal_id
 	if _rig != null:
 		_preview_root.add_child(_rig)
+
+
+func _is_deform_category(category: String) -> bool:
+	var pair := Content.pair_for_category(category)
+	return pair != null and (pair.modifier == "BODY_LENGTH" or pair.modifier == "LEG_LENGTH")
 
 
 ## A short pop so a newly applied "It was..." trait is felt, not just seen.
@@ -338,8 +354,11 @@ func _on_pair_selected(category: String, before: String, after: String) -> void:
 		return
 	_pending = {"category": category, "before": before, "after": after}
 	_attempts = 0
-	_refresh_rig()
-	_punch()
+	_apply_traits(true)
+	# Body and leg changes stage their own cartoon transition; a scale punch on top
+	# would just fight it.
+	if not _is_deform_category(category):
+		_punch()
 	_word_lab.set_locked(true)
 	_speech.show_target(before, after)
 
@@ -349,7 +368,7 @@ func _cancel_pending() -> void:
 		return
 	_pending = {}
 	_attempts = 0
-	_refresh_rig()
+	_apply_traits(true)
 	_word_lab.set_locked(false)
 	_speech.show_idle("Pick another card.")
 
