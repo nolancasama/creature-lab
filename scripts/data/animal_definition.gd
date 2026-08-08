@@ -22,7 +22,17 @@ extends Resource
 ## below the hip, so TALL/SHORT changes leg length without touching the torso.
 @export var legs: Array[Dictionary] = []
 
-@export var bulk_bones: PackedStringArray = PackedStringArray() ## Thickened by STRENGTH.
+## STRONG/WEAK muscle groups: name -> {"bones": PackedStringArray}. Nesting between
+## groups is resolved by walking the skeleton, not declared here.
+@export var bulk: Dictionary = {}
+
+## Cartoon vein clusters that pop in on the biggest muscles when an animal turns strong:
+## [{"bone": String, "off": Vector3, "size": float}].
+@export var veins: Array[Dictionary] = []
+
+## Which species finishing pose closes the power-up: stomp | rear | puff | flex.
+@export var flourish: String = "puff"
+
 @export var leg_bones: PackedStringArray = PackedStringArray() ## Swung by the walk cycle.
 
 ## socket name -> {"bone": String, "off": Vector3}. Offsets are in normalised units
@@ -48,7 +58,16 @@ static func from_dict(d: Dictionary) -> AnimalDefinition:
 			"id": str(leg.get("id", "leg")),
 			"bones": PackedStringArray(leg.get("bones", [])),
 		})
-	a.bulk_bones = PackedStringArray(d.get("bulk_bones", []))
+	for group_name in d.get("bulk", {}):
+		var group: Dictionary = d["bulk"][group_name]
+		a.bulk[str(group_name)] = {"bones": PackedStringArray(group.get("bones", []))}
+	for vein in d.get("veins", []):
+		a.veins.append({
+			"bone": str(vein.get("bone", "")),
+			"off": BodyPartSpec.to_v3(vein.get("off", null), Vector3.ZERO),
+			"size": float(vein.get("size", 0.3)),
+		})
+	a.flourish = str(d.get("flourish", "puff"))
 	a.leg_bones = PackedStringArray(d.get("leg_bones", []))
 	for socket_name in d.get("sockets", {}):
 		var entry: Dictionary = d["sockets"][socket_name]
@@ -61,6 +80,12 @@ static func from_dict(d: Dictionary) -> AnimalDefinition:
 	a.voice_pitch = float(d.get("voice_pitch", 1.0))
 	a.hover = float(d.get("hover", 0.0))
 	return a
+
+
+func bulk_bones_for(group: String) -> PackedStringArray:
+	if bulk.has(group):
+		return bulk[group].get("bones", PackedStringArray())
+	return PackedStringArray()
 
 
 func socket_bone(socket_name: String) -> String:

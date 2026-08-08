@@ -44,7 +44,7 @@ static func _autoplay(main: Node) -> void:
 
 	var picks := [
 		["LENGTH", "long", "short"],
-		["HEIGHT", "tall", "short"],
+		["STRENGTH", "strong", "weak"],
 		[Content.COLOR_CATEGORY, "red", "blue"],
 	]
 	for pick in picks:
@@ -120,7 +120,7 @@ static func _goto(phase: String) -> void:
 static func _seed_full_creature(ids: PackedStringArray) -> void:
 	Game.begin_creature("dog" if ids.has("dog") else ids[0])
 	Game.record_sentence("LENGTH", "long", "short")
-	Game.record_sentence("HEIGHT", "tall", "short")
+	Game.record_sentence("STRENGTH", "strong", "weak")
 	Game.record_sentence(Content.COLOR_CATEGORY, "red", "blue")
 	Game.current.generated_name = NameGenerator.candidates(Game.current)[0]
 
@@ -157,12 +157,19 @@ static func _selftest(main: Node) -> void:
 		_check(failures, rig.skeleton != null, "%s: no skeleton in model '%s'" % [def.id, def.model])
 		_check(failures, rig.mesh_instance != null, "%s: no mesh in model '%s'" % [def.id, def.model])
 		_check(failures, not def.body_bones.is_empty(), "%s has no LONG/SHORT body bones" % def.id)
+		for group in MuscleDeformer.GROUPS:
+			_check(failures, not def.bulk_bones_for(group).is_empty(),
+				"%s has no bones for muscle group '%s'" % [def.id, group])
+		_check(failures, not def.veins.is_empty(), "%s has no cartoon veins" % def.id)
 		_check(failures, def.legs.size() >= 2, "%s has fewer than 2 legs configured" % def.id)
 
 		if rig.skeleton != null:
 			var all_bones: Array[String] = []
 			all_bones.append_array(Array(def.body_bones))
-			all_bones.append_array(Array(def.bulk_bones))
+			for group in MuscleDeformer.GROUPS:
+				all_bones.append_array(Array(def.bulk_bones_for(group)))
+			for vein in def.veins:
+				all_bones.append(str(vein["bone"]))
 			all_bones.append_array(Array(def.leg_bones))
 			for leg in def.legs:
 				all_bones.append_array(Array(leg["bones"] as PackedStringArray))
@@ -196,6 +203,21 @@ static func _selftest(main: Node) -> void:
 		rig.deformer.set_state(1.0, 0.45)
 		_check(failures, rig.deformer.lift < -0.005,
 			"%s: SHORT legs did not lower the body" % def.id)
+
+		# STRONG has to actually thicken the chest, WEAK has to thin it, and veins must
+		# only exist on the strong form.
+		var chest_bone := rig.skeleton.find_bone(def.bulk_bones_for("chest")[0])
+		rig.muscle.set_state(1.35)
+		_check(failures, rig.skeleton.get_bone_pose_scale(chest_bone).x > 1.05,
+			"%s: STRONG did not thicken the chest" % def.id)
+		_check(failures, rig.muscle.vein_visibility > 0.5, "%s: STRONG showed no veins" % def.id)
+		rig.muscle.set_state(0.72)
+		_check(failures, rig.skeleton.get_bone_pose_scale(chest_bone).x < 0.95,
+			"%s: WEAK did not thin the chest" % def.id)
+		_check(failures, rig.muscle.vein_visibility < 0.01, "%s: WEAK still shows veins" % def.id)
+		rig.muscle.reset()
+		_check(failures, absf(rig.skeleton.get_bone_pose_scale(chest_bone).x - 1.0) < 0.001,
+			"%s: muscle did not return to rest" % def.id)
 
 		rig.deformer.reset()
 		var back_tip: Vector3 = rig.skeleton.get_bone_pose_position(tip)

@@ -25,14 +25,18 @@ static func apply_all(rig: CreatureRig, traits: Dictionary, animate := false) ->
 	# Deformation has to survive the reset below, so remember where it currently is.
 	var from_body := 1.0
 	var from_leg := 1.0
+	var from_bulk := 1.0
 	if rig.deformer != null:
 		from_body = rig.deformer.body_length
 		from_leg = rig.deformer.leg_target
+	if rig.muscle != null:
+		from_bulk = rig.muscle.bulk.get("chest", 1.0)
 
 	rig.reset_modifiers()
 
 	var body_target := 1.0
 	var leg_target := 1.0
+	var bulk_target := 1.0
 	# Colour last: it repaints roles that other modifiers may have tinted.
 	var color_word := ""
 	for category in traits:
@@ -47,6 +51,8 @@ static func apply_all(rig: CreatureRig, traits: Dictionary, animate := false) ->
 			body_target = pair.value_for(word)
 		elif pair.modifier == "LEG_LENGTH":
 			leg_target = pair.value_for(word)
+		elif pair.modifier == "BULK":
+			bulk_target = pair.value_for(word)
 		else:
 			_apply_pair(rig, str(category), word)
 	if not color_word.is_empty():
@@ -58,6 +64,12 @@ static func apply_all(rig: CreatureRig, traits: Dictionary, animate := false) ->
 			rig.deformer.animate_to(body_target, leg_target)
 		else:
 			rig.deformer.set_state(body_target, leg_target)
+	if rig.muscle != null:
+		if animate:
+			rig.muscle.set_state(from_bulk)
+			rig.muscle.animate_to(bulk_target)
+		else:
+			rig.muscle.set_state(bulk_target)
 
 
 static func _apply_color(rig: CreatureRig, word: String) -> void:
@@ -76,8 +88,6 @@ static func _apply_pair(rig: CreatureRig, category: String, word: String) -> voi
 	match pair.modifier:
 		"SCALE_UNIFORM":
 			rig.scale_body(Vector3.ONE * value)
-		"BULK":
-			rig.scale_parts(rig.definition.bulk_bones, Vector3(value, 1.0, value))
 		"TEMPO":
 			rig.tempo = value
 			if value > 1.0:

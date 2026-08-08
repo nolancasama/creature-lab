@@ -131,6 +131,18 @@ and then drops each leg to the ground one at a time. The two "short"s are delibe
 different — one squashes the body, the other retracts the legs. See
 `scripts/creature/creature_deformer.gd`.
 
+`strong/weak` swells five muscle groups — chest, shoulder, front limb, rear limb, neck —
+in sequence, overshoots into something ridiculous, rebounds, then pops in cartoon veins
+and lands in a per-species finishing pose. Because bone scale propagates to descendants,
+naively scaling the chest would inflate the skull and feet too and just make the animal
+*bigger*, which is what `big/small` already does; instead every bone is told what
+thickness it should end up at and the skeleton is walked parents-first so untouched bones
+actively cancel what they'd inherit. See `scripts/creature/muscle_deformer.gd`.
+
+The three deformation systems each own **one** bone component — position, scale and
+rotation respectively — which is what lets a creature be long, tall, strong and walking
+all at once without any of them clobbering the others.
+
 **Not done (Phase 2/3):** the pack ships **no animations**, so idle and walk are posed
 procedurally in `CreatureRig._swing_legs()`; a real animation set would look considerably
 better. Also outstanding: richer zoo interactions, camera moves, and a low-graphics

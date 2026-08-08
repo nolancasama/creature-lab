@@ -40,6 +40,7 @@ var sockets := {} ## socket name -> Node3D
 var part_materials := {} ## role -> StandardMaterial3D, for fantasy add-ons
 
 var deformer: CreatureDeformer = null ## Body length and per-leg lengths.
+var muscle: MuscleDeformer = null ## STRONG/WEAK bulk, veins and posture.
 
 var tempo := 1.0 ## Idle animation speed; the SPEED modifier drives this.
 var moving := false ## Zoo creatures set this to swing their legs.
@@ -84,6 +85,7 @@ func _build(def: AnimalDefinition) -> void:
 	_setup_material()
 	_build_sockets()
 	deformer = CreatureDeformer.new(self)
+	muscle = MuscleDeformer.new(self)
 
 
 ## Pull one animal out of the shared GLB and discard the other six. The PackedScene
@@ -183,6 +185,8 @@ func reset_modifiers() -> void:
 	tempo = 1.0
 	if deformer != null:
 		deformer.reset()
+	if muscle != null:
+		muscle.reset()
 	_reset_material()
 	clear_fx()
 
@@ -231,12 +235,6 @@ func set_surface(role: String, roughness: float, metallic: float) -> void:
 	material.set_shader_parameter("metallic_value", clampf(metallic, 0.0, 1.0))
 
 
-## STRENGTH: thicken or thin the body. `ids` is ignored - the bones come from the
-## animal definition - but the signature matches what TraitVisuals already calls.
-func scale_parts(_ids: PackedStringArray, factor: Vector3) -> void:
-	_scale_bones(definition.bulk_bones, Vector3(factor.x, 1.0, factor.z))
-
-
 func _scale_bones(bones: PackedStringArray, factor: Vector3) -> void:
 	if skeleton == null:
 		return
@@ -254,6 +252,12 @@ func mark_posed(bone_index: int) -> void:
 
 func normal_scale() -> float:
 	return _normal_scale
+
+
+## Where the model sits after height normalisation, so overlays can be placed in the
+## same space as the sockets.
+func model_base_y() -> float:
+	return _base_model_pos.y
 
 
 ## The deformer slides the model to keep a lengthened body centred on its platform.
@@ -314,14 +318,33 @@ func _process(delta: float) -> void:
 	_clock += delta * tempo
 	# Idle motion is added on top of the deformation, never in place of it, so a
 	# transformed creature keeps its new proportions while it breathes and walks.
+	# Both deformers contribute to the body transform, so their effects compose rather
+	# than overwrite: a creature can be long, tall, strong and walking all at once.
 	var lift := 0.0
 	var squash := Vector3.ONE
+	var offset := Vector3.ZERO
+	var lean := 0.0
+	var twist := 0.0
+	var posture := 0.0
 	if deformer != null:
-		lift = deformer.lift + deformer.bounce
-		squash = deformer.squash
+		lift += deformer.lift + deformer.bounce
+		squash *= deformer.squash
+	if muscle != null:
+		lift += muscle.lift_total()
+		squash *= muscle.squash
+		offset = muscle.shake
+		lean = muscle.pitch
+		twist = muscle.yaw
+		posture = muscle.posture
 
-	body.position.y = lift + sin(_clock * 1.8) * 0.02 + sin(_clock * 1.1) * 0.05 * definition.hover
-	body.rotation.z = sin(_clock * 0.9) * 0.01
+	# A strong animal idles heavier and slower; a weak one droops and dawdles.
+	var idle_rate: float = 1.0 + posture * 0.18
+	body.position = offset + Vector3(0.0, lift
+		+ sin(_clock * 1.8 * idle_rate) * 0.02
+		+ sin(_clock * 1.1) * 0.05 * definition.hover, 0.0)
+	body.rotation.x = lean
+	body.rotation.y = twist
+	body.rotation.z = sin(_clock * 0.9) * 0.01 * (1.0 - posture * 0.4)
 	body.scale = _trait_scale * squash
 	_swing_legs(sin(_clock * 5.0) * 0.5 if moving else 0.0)
 

@@ -61,6 +61,8 @@ func _build_library() -> void:
 	_library["squish"] = _blip(700.0, 170.0, 0.55, 0.34)
 	_library["zip"] = _blip(880.0, 330.0, 0.14, 0.42)
 	_library["thud"] = _blip(150.0, 62.0, 0.26, 0.55)
+	# A long airy sag for muscles deflating - the "pffft" the design asks for.
+	_library["deflate"] = _blip(540.0, 85.0, 0.72, 0.30)
 
 
 ## A decaying sine that glides from one pitch to another - the workhorse UI sound.

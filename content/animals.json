@@ -1,5 +1,5 @@
 {
-  "_comment": "Animals are skinned models from res://models/animals.glb (ITHappy 'Animals FREE' pack, free for commercial use). 'body_bones' are the torso segments the LONG/SHORT trait pushes apart - translating bones rather than scaling them is what stretches the torso without stretching the head, legs or tail. 'legs' lists each leg's telescoping segments in the order they pop out for TALL. 'stand_height' is the display height every animal is normalised to. Socket offsets are in those normalised units, Y up.",
+  "_comment": "Animals are skinned models from res://models/animals.glb (ITHappy 'Animals FREE' pack, free for commercial use). 'body_bones' are the torso segments the LONG/SHORT trait pushes apart - translating bones rather than scaling them is what stretches the torso without stretching the head, legs or tail. 'legs' lists each leg's telescoping segments in the order they pop out for TALL. 'stand_height' is the display height every animal is normalised to. Socket offsets are in those normalised units, Y up. 'bulk' groups the bones STRONG/WEAK thickens; 'inherits' names the group a group is nested inside so its scale can be divided out and the five controls stay independent. 'veins' are cartoon vein clusters that pop in on the biggest muscles. 'flourish' picks the species finishing pose.",
   "roles": {
     "_comment": "Colours for fantasy add-on parts, which are still built from primitives.",
     "dark": "#26262e",
@@ -21,10 +21,6 @@
       "stand_height": 1.55,
       "walk_speed": 1.6,
       "voice_pitch": 1.0,
-      "bulk_bones": [
-        "spine.005",
-        "spine.006"
-      ],
       "leg_bones": [
         "thigh.R",
         "thigh.L",
@@ -98,7 +94,69 @@
             "foot.R"
           ]
         }
-      ]
+      ],
+      "bulk": {
+        "chest": {
+          "bones": [
+            "spine.005",
+            "spine.006"
+          ]
+        },
+        "neck": {
+          "bones": [
+            "spine.007",
+            "spine.008"
+          ]
+        },
+        "shoulder": {
+          "bones": [
+            "front_shoulder.L",
+            "front_shoulder.R"
+          ]
+        },
+        "front_limb": {
+          "bones": [
+            "front_thigh.L",
+            "front_thigh.R"
+          ]
+        },
+        "rear_limb": {
+          "bones": [
+            "thigh.L",
+            "thigh.R"
+          ]
+        }
+      },
+      "veins": [
+        {
+          "bone": "front_shoulder.L",
+          "off": [
+            -0.163,
+            -0.02,
+            0.025
+          ],
+          "size": 0.204
+        },
+        {
+          "bone": "front_shoulder.R",
+          "off": [
+            0.163,
+            -0.02,
+            0.025
+          ],
+          "size": 0.204
+        },
+        {
+          "bone": "spine.006",
+          "off": [
+            0.0,
+            -0.06,
+            0.2
+          ],
+          "size": 0.187
+        }
+      ],
+      "flourish": "stomp"
     },
     {
       "id": "cat",
@@ -109,10 +167,6 @@
       "stand_height": 1.25,
       "walk_speed": 1.8,
       "voice_pitch": 1.25,
-      "bulk_bones": [
-        "spine.006",
-        "spine.007"
-      ],
       "leg_bones": [
         "thigh.R",
         "thigh.L",
@@ -186,7 +240,68 @@
             "foot.R"
           ]
         }
-      ]
+      ],
+      "bulk": {
+        "chest": {
+          "bones": [
+            "spine.006",
+            "spine.007"
+          ]
+        },
+        "neck": {
+          "bones": [
+            "spine.008"
+          ]
+        },
+        "shoulder": {
+          "bones": [
+            "front_shoulder.L",
+            "front_shoulder.R"
+          ]
+        },
+        "front_limb": {
+          "bones": [
+            "front_thigh.L",
+            "front_thigh.R"
+          ]
+        },
+        "rear_limb": {
+          "bones": [
+            "thigh.L",
+            "thigh.R"
+          ]
+        }
+      },
+      "veins": [
+        {
+          "bone": "front_shoulder.L",
+          "off": [
+            -0.125,
+            -0.02,
+            0.025
+          ],
+          "size": 0.17
+        },
+        {
+          "bone": "front_shoulder.R",
+          "off": [
+            0.125,
+            -0.02,
+            0.025
+          ],
+          "size": 0.17
+        },
+        {
+          "bone": "spine.007",
+          "off": [
+            0.0,
+            -0.05,
+            0.163
+          ],
+          "size": 0.153
+        }
+      ],
+      "flourish": "flex"
     },
     {
       "id": "tiger",
@@ -197,10 +312,6 @@
       "stand_height": 1.85,
       "walk_speed": 1.4,
       "voice_pitch": 0.8,
-      "bulk_bones": [
-        "spine.008",
-        "spine.009"
-      ],
       "leg_bones": [
         "thigh.R",
         "thigh.L",
@@ -274,7 +385,69 @@
             "foot.R"
           ]
         }
-      ]
+      ],
+      "bulk": {
+        "chest": {
+          "bones": [
+            "spine.008",
+            "spine.009"
+          ]
+        },
+        "neck": {
+          "bones": [
+            "spine.010",
+            "spine.011"
+          ]
+        },
+        "shoulder": {
+          "bones": [
+            "shoulder.L",
+            "shoulder.R"
+          ]
+        },
+        "front_limb": {
+          "bones": [
+            "front_thigh.L",
+            "front_thigh.R"
+          ]
+        },
+        "rear_limb": {
+          "bones": [
+            "thigh.L",
+            "thigh.R"
+          ]
+        }
+      },
+      "veins": [
+        {
+          "bone": "shoulder.L",
+          "off": [
+            -0.213,
+            -0.02,
+            0.025
+          ],
+          "size": 0.255
+        },
+        {
+          "bone": "shoulder.R",
+          "off": [
+            0.213,
+            -0.02,
+            0.025
+          ],
+          "size": 0.255
+        },
+        {
+          "bone": "spine.009",
+          "off": [
+            0.0,
+            -0.06,
+            0.25
+          ],
+          "size": 0.238
+        }
+      ],
+      "flourish": "flex"
     },
     {
       "id": "horse",
@@ -285,10 +458,6 @@
       "stand_height": 2.15,
       "walk_speed": 1.7,
       "voice_pitch": 0.9,
-      "bulk_bones": [
-        "spine.006",
-        "spine.007"
-      ],
       "leg_bones": [
         "thigh.R",
         "thigh.L",
@@ -362,7 +531,87 @@
             "foot.R"
           ]
         }
-      ]
+      ],
+      "bulk": {
+        "chest": {
+          "bones": [
+            "spine.006",
+            "spine.007"
+          ]
+        },
+        "neck": {
+          "bones": [
+            "spine.008",
+            "spine.009"
+          ]
+        },
+        "shoulder": {
+          "bones": [
+            "front_shoulder.L",
+            "front_shoulder.R"
+          ]
+        },
+        "front_limb": {
+          "bones": [
+            "front_thigh.L",
+            "front_thigh.R"
+          ]
+        },
+        "rear_limb": {
+          "bones": [
+            "thigh.L",
+            "thigh.R"
+          ]
+        }
+      },
+      "veins": [
+        {
+          "bone": "front_shoulder.L",
+          "off": [
+            -0.2,
+            -0.02,
+            0.025
+          ],
+          "size": 0.221
+        },
+        {
+          "bone": "front_shoulder.R",
+          "off": [
+            0.2,
+            -0.02,
+            0.025
+          ],
+          "size": 0.221
+        },
+        {
+          "bone": "spine.009",
+          "off": [
+            -0.125,
+            0.02,
+            0.05
+          ],
+          "size": 0.204
+        },
+        {
+          "bone": "thigh.L",
+          "off": [
+            -0.163,
+            0.06,
+            0.0
+          ],
+          "size": 0.204
+        },
+        {
+          "bone": "thigh.R",
+          "off": [
+            0.163,
+            0.06,
+            0.0
+          ],
+          "size": 0.204
+        }
+      ],
+      "flourish": "rear"
     },
     {
       "id": "deer",
@@ -373,10 +622,6 @@
       "stand_height": 2.0,
       "walk_speed": 1.6,
       "voice_pitch": 1.1,
-      "bulk_bones": [
-        "spine.004",
-        "spine.005"
-      ],
       "leg_bones": [
         "thigh.R",
         "thigh.L",
@@ -450,7 +695,78 @@
             "foot.R"
           ]
         }
-      ]
+      ],
+      "bulk": {
+        "chest": {
+          "bones": [
+            "spine.004",
+            "spine.005"
+          ]
+        },
+        "neck": {
+          "bones": [
+            "spine.006",
+            "spine.007"
+          ]
+        },
+        "shoulder": {
+          "bones": [
+            "front_shoulder.L",
+            "front_shoulder.R"
+          ]
+        },
+        "front_limb": {
+          "bones": [
+            "front_thigh.L",
+            "front_thigh.R"
+          ]
+        },
+        "rear_limb": {
+          "bones": [
+            "thigh.L",
+            "thigh.R"
+          ]
+        }
+      },
+      "veins": [
+        {
+          "bone": "front_shoulder.L",
+          "off": [
+            -0.163,
+            -0.02,
+            0.025
+          ],
+          "size": 0.187
+        },
+        {
+          "bone": "front_shoulder.R",
+          "off": [
+            0.163,
+            -0.02,
+            0.025
+          ],
+          "size": 0.187
+        },
+        {
+          "bone": "thigh.L",
+          "off": [
+            -0.138,
+            0.06,
+            0.0
+          ],
+          "size": 0.17
+        },
+        {
+          "bone": "thigh.R",
+          "off": [
+            0.138,
+            0.06,
+            0.0
+          ],
+          "size": 0.17
+        }
+      ],
+      "flourish": "rear"
     },
     {
       "id": "penguin",
@@ -461,10 +777,6 @@
       "stand_height": 1.4,
       "walk_speed": 0.9,
       "voice_pitch": 1.3,
-      "bulk_bones": [
-        "spine.003",
-        "spine.004"
-      ],
       "leg_bones": [
         "thigh.R",
         "thigh.L"
@@ -522,7 +834,68 @@
             "foot.R"
           ]
         }
-      ]
+      ],
+      "bulk": {
+        "chest": {
+          "bones": [
+            "spine.003",
+            "spine.004"
+          ]
+        },
+        "neck": {
+          "bones": [
+            "spine.005"
+          ]
+        },
+        "shoulder": {
+          "bones": [
+            "fin.L",
+            "fin.R"
+          ]
+        },
+        "front_limb": {
+          "bones": [
+            "fin.001.L",
+            "fin.001.R"
+          ]
+        },
+        "rear_limb": {
+          "bones": [
+            "thigh.L",
+            "thigh.R"
+          ]
+        }
+      },
+      "veins": [
+        {
+          "bone": "spine.004",
+          "off": [
+            0.0,
+            -0.04,
+            0.11
+          ],
+          "size": 0.187
+        },
+        {
+          "bone": "fin.L",
+          "off": [
+            -0.138,
+            0.0,
+            0.014
+          ],
+          "size": 0.17
+        },
+        {
+          "bone": "fin.R",
+          "off": [
+            0.138,
+            0.0,
+            0.014
+          ],
+          "size": 0.17
+        }
+      ],
+      "flourish": "puff"
     },
     {
       "id": "chicken",
@@ -533,10 +906,6 @@
       "stand_height": 1.15,
       "walk_speed": 1.5,
       "voice_pitch": 1.45,
-      "bulk_bones": [
-        "spine.003",
-        "spine.004"
-      ],
       "leg_bones": [
         "thigh.R",
         "thigh.L"
@@ -594,7 +963,69 @@
             "foot.R"
           ]
         }
-      ]
+      ],
+      "bulk": {
+        "chest": {
+          "bones": [
+            "spine.003",
+            "spine.004"
+          ]
+        },
+        "neck": {
+          "bones": [
+            "spine.005",
+            "spine.006"
+          ]
+        },
+        "shoulder": {
+          "bones": [
+            "shoulder.L",
+            "shoulder.R"
+          ]
+        },
+        "front_limb": {
+          "bones": [
+            "Wing.L",
+            "Wing.R"
+          ]
+        },
+        "rear_limb": {
+          "bones": [
+            "thigh.L",
+            "thigh.R"
+          ]
+        }
+      },
+      "veins": [
+        {
+          "bone": "spine.004",
+          "off": [
+            0.0,
+            -0.03,
+            0.09
+          ],
+          "size": 0.153
+        },
+        {
+          "bone": "thigh.L",
+          "off": [
+            -0.112,
+            0.04,
+            0.0
+          ],
+          "size": 0.153
+        },
+        {
+          "bone": "thigh.R",
+          "off": [
+            0.112,
+            0.04,
+            0.0
+          ],
+          "size": 0.153
+        }
+      ],
+      "flourish": "puff"
     }
   ]
 }
