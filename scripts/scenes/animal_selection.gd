@@ -19,8 +19,20 @@ const PLATFORM_POS := Vector3(-0.5, 0.0, 0.6)
 const CAMERA_POS := Vector3(0.5, 2.4, 6.5)
 const CAMERA_AIM := Vector3(-0.5, 0.95, 0.0)
 
-const RIGHT_PANEL_WIDTH := 480
-const RIGHT_MARGIN := 44 ## Wider than the left margin - a 24px gap read as hugging the edge.
+## Slides the camera along its own X so the platform sits centred in the gap beside the
+## panel instead of centred on the screen. h_offset translates the camera rather than
+## turning it, so the animal keeps its profile and the platform stays square to view.
+const CAMERA_H_OFFSET := 1.9
+
+## Picking and recording are overlays on one screen, so they share one panel rect: the
+## Word Lab / Say It stack lands exactly where the animal grid was, and nothing resizes
+## or jumps underneath the player at the moment of confirming.
+const PANEL_LEFT := -680
+const PANEL_RIGHT := -32
+const PANEL_TOP := 40
+const PANEL_BOTTOM := -40
+const PANEL_WIDTH := -PANEL_LEFT + PANEL_RIGHT ## 648 - the rect's actual width.
+const HUD_BUTTON := 52
 
 enum Mode { PICKING, RECORDING }
 
@@ -110,7 +122,9 @@ func _build_stage() -> void:
 	_preview_root.position = PLATFORM_POS + Vector3(0, 0.28, 0)
 	add_child(_preview_root)
 
-	add_child(StageKit.camera(CAMERA_POS, CAMERA_AIM, 48.0))
+	var cam := StageKit.camera(CAMERA_POS, CAMERA_AIM, 48.0)
+	cam.h_offset = CAMERA_H_OFFSET
+	add_child(cam)
 
 
 func _build_root() -> void:
@@ -127,10 +141,10 @@ func _build_root() -> void:
 func _build_picking_panel() -> void:
 	var panel := UiKit.panel(Color(0.06, 0.1, 0.16, 0.92), 18, 2, UiKit.PANEL_HI)
 	panel.set_anchors_and_offsets_preset(Control.PRESET_RIGHT_WIDE)
-	panel.offset_left = -680
-	panel.offset_right = -32
-	panel.offset_top = 40
-	panel.offset_bottom = -40
+	panel.offset_left = PANEL_LEFT
+	panel.offset_right = PANEL_RIGHT
+	panel.offset_top = PANEL_TOP
+	panel.offset_bottom = PANEL_BOTTOM
 	_root.add_child(panel)
 	_picking_panel = panel
 
@@ -272,11 +286,11 @@ func _enter_recording() -> void:
 func _build_recording_ui() -> void:
 	var right := UiKit.vbox(12)
 	right.set_anchors_and_offsets_preset(Control.PRESET_RIGHT_WIDE)
-	right.offset_left = -(RIGHT_PANEL_WIDTH + RIGHT_MARGIN)
-	right.offset_right = -RIGHT_MARGIN
-	right.offset_top = 24
-	right.offset_bottom = -24
-	right.custom_minimum_size = Vector2(RIGHT_PANEL_WIDTH, 0)
+	right.offset_left = PANEL_LEFT
+	right.offset_right = PANEL_RIGHT
+	right.offset_top = PANEL_TOP
+	right.offset_bottom = PANEL_BOTTOM
+	right.custom_minimum_size = Vector2(PANEL_WIDTH, 0)
 	_root.add_child(right)
 
 	# Word Lab has more content than a narrow column can always guarantee height for;
@@ -300,25 +314,36 @@ func _build_recording_ui() -> void:
 	right.add_child(_speech)
 
 	# Floating HUD
-	var back_btn := UiKit.icon_button("<", 52)
+	var back_btn := UiKit.icon_button("<", HUD_BUTTON)
 	back_btn.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
 	back_btn.offset_left = 24
+	back_btn.offset_right = 24 + HUD_BUTTON
 	back_btn.offset_top = 24
+	back_btn.offset_bottom = 24 + HUD_BUTTON
 	back_btn.pressed.connect(func() -> void:
 		Audio.play("click")
 		Game.abandon_creature()
 		_enter_picking())
 	_root.add_child(back_btn)
 
-	var gear_btn := UiKit.icon_button("⚙", 52)
+	# Both offsets are set explicitly: the preset derives them from the button's current
+	# size, so moving only one edge leaves a rect narrower than the button and it renders
+	# clipped off the screen edge.
+	var gear_btn := UiKit.icon_button("⚙", HUD_BUTTON)
 	gear_btn.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
-	gear_btn.offset_right = -RIGHT_MARGIN
+	gear_btn.offset_right = PANEL_RIGHT
+	gear_btn.offset_left = PANEL_RIGHT - HUD_BUTTON
 	gear_btn.offset_top = 24
+	gear_btn.offset_bottom = 24 + HUD_BUTTON
 	gear_btn.pressed.connect(func() -> void: Game.open_settings())
 	_root.add_child(gear_btn)
 
+	# Spans the gap to the left of the panel rather than the whole screen, so the progress
+	# line reads as a caption over the animal instead of drifting toward the Word Lab.
 	_progress = UiKit.label("", UiKit.BODY, UiKit.GOLD)
-	_progress.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
+	_progress.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
+	_progress.offset_left = 0
+	_progress.offset_right = PANEL_LEFT
 	_progress.add_theme_font_size_override("font_size", UiKit.SMALL)
 	_progress.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_progress.offset_top = 32
