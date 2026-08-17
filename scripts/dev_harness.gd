@@ -69,7 +69,7 @@ static func _autoplay(main: Node) -> void:
 			return
 		word_lab.pair_selected.emit(str(pick[0]), str(pick[1]), str(pick[2]))
 		await tree.create_timer(0.7).timeout
-		Speech.submit_typed(GrammarValidator.expected_sentence(str(pick[1]), str(pick[2])))
+		Speech.submit_typed(_expected(str(pick[1]), str(pick[2])))
 		await tree.create_timer(2.6).timeout
 		print("[autoplay] slot %d recorded" % Game.current.slots_filled())
 
@@ -103,7 +103,7 @@ static func _backtest(main: Node) -> void:
 		return
 	word_lab.pair_selected.emit("LENGTH", "long", "short")
 	await tree.create_timer(0.7).timeout
-	Speech.submit_typed(GrammarValidator.expected_sentence("long", "short"))
+	Speech.submit_typed(_expected("long", "short"))
 	await tree.create_timer(2.6).timeout
 	print("[backtest] %d slot(s) recorded, now backing out" % Game.current.slots_filled())
 
@@ -141,7 +141,7 @@ static func _backtest(main: Node) -> void:
 		return
 	word_lab.pair_selected.emit("LENGTH", "long", "short")
 	await tree.create_timer(0.7).timeout
-	Speech.submit_typed(GrammarValidator.expected_sentence("long", "short"))
+	Speech.submit_typed(_expected("long", "short"))
 	await tree.create_timer(2.6).timeout
 
 	var slots := Game.current.slots_filled() if Game.current != null else 0
@@ -151,6 +151,14 @@ static func _backtest(main: Node) -> void:
 	else:
 		printerr("[backtest] FAIL: card did not register after backing out (%d slots)" % slots)
 		tree.quit(1)
+
+
+## What a correct answer sounds like under the current teacher settings - past-only is
+## the default, so submitting the full sentence would be testing a mode nobody is in.
+static func _expected(before: String, after: String) -> String:
+	if Settings.past_only():
+		return GrammarValidator.expected_past(before)
+	return GrammarValidator.expected_sentence(before, after)
 
 
 static func _find_button(node: Node, text: String) -> Button:
@@ -457,6 +465,29 @@ static func _grammar_checks(failures: Array[String]) -> void:
 		var result := GrammarValidator.validate(str(case[0]), str(case[1]), str(case[2]), int(case[3]))
 		_check(failures, bool(result["ok"]) == bool(case[4]),
 			"grammar: %s - '%s' gave ok=%s reason=%s" % [str(case[5]), str(case[0]), result["ok"], result["reason"]])
+
+	# Past-only is the shipped default, so it needs its own row of cases: the same
+	# transcripts must pass that fail when the whole sentence is required.
+	var past_cases := [
+		["It was small.", "small", "big", GrammarValidator.NORMAL, true, "past clause alone"],
+		["it was small", "small", "big", GrammarValidator.NORMAL, true, "no punctuation"],
+		["um it was small okay", "small", "big", GrammarValidator.NORMAL, true, "edge filler"],
+		["it was small now it is big", "small", "big", GrammarValidator.NORMAL, true, "running on is not punished"],
+		["small", "small", "big", GrammarValidator.LENIENT, true, "lenient keyword"],
+		["small", "small", "big", GrammarValidator.NORMAL, false, "normal still needs the frame"],
+		["it was big", "small", "big", GrammarValidator.NORMAL, false, "wrong half of the pair"],
+		["it was small", "small", "big", GrammarValidator.EXACT, true, "exact wants just the clause"],
+		["", "small", "big", GrammarValidator.NORMAL, false, "silence"],
+	]
+	for case in past_cases:
+		var result := GrammarValidator.validate(str(case[0]), str(case[1]), str(case[2]), int(case[3]), true)
+		_check(failures, bool(result["ok"]) == bool(case[4]),
+			"grammar past-only: %s - '%s' gave ok=%s reason=%s" % [str(case[5]), str(case[0]), result["ok"], result["reason"]])
+
+	# The missing second clause must never be reported as a failure in past-only.
+	var past_partial := GrammarValidator.validate("it was small", "small", "big", GrammarValidator.NORMAL, true)
+	_check(failures, str(past_partial["reason"]) == "ok",
+		"grammar past-only: complete answer reported as %s" % past_partial["reason"])
 
 	# Half-credit feedback is what the retry ladder shows the student.
 	var partial := GrammarValidator.validate("it was small now it is red", "small", "big", GrammarValidator.NORMAL)

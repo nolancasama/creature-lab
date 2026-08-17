@@ -41,6 +41,13 @@ func _build() -> void:
 	scroll.add_child(column)
 
 	column.add_child(_choice_section(
+		"How much the student says",
+		"Past only is one short clause, and short answers are recognised far more reliably. The creature still changes both ways.",
+		[["Past only  (It was small.)", Settings.SAY_PAST], ["Whole sentence", Settings.SAY_FULL]],
+		func() -> String: return Settings.say_mode,
+		func(value: String) -> void: Settings.say_mode = value))
+
+	column.add_child(_choice_section(
 		"Who chooses the words", "Easy Mode in the original design.",
 		[["Student chooses freely", Settings.CHOICE_FREE], ["Game assigns the pairs", Settings.CHOICE_GUIDED]],
 		func() -> String: return Settings.choice_mode,

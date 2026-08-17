@@ -32,6 +32,7 @@ const CAMERA_AIM := Vector3(-0.5, 0.95, 0.0)
 const PANEL_LEFT := -680
 const PANEL_RIGHT := -32
 const HUD_TOP := 24 ## Top edge of the floating buttons, above the panel on both sub-states.
+const PROGRESS_FONT := UiKit.SMALL * 3 ## Readable from the back of a classroom.
 const HUD_BUTTON := 52
 const GEAR_ICON := preload("res://ui/gear.svg")
 const PANEL_TOP := HUD_TOP + HUD_BUTTON + 12 ## Clears the gear rather than sitting under it.
@@ -374,7 +375,7 @@ func _build_recording_ui() -> void:
 	_progress.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
 	_progress.offset_left = 0
 	_progress.offset_right = PANEL_LEFT
-	_progress.add_theme_font_size_override("font_size", UiKit.SMALL)
+	_progress.add_theme_font_size_override("font_size", PROGRESS_FONT)
 	_progress.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_progress.offset_top = 32
 	_root.add_child(_progress)
@@ -384,7 +385,7 @@ func _sync_ui() -> void:
 	if Game.current == null:
 		return
 	var assigned := _assigned_category()
-	var text := "Before / %d of %d" % [mini(Game.current.slots_filled() + 1, CreatureState.SLOTS), CreatureState.SLOTS]
+	var text := "Before %d of %d" % [mini(Game.current.slots_filled() + 1, CreatureState.SLOTS), CreatureState.SLOTS]
 	if _progress != null:
 		_progress.text = text
 
@@ -494,14 +495,14 @@ func _evaluate(alternatives: PackedStringArray) -> void:
 	var after := str(_pending["after"])
 	var best := {}
 	for alternative in alternatives:
-		var result := GrammarValidator.validate(alternative, before, after, Settings.strictness)
+		var result := GrammarValidator.validate(alternative, before, after, Settings.strictness, Settings.past_only())
 		if bool(result["ok"]):
 			_commit(false)
 			return
 		if best.is_empty() or _score(result) > _score(best):
 			best = result
 	if best.is_empty():
-		best = GrammarValidator.validate("", before, after, Settings.strictness)
+		best = GrammarValidator.validate("", before, after, Settings.strictness, Settings.past_only())
 	_attempts += 1
 	_speech.show_failure(best, _attempts)
 

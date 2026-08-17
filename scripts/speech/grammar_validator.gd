@@ -8,7 +8,7 @@ extends RefCounted
 ## `long`, so word-level matching would be guesswork. Pair-scoped matching is exact.
 ##
 ## Reason codes: ok, empty, nothing, no_before, no_after, swapped, frame_before,
-## frame_after, exact.
+## frame_after, exact. Past-only mode raises only: ok, empty, nothing, frame_before, exact.
 
 const BEFORE_FRAME := "it was"
 const AFTER_FRAME := "now it is"
@@ -24,7 +24,14 @@ static func expected_sentence(before: String, after: String) -> String:
 	return "%s %s %s %s" % [BEFORE_FRAME, before, AFTER_FRAME, after]
 
 
-static func validate(transcript: String, before: String, after: String, strictness: int) -> Dictionary:
+## Just the past half, which is all the student is asked for in Settings.SAY_PAST.
+static func expected_past(before: String) -> String:
+	return "%s %s" % [BEFORE_FRAME, before]
+
+
+## `past_only` is passed in rather than read off Settings, for the same reason the
+## strictness constants are duplicated here: this class stays testable on its own.
+static func validate(transcript: String, before: String, after: String, strictness: int, past_only := false) -> Dictionary:
 	var normalized := TextNormalizer.strip_edge_filler(TextNormalizer.normalize(transcript))
 	var result := {
 		"ok": false,
@@ -50,6 +57,19 @@ static func validate(transcript: String, before: String, after: String, strictne
 	result["frame_before"] = frame_before >= 0
 	result["frame_after"] = frame_after >= 0
 
+	if past_only:
+		# Only the first clause is asked for, so the second is neither required nor
+		# penalised - a student who runs on into "now it is big" has still said the part
+		# that was set, and is not corrected for volunteering more.
+		if strictness >= EXACT:
+			result["ok"] = normalized == expected_past(before)
+		elif strictness <= LENIENT:
+			result["ok"] = word_before >= 0
+		else:
+			result["ok"] = frame_before >= 0
+		result["reason"] = "ok" if result["ok"] else _diagnose_past(result, normalized, before)
+		return result
+
 	if strictness >= EXACT:
 		result["ok"] = _matches_exactly(normalized, before, after)
 		result["reason"] = "ok" if result["ok"] else _diagnose(result, normalized, before, after, true)
@@ -68,6 +88,17 @@ static func _matches_exactly(normalized: String, before: String, after: String) 
 	if normalized == target:
 		return true
 	return normalized == target.replace(AFTER_FRAME, "and " + AFTER_FRAME)
+
+
+## Past-only never reports no_after or frame_after: the second clause was never asked for,
+## so naming it as missing would teach the student they had failed at something they were
+## not set.
+static func _diagnose_past(result: Dictionary, normalized: String, before: String) -> String:
+	if not bool(result["said_before"]):
+		return "nothing"
+	if not bool(result["frame_before"]):
+		return "frame_before"
+	return "exact" if normalized != expected_past(before) else "ok"
 
 
 static func _diagnose(result: Dictionary, normalized: String, before: String, after: String, exact: bool) -> String:

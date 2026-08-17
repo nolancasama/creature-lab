@@ -15,6 +15,14 @@ const CHOICE_FREE := "free"
 const CHOICE_GUIDED := "guided"
 
 ## How much of the target sentence is printed above the mic.
+## How much of the transformation the student has to say out loud. Past-only is the
+## default: "It was small." is one short clause a beginner can actually produce, and short
+## utterances are recognised far more reliably than the full compound sentence. The
+## creature still changes both ways either way - this is about speaking, not about what
+## gets recorded.
+const SAY_PAST := "past" ## "It was small."
+const SAY_FULL := "full" ## "It was small. Now it is big."
+
 const PROMPT_FULL := "full" ## "It was small. Now it is big."
 const PROMPT_GAPPED := "gapped" ## "It was ____ . Now it is ____ ."
 const PROMPT_HIDDEN := "hidden" ## Picture cards only - the student produces the frame.
@@ -25,6 +33,7 @@ const STRICT_NORMAL := 1
 const STRICT_EXACT := 2
 
 var choice_mode: String = CHOICE_FREE
+var say_mode: String = SAY_PAST
 var prompt_mode: String = PROMPT_FULL
 var strictness: int = STRICT_NORMAL
 var enabled_pairs := PackedStringArray() ## Empty = all.
@@ -48,6 +57,7 @@ func load_settings() -> void:
 	if cfg.load(PATH) != OK:
 		return
 	choice_mode = str(cfg.get_value("game", "choice_mode", choice_mode))
+	say_mode = str(cfg.get_value("game", "say_mode", say_mode))
 	prompt_mode = str(cfg.get_value("game", "prompt_mode", prompt_mode))
 	strictness = int(cfg.get_value("game", "strictness", strictness))
 	enabled_pairs = PackedStringArray(cfg.get_value("content", "pairs", []))
@@ -65,6 +75,7 @@ func load_settings() -> void:
 func save_settings() -> void:
 	var cfg := ConfigFile.new()
 	cfg.set_value("game", "choice_mode", choice_mode)
+	cfg.set_value("game", "say_mode", say_mode)
 	cfg.set_value("game", "prompt_mode", prompt_mode)
 	cfg.set_value("game", "strictness", strictness)
 	cfg.set_value("game", "persist_zoo", persist_zoo)
@@ -123,3 +134,8 @@ static func _toggled(current: PackedStringArray, all: PackedStringArray, key: St
 	if list.size() >= all.size():
 		return PackedStringArray()
 	return list
+
+
+## True when the student only has to say the "It was ___" half.
+func past_only() -> bool:
+	return say_mode == SAY_PAST

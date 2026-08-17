@@ -24,6 +24,12 @@ static func sentence_for(before: String, after: String) -> String:
 	return "It was %s. Now it is %s." % [before, after]
 
 
+## What the student is asked to say in Settings.SAY_PAST. The recorded entry still keeps
+## the full sentence: the creature transforms either way, only the speaking is halved.
+static func past_sentence_for(before: String) -> String:
+	return "It was %s." % before
+
+
 func add_entry(category: String, before: String, after: String, assisted := false) -> void:
 	entries.append({
 		"category": category,

@@ -113,7 +113,10 @@ func show_target(before: String, after: String) -> void:
 	_armed = true
 	_sentence_label.text = _prompt_text()
 	_set_chips([before, after])
-	_feedback.text = "" if Speech.uses_microphone() else "Type the whole sentence."
+	if Speech.uses_microphone():
+		_feedback.text = "" ## The mic button carries the instruction now.
+	else:
+		_feedback.text = "Type the sentence." if Settings.past_only() else "Type the whole sentence."
 	_feedback.add_theme_color_override("font_color", UiKit.MUTED)
 	_override_button.visible = false
 	_listen_button.visible = Tts.available() and Settings.prompt_mode != Settings.PROMPT_HIDDEN
@@ -159,6 +162,8 @@ func is_armed() -> bool:
 func _target_sentence() -> String:
 	if _before.is_empty():
 		return ""
+	if Settings.past_only():
+		return CreatureState.past_sentence_for(_before)
 	return CreatureState.sentence_for(_before, _after)
 
 
@@ -166,7 +171,7 @@ func _prompt_text() -> String:
 	if Settings.prompt_mode == Settings.PROMPT_HIDDEN:
 		return "[center][color=#93a6bf]Say your sentence.[/color][/center]"
 	if Settings.prompt_mode == Settings.PROMPT_GAPPED:
-		return _sentence_bbcode("It was ____ . Now it is ____ .")
+		return _sentence_bbcode("It was ____ ." if Settings.past_only() else "It was ____ . Now it is ____ .")
 	return _sentence_bbcode(_target_sentence())
 
 
