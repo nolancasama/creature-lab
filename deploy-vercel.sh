@@ -51,7 +51,17 @@ echo "==> Deploying to Vercel..."
 pushd web-build >/dev/null
 # --prod publishes to the project's production deployment; the stable alias below is
 # what people actually visit, so it is re-pointed at whatever this run produced.
-URL=$(vercel deploy --prod --yes | tail -1 | tr -d '\r')
+#
+# The URL is grepped out rather than taken from the last line: the CLI interleaves
+# build logs and a JSON tail, so `tail -1` picks up a stray "}" and the alias fails.
+DEPLOY_LOG=$(mktemp)
+vercel deploy --prod --yes 2>&1 | tee "$DEPLOY_LOG"
+URL=$(grep -oE 'https://[a-z0-9-]+-nolan-casamas-projects\.vercel\.app' "$DEPLOY_LOG" | tail -1)
+rm -f "$DEPLOY_LOG"
+if [ -z "$URL" ]; then
+	echo "error: could not find the deployment URL in the Vercel output" >&2
+	exit 1
+fi
 vercel alias set "$URL" "$ALIAS"
 popd >/dev/null
 
