@@ -7,7 +7,8 @@ extends Node3D
 ## Two local UI sub-states, not global FSM phases (the FSM only sees one
 ## Phase.ANIMAL_SELECTION for all of it):
 ##   PICKING   - grid of animal buttons, live rotating preview, a confirm button.
-##   RECORDING - DNA Log on the left, Word Lab + Say It stacked on the right.
+##   RECORDING - Word Lab + Say It stacked on the right, floating HUD, animal centred in
+##               the free space on the left.
 
 const PREVIEW_SPIN := 0.45
 const RECORDING_FACING := -PI * 0.5 ## Godot forward (-Z) turned toward screen-right.
@@ -18,7 +19,6 @@ const PLATFORM_POS := Vector3(-0.5, 0.0, 0.6)
 const CAMERA_POS := Vector3(0.5, 2.4, 6.5)
 const CAMERA_AIM := Vector3(-0.5, 0.95, 0.0)
 
-const DNA_PANEL_WIDTH := 380
 const RIGHT_PANEL_WIDTH := 480
 const RIGHT_MARGIN := 44 ## Wider than the left margin - a 24px gap read as hugging the edge.
 
@@ -201,8 +201,8 @@ func _confirm() -> void:
 
 # --- Recording sub-state -----------------------------------------------------------
 
-## Swaps the picking panel for the DNA Log / Word Lab / Say It layout in place - the
-## screen never changes, only what is shown on top of it.
+## Swaps the picking panel for the Word Lab / Say It layout in place - the screen never
+## changes, only what is shown on top of it.
 func _enter_recording() -> void:
 	_mode = Mode.RECORDING
 	_dragging_view = false
@@ -273,7 +273,7 @@ func _build_recording_ui() -> void:
 	_root.add_child(gear_btn)
 
 	_progress = UiKit.label("", UiKit.BODY, UiKit.GOLD)
-	_progress.set_anchors_and_offsets_preset(Control.PRESET_TOP_CENTER)
+	_progress.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
 	_progress.add_theme_font_size_override("font_size", UiKit.SMALL)
 	_progress.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_progress.offset_top = 32
@@ -430,8 +430,6 @@ func _commit(assisted: bool) -> void:
 	_pending = {}
 
 	Game.record_sentence(category, before, after, assisted)
-	var index := Game.current.slots_filled() - 1
-	_dna_log.set_slot(index, str(Game.current.entries[index]["sentence"]))
 	Audio.play("success")
 	Fx.burst(_preview_root, Vector3(0, 0.4, 0), "sparkle", UiKit.OK, 1.6)
 	_speech.show_success()
