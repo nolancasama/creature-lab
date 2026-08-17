@@ -10,6 +10,7 @@ signal backend_changed(backend_id: String)
 signal failed(reason: String)
 
 var backend: SpeechBackend = null
+var _cancelled := false ## Drops the transcript from a session the student called off.
 
 
 func _ready() -> void:
@@ -56,6 +57,7 @@ func is_listening() -> bool:
 
 func start() -> void:
 	if backend != null:
+		_cancelled = false
 		backend.start()
 
 
@@ -64,12 +66,26 @@ func stop() -> void:
 		backend.stop()
 
 
+## Stop listening and throw away whatever this session was about to report. A student who
+## taps the button a second time has changed their mind, not answered wrongly, so the
+## transcript must not reach the validator and be counted as a failed attempt - a
+## recogniser will still deliver a final result after being told to stop.
+func cancel() -> void:
+	if backend == null:
+		return
+	_cancelled = true
+	backend.stop()
+
+
 func submit_typed(text: String) -> void:
 	if backend != null:
+		_cancelled = false ## Typing is its own answer; an earlier cancel must not eat it.
 		backend.submit(text)
 
 
 func _on_transcript(alternatives: PackedStringArray, is_final: bool) -> void:
+	if _cancelled:
+		return
 	heard.emit(alternatives, is_final)
 
 

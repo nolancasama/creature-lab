@@ -12,13 +12,18 @@ signal accepted_by_teacher()
 const HELP_AFTER_MODEL := 2 ## Failed attempts before the sentence is read aloud.
 const HELP_AFTER_OVERRIDE := 3 ## Failed attempts before the teacher override appears.
 const MIC_ICON := preload("res://ui/mic.svg")
+const MIC_IDLE := "Tap to speak  (Space)"
+const MIC_LISTENING := "Listening...  tap to stop"
+const LISTEN_TIMEOUT := 10.0 ## Seconds before an unanswered microphone closes itself.
+const HEADER_HEIGHT := 34
+const LISTEN_WIDTH := 96
 
 var _sentence_label: RichTextLabel = null
-var _chips: HBoxContainer = null
 var _feedback: Label = null
 var _mic_button: Button = null
 var _entry: LineEdit = null
 var _listen_button: Button = null
+var _listen_timer: Timer = null
 var _override_button: Button = null
 
 var _before := ""
@@ -38,20 +43,31 @@ func _build() -> void:
 	var column := UiKit.vbox(8)
 	add_child(column)
 
-	var header := UiKit.hbox(8)
+	# A plain hbox would centre the title only when Listen is hidden, and shift it every
+	# time Listen appears. Anchoring both inside one Control keeps the title on the panel's
+	# centre line whatever else is in the row.
+	var header := Control.new()
+	header.custom_minimum_size = Vector2(0, HEADER_HEIGHT)
 	column.add_child(header)
-	header.add_child(UiKit.label("SAY IT", UiKit.H3, UiKit.ACCENT))
-	header.add_child(UiKit.expander())
+
+	var title := UiKit.label("SAY IT", UiKit.H3, UiKit.ACCENT)
+	title.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	header.add_child(title)
+
 	_listen_button = UiKit.button("Listen", UiKit.SMALL)
+	_listen_button.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
+	_listen_button.offset_left = -LISTEN_WIDTH
+	_listen_button.offset_right = 0
+	_listen_button.offset_top = 0
+	_listen_button.offset_bottom = HEADER_HEIGHT
 	_listen_button.pressed.connect(func() -> void: Tts.speak(_target_sentence()))
 	header.add_child(_listen_button)
 
 	_sentence_label = UiKit.rich("", UiKit.H2)
 	_sentence_label.custom_minimum_size = Vector2(0, 104)
 	column.add_child(_sentence_label)
-
-	_chips = UiKit.hbox(8)
-	column.add_child(_chips)
 
 	_entry = UiKit.line_edit("Type the sentence, then press Enter")
 	_entry.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -67,14 +83,22 @@ func _build() -> void:
 	# is meant to reach for, and it carries the instruction now that the feedback line no
 	# longer repeats it.
 	column.add_child(UiKit.expander())
-	_mic_button = UiKit.button("Hold to speak  (Space)", UiKit.H3, true)
+	_mic_button = UiKit.button(MIC_IDLE, UiKit.H3, true)
 	_mic_button.icon = MIC_ICON
 	_mic_button.custom_minimum_size = Vector2(0, 60)
-	_mic_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_mic_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_mic_button.add_theme_constant_override("h_separation", 10)
-	_mic_button.button_down.connect(_on_mic_down)
-	_mic_button.button_up.connect(_on_mic_up)
+	_mic_button.pressed.connect(_on_mic_pressed)
 	column.add_child(_mic_button)
+
+	# An open microphone with no way out is the failure mode of tap-to-talk: a child who
+	# taps and then says nothing would otherwise sit in front of a listening button for
+	# ever. This closes the session and says so in words they can act on.
+	_listen_timer = Timer.new()
+	_listen_timer.one_shot = true
+	_listen_timer.wait_time = LISTEN_TIMEOUT
+	_listen_timer.timeout.connect(_on_listen_timeout)
+	add_child(_listen_timer)
 
 	_override_button = UiKit.button("That was right - accept it", UiKit.SMALL)
 	_override_button.visible = false
@@ -99,7 +123,6 @@ func show_idle(message := "") -> void:
 	_before = ""
 	_after = ""
 	_sentence_label.text = "[center][color=#93a6bf]Choose a word card.[/color][/center]"
-	_set_chips([])
 	_feedback.text = message
 	_feedback.add_theme_color_override("font_color", UiKit.MUTED)
 	_override_button.visible = false
@@ -112,7 +135,6 @@ func show_target(before: String, after: String) -> void:
 	_after = after
 	_armed = true
 	_sentence_label.text = _prompt_text()
-	_set_chips([before, after])
 	if Speech.uses_microphone():
 		_feedback.text = "" ## The mic button carries the instruction now.
 	else:
@@ -179,35 +201,6 @@ func _sentence_bbcode(text: String) -> String:
 	return "[center][b]%s[/b][/center]" % text
 
 
-## The two words always stay visible as chips, even when the frame is hidden: the child
-## needs to know which words they picked, not be tested on remembering them.
-func _set_chips(words: Array) -> void:
-	for child in _chips.get_children():
-		child.queue_free()
-	if words.is_empty():
-		return
-	_chips.add_child(UiKit.expander())
-	_chips.add_child(_chip("was", str(words[0])))
-	_chips.add_child(UiKit.label("->", UiKit.H3, UiKit.MUTED))
-	_chips.add_child(_chip("now", str(words[1])))
-	_chips.add_child(UiKit.expander())
-
-
-func _chip(tag: String, word: String) -> Control:
-	var tint := Content.color_of(word, UiKit.PANEL_HI) if Content.is_color_word(word) else UiKit.PANEL_HI
-	var chip := UiKit.panel(tint, 10)
-	var row := UiKit.hbox(6)
-	chip.add_child(row)
-	var text_color := UiKit.TEXT
-	if Content.is_color_word(word):
-		var def := Content.color_def(word)
-		if def != null:
-			text_color = def.label_color()
-	row.add_child(UiKit.label(tag, UiKit.SMALL, text_color))
-	row.add_child(UiKit.label(word, UiKit.H3, text_color))
-	return chip
-
-
 func _set_input_enabled(enabled: bool) -> void:
 	_mic_button.disabled = not enabled
 	_entry.editable = enabled
@@ -222,19 +215,35 @@ func _submit_typed(text: String) -> void:
 	Speech.submit_typed(text)
 
 
-func _on_mic_down() -> void:
-	if _armed:
+## One tap starts listening, a second calls it off. Holding a button down while speaking
+## is a lot to ask of a six-year-old who is also trying to remember a sentence.
+func _on_mic_pressed() -> void:
+	if not _armed:
+		return
+	if Speech.is_listening():
+		Speech.cancel()
+		_feedback.text = ""
+		_feedback.add_theme_color_override("font_color", UiKit.MUTED)
+	else:
 		Speech.start()
 
 
-func _on_mic_up() -> void:
-	Speech.stop()
+func _on_listen_timeout() -> void:
+	if not Speech.is_listening():
+		return
+	Speech.cancel()
+	_feedback.text = "I didn't hear anything. Tap the button and try again."
+	_feedback.add_theme_color_override("font_color", UiKit.MUTED)
 
 
 func _on_listening_changed(listening: bool) -> void:
 	if not Speech.uses_microphone():
 		return
-	_mic_button.text = "Listening..." if listening else "Hold to speak  (Space)"
+	if listening:
+		_listen_timer.start()
+	else:
+		_listen_timer.stop()
+	_mic_button.text = MIC_LISTENING if listening else MIC_IDLE
 	UiKit.style_button(_mic_button, UiKit.OK if listening else UiKit.ACCENT, true)
 
 
@@ -242,10 +251,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	if not _armed or not Speech.uses_microphone():
 		return
 	if event.is_action_pressed("push_to_talk"):
-		Speech.start()
-		get_viewport().set_input_as_handled()
-	elif event.is_action_released("push_to_talk"):
-		Speech.stop()
+		_on_mic_pressed()
 		get_viewport().set_input_as_handled()
 
 

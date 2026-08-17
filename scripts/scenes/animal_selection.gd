@@ -385,7 +385,7 @@ func _sync_ui() -> void:
 	if Game.current == null:
 		return
 	var assigned := _assigned_category()
-	var text := "Before %d of %d" % [mini(Game.current.slots_filled() + 1, CreatureState.SLOTS), CreatureState.SLOTS]
+	var text := "Before (%d of %d)" % [mini(Game.current.slots_filled() + 1, CreatureState.SLOTS), CreatureState.SLOTS]
 	if _progress != null:
 		_progress.text = text
 
