@@ -645,15 +645,24 @@ func _apply_grounding(delta: float, instant := false) -> void:
 	_support_lowest_contact()
 	var contacts := foot_contact_positions()
 	var pair_targets := {"front": 0.0, "rear": 0.0}
+	var pair_present := {"front": false, "rear": false}
 	var scale_y := maxf(absf(body.scale.y), 0.001)
 	for i in mini(contacts.size(), definition.legs.size()):
 		if not is_finite(contacts[i].y):
 			continue
 		var pair := "front" if str(definition.legs[i].get("id", "")).begins_with("front") else "rear"
+		pair_present[pair] = true
 		# A positive Y means this sole floats above the plane and needs more reach.
 		var needed := deformer.ground_extension(i) \
-			+ maxf(contacts[i].y - GROUND_CLEARANCE, 0.0) / scale_y
+			+ maxf(contacts[i].y - GROUND_CLEARANCE, 0.0) / scale_y * 0.45
 		pair_targets[pair] = maxf(float(pair_targets[pair]), needed)
+	# Body translation handles the common vertical offset. Keeping a shared amount in
+	# every leg creates a feedback loop: the body rises, the other pair then extends,
+	# and the cycle repeats until the animal floats at the extension cap.
+	if pair_present.front and pair_present.rear:
+		var common_extension := minf(float(pair_targets.front), float(pair_targets.rear))
+		pair_targets.front = maxf(float(pair_targets.front) - common_extension, 0.0)
+		pair_targets.rear = maxf(float(pair_targets.rear) - common_extension, 0.0)
 	var targets: Array[float] = []
 	for leg in definition.legs:
 		var pair := "front" if str(leg.get("id", "")).begins_with("front") else "rear"

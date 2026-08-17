@@ -335,7 +335,7 @@
       "skin": "#e08a3c",
       "stand_height": 1.85,
       "ribs": {"center": [0.5, 0.57, 0.62], "size": [0.78, 0.31, 0.34], "count": 4, "depth": 0.022},
-      "foot_contacts": {"front_left": [0, -0.28005, 0], "front_right": [0, -0.28005, 0], "rear_left": [0, -0.38112, 0], "rear_right": [0, -0.38112, 0]},
+      "foot_contacts": {"front_left": [0, -0.29305, 0], "front_right": [0, -0.29305, 0], "rear_left": [0, -0.38112, 0], "rear_right": [0, -0.38112, 0]},
       "ground_neutral": true,
       "walk_speed": 1.4,
       "voice_pitch": 0.8,

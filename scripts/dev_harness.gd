@@ -32,8 +32,6 @@ static func run_if_requested(main: Node) -> void:
 		_screenshot(main, shot)
 	elif not phase.is_empty():
 		_goto(phase)
-
-
 ## Plays a whole round through the real UI signals - pick a card, say the sentence,
 ## three times, then the chamber - and reports where it ended up. This is the only check
 ## that covers the awaits in the transformation sequence.
@@ -269,7 +267,9 @@ static func _selftest(main: Node) -> void:
 		main.add_child(rig)
 		if def.ground_neutral:
 			var neutral_body_y := rig.body.position.y
-			for ground_step in 4:
+			# Repeated passes catch common-extension feedback, which used to ratchet the
+			# whole Tiger upward only after it had been selected for about a second.
+			for ground_step in 120:
 				rig.solve_idle_grounding_immediately()
 			var neutral_contacts := rig.foot_contact_positions()
 			_check(failures, absf(rig.body.position.y - neutral_body_y) < 0.002,
@@ -278,7 +278,7 @@ static func _selftest(main: Node) -> void:
 				_check(failures, absf(neutral_contacts[contact_idx].y - CreatureRig.GROUND_CLEARANCE) < 0.005,
 					"%s: neutral foot '%s' did not ground (y=%.3f)" % [def.id,
 						def.legs[contact_idx].get("id", ""), neutral_contacts[contact_idx].y])
-			_check(failures, rig.deformer.ground_extension(0) > 0.01,
+			_check(failures, rig.deformer.ground_extension(0) > 0.002,
 				"%s: neutral front paws were not lowered" % def.id)
 			_check(failures, is_equal_approx(rig.deformer.ground_extension(0), rig.deformer.ground_extension(1)),
 				"%s: neutral front-paw correction became asymmetric" % def.id)
