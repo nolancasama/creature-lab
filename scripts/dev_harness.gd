@@ -7,8 +7,16 @@ extends RefCounted
 ##   godot --path . -- --shot=lab          jump there, save user://shot_lab.png, quit
 ##   godot --path . -- --shot=say          the recording screen with a card chosen
 ##   godot --path . -- --backtest          abandon a half-finished round, then restart it
+##   godot --path . -- --splittest         the SAY_SPLIT present-tense pass, end to end
+##   godot --path . -- --shot=present      the centred present-tense panel
 
 const SHOT_DELAY := 1.6
+
+const SPLIT_PICKS := [
+	["LENGTH", "long", "short"],
+	["HARDNESS", "hard", "soft"],
+	[Content.COLOR_CATEGORY, "red", "blue"],
+]
 
 
 ## True when a harness run is about to drive the game itself. Boot code checks this before
@@ -17,7 +25,7 @@ const SHOT_DELAY := 1.6
 static func is_requested() -> bool:
 	for arg in OS.get_cmdline_user_args():
 		var text := str(arg)
-		if text in ["--selftest", "--autoplay", "--backtest"] \
+		if text in ["--selftest", "--autoplay", "--backtest", "--splittest"] \
 				or text.begins_with("--shot=") or text.begins_with("--phase="):
 			return true
 	return false
@@ -44,6 +52,8 @@ static func run_if_requested(main: Node) -> void:
 		_autoplay(main)
 	elif args.has("--backtest"):
 		_backtest(main)
+	elif args.has("--splittest"):
+		_splittest(main)
 	elif not shot.is_empty():
 		_screenshot(main, shot)
 	elif not phase.is_empty():
@@ -161,6 +171,57 @@ static func _expected(before: String, after: String) -> String:
 	return GrammarValidator.expected_sentence(before, after)
 
 
+## Records the three past sentences, which is the way in to everything after them.
+## False if the round did not complete, so callers fail loudly rather than asserting
+## against a screen that never appeared.
+static func _drive_past_pass(tree: SceneTree, tag: String) -> bool:
+	for pick in SPLIT_PICKS:
+		var word_lab := _find_word_lab(Router.current_scene)
+		if word_lab == null:
+			printerr("[%s] FAIL: no Word Lab in %s" % [tag, Router.current_scene])
+			return false
+		word_lab.pair_selected.emit(str(pick[0]), str(pick[1]), str(pick[2]))
+		await tree.create_timer(0.7).timeout
+		Speech.submit_typed(_expected(str(pick[1]), str(pick[2])))
+		await tree.create_timer(2.6).timeout
+	return true
+
+
+## Settings.SAY_SPLIT: three past sentences, then three more in the present before
+## anything transforms. The assertion that matters is the middle one - after the third
+## past sentence the game must still be on the selection screen, because in every other
+## mode that is exactly when it leaves for the chamber.
+static func _splittest(main: Node) -> void:
+	var tree := main.get_tree()
+	Settings.say_mode = Settings.SAY_SPLIT
+	_goto("lab")
+	await tree.create_timer(1.4).timeout
+
+	var recorded: bool = await _drive_past_pass(tree, "splittest")
+	if not recorded:
+		tree.quit(1)
+		return
+	print("[splittest] %d past sentences recorded" % Game.current.entries.size())
+
+	await tree.create_timer(1.0).timeout
+	if Game.phase != Game.Phase.ANIMAL_SELECTION:
+		printerr("[splittest] FAIL: left for %s instead of asking for the present tense"
+			% Game.Phase.keys()[Game.phase])
+		tree.quit(1)
+		return
+	print("[splittest] held for the present-tense pass")
+
+	for pick in SPLIT_PICKS:
+		Speech.submit_typed(GrammarValidator.expected_present(str(pick[2])))
+		await tree.create_timer(2.4).timeout
+
+	await tree.create_timer(12.0).timeout
+	var ok := Game.phase == Game.Phase.NAMING
+	print("[splittest] ended in phase %s" % Game.Phase.keys()[Game.phase])
+	print("[splittest] PASS" if ok else "[splittest] FAIL: expected NAMING")
+	tree.quit(0 if ok else 1)
+
+
 static func _find_button(node: Node, text: String) -> Button:
 	if node == null:
 		return null
@@ -229,13 +290,18 @@ static func _screenshot(main: Node, phase: String) -> void:
 	# "say" is the recording screen with a card already chosen. Worth its own target
 	# because Say It looks nothing like its idle self once armed - the chips, the mic and
 	# Change card only exist in that state, and none of them can be seen from --shot=lab.
-	_goto("lab" if phase == "say" else phase)
+	if phase == "present":
+		Settings.say_mode = Settings.SAY_SPLIT
+	_goto("lab" if phase in ["say", "present"] else phase)
 	await main.get_tree().create_timer(SHOT_DELAY).timeout
 	if phase == "say":
 		var word_lab := _find_word_lab(Router.current_scene)
 		if word_lab != null:
 			word_lab.pair_selected.emit("HARDNESS", "soft", "hard")
 		await main.get_tree().create_timer(1.0).timeout
+	elif phase == "present":
+		var _reached: bool = await _drive_past_pass(main.get_tree(), "shot")
+		await main.get_tree().create_timer(1.2).timeout
 	await RenderingServer.frame_post_draw
 	var image := main.get_viewport().get_texture().get_image()
 	var path := "user://shot_%s.png" % phase

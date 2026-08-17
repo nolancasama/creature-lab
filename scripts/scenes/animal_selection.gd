@@ -39,13 +39,14 @@ const PANEL_TOP := HUD_TOP + HUD_BUTTON + 12 ## Clears the gear rather than sitt
 const PANEL_BOTTOM := -24 ## Tighter than the top margin: the height lost to the gear row
                           ## above comes back here, so the Word Lab still shows every card.
 const PANEL_WIDTH := -PANEL_LEFT + PANEL_RIGHT ## 648 - the rect's actual width.
+const PRESENT_SIZE := Vector2(720, 460) ## The centred present-tense panel.
 
 ## The animal sits centred in the gap beside the panel, which is always half the panel's
 ## span left of screen centre, whatever the window is doing. Applied as a lens shift - see
 ## _lens_shift() for why it is not simply a camera move.
 const CAMERA_SHIFT := -PANEL_LEFT / 2.0
 
-enum Mode { PICKING, RECORDING }
+enum Mode { PICKING, RECORDING, PRESENT }
 
 var _mode: Mode = Mode.PICKING
 
@@ -69,6 +70,10 @@ var _pending := {}
 var _attempts := 0
 var _busy := false
 var _dragging_view := false
+
+# Present-tense pass (Settings.SAY_SPLIT)
+var _present_index := 0
+var _present_counter: Label = null
 
 
 func _ready() -> void:
@@ -149,6 +154,15 @@ func _lens_shift(cam: Camera3D, pixels: float) -> void:
 	var near_height := 2.0 * cam.near * tan(deg_to_rad(cam.fov) * 0.5)
 	var near_width := near_height * view.x / view.y
 	cam.set_frustum(near_height, Vector2(pixels / view.x * near_width, 0.0), cam.near, cam.far)
+
+
+## The clause the student is currently being asked to produce. Split mode asks for the
+## past card by card and gathers the present tense afterwards, so the answer depends on
+## the sub-state as much as on the setting.
+func _clause() -> int:
+	if _mode == Mode.PRESENT:
+		return GrammarValidator.CLAUSE_PRESENT
+	return GrammarValidator.CLAUSE_PAST if Settings.past_only() else GrammarValidator.CLAUSE_BOTH
 
 
 func _build_root() -> void:
@@ -294,6 +308,90 @@ func _enter_picking() -> void:
 	_selected = ""
 	if not previous.is_empty():
 		_preview(previous)
+
+
+# --- Present-tense pass ------------------------------------------------------------
+
+## Settings.SAY_SPLIT collects the three "Now it is ___" sentences here, after every past
+## sentence is recorded and before the chamber runs. The creature is still in its BEFORE
+## state throughout - it transforms once, on all three traits at once, exactly as it does
+## without this pass. This is a modal over that creature rather than another side panel:
+## the three sentences are one task, and nothing else on screen is actionable during it.
+func _enter_present() -> void:
+	_mode = Mode.PRESENT
+	_dragging_view = false
+	_present_index = 0
+	_attempts = 0
+	_busy = false
+	_pending = {}
+	_clear_overlays()
+
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.55)
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP ## Swallows taps meant for the panel behind.
+	_root.add_child(dim)
+
+	var panel := UiKit.panel(Color(0.06, 0.1, 0.16, 0.98), 18, 2, UiKit.ACCENT)
+	panel.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	panel.offset_left = -PRESENT_SIZE.x * 0.5
+	panel.offset_right = PRESENT_SIZE.x * 0.5
+	panel.offset_top = -PRESENT_SIZE.y * 0.5
+	panel.offset_bottom = PRESENT_SIZE.y * 0.5
+	_root.add_child(panel)
+
+	var column := UiKit.vbox(10)
+	panel.add_child(column)
+
+	var heading := UiKit.label("Now say what it IS", UiKit.H2, UiKit.ACCENT)
+	heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	column.add_child(heading)
+
+	_present_counter = UiKit.label("", UiKit.H3, UiKit.GOLD)
+	_present_counter.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	column.add_child(_present_counter)
+
+	_speech = SpeechPanel.new()
+	_speech.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_speech.accepted_by_teacher.connect(func() -> void: _present_advance())
+	column.add_child(_speech)
+
+	_add_gear_button() ## A teacher must still be able to reach the settings mid-pass.
+	_present_step()
+
+
+func _present_step() -> void:
+	if Game.current == null or _present_index >= Game.current.entries.size():
+		return
+	var entry: Dictionary = Game.current.entries[_present_index]
+	_pending = {
+		"category": str(entry["category"]),
+		"before": str(entry["before"]),
+		"after": str(entry["after"]),
+	}
+	_attempts = 0
+	_present_counter.text = "(%d of %d)" % [_present_index + 1, Game.current.entries.size()]
+	_speech.show_target(str(entry["before"]), str(entry["after"]), GrammarValidator.CLAUSE_PRESENT)
+
+
+## Nothing is recorded here - the entry already exists from the past pass, and the traits
+## are applied by the chamber. This pass only gates the way there.
+func _present_advance() -> void:
+	if _busy:
+		return
+	_busy = true
+	_pending = {}
+	_speech.show_success()
+	Audio.play("success")
+	await get_tree().create_timer(SUCCESS_PAUSE).timeout
+	if not is_inside_tree():
+		return
+	_busy = false
+	_present_index += 1
+	if Game.current == null or _present_index >= Game.current.entries.size():
+		Game.set_phase(Game.Phase.CREATURE_LAB)
+		return
+	_present_step()
 
 
 # --- Recording sub-state -----------------------------------------------------------
@@ -469,7 +567,7 @@ func _on_pair_selected(category: String, before: String, after: String) -> void:
 	if not _is_deform_category(category):
 		_punch()
 	_word_lab.set_locked(true)
-	_speech.show_target(before, after)
+	_speech.show_target(before, after, _clause())
 
 
 func _cancel_pending() -> void:
@@ -483,7 +581,8 @@ func _cancel_pending() -> void:
 
 
 func _on_heard(alternatives: PackedStringArray, is_final: bool) -> void:
-	if _mode != Mode.RECORDING or not is_final or _busy or _pending.is_empty() or not _speech.is_armed():
+	var speaking := _mode == Mode.RECORDING or _mode == Mode.PRESENT
+	if not speaking or not is_final or _busy or _pending.is_empty() or not _speech.is_armed():
 		return
 	_evaluate(alternatives)
 
@@ -495,14 +594,17 @@ func _evaluate(alternatives: PackedStringArray) -> void:
 	var after := str(_pending["after"])
 	var best := {}
 	for alternative in alternatives:
-		var result := GrammarValidator.validate(alternative, before, after, Settings.strictness, Settings.past_only())
+		var result := GrammarValidator.validate(alternative, before, after, Settings.strictness, _clause())
 		if bool(result["ok"]):
-			_commit(false)
+			if _mode == Mode.PRESENT:
+				_present_advance()
+			else:
+				_commit(false)
 			return
 		if best.is_empty() or _score(result) > _score(best):
 			best = result
 	if best.is_empty():
-		best = GrammarValidator.validate("", before, after, Settings.strictness, Settings.past_only())
+		best = GrammarValidator.validate("", before, after, Settings.strictness, _clause())
 	_attempts += 1
 	_speech.show_failure(best, _attempts)
 
@@ -545,7 +647,10 @@ func _finish_sentence() -> void:
 		return
 	_busy = false
 	if Game.current != null and Game.current.is_complete():
-		Game.set_phase(Game.Phase.CREATURE_LAB)
+		if Settings.split_pass():
+			_enter_present()
+		else:
+			Game.set_phase(Game.Phase.CREATURE_LAB)
 	else:
 		_word_lab.set_locked(false)
 		_speech.show_idle("Choose your next card.")

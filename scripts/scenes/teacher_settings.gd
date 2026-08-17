@@ -43,7 +43,9 @@ func _build() -> void:
 	column.add_child(_choice_section(
 		"How much the student says",
 		"Past only is one short clause, and short answers are recognised far more reliably. The creature still changes both ways.",
-		[["Past only  (It was small.)", Settings.SAY_PAST], ["Whole sentence", Settings.SAY_FULL]],
+		[["Past only  (It was small.)", Settings.SAY_PAST],
+			["Past, then all three in the present", Settings.SAY_SPLIT],
+			["Whole sentence", Settings.SAY_FULL]],
 		func() -> String: return Settings.say_mode,
 		func(value: String) -> void: Settings.say_mode = value))
 

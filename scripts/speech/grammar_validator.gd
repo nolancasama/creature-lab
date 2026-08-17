@@ -8,7 +8,8 @@ extends RefCounted
 ## `long`, so word-level matching would be guesswork. Pair-scoped matching is exact.
 ##
 ## Reason codes: ok, empty, nothing, no_before, no_after, swapped, frame_before,
-## frame_after, exact. Past-only mode raises only: ok, empty, nothing, frame_before, exact.
+## frame_after, exact. A single-clause mode raises only: ok, empty, nothing, exact, and
+## whichever of frame_before / frame_after belongs to the clause it asked for.
 
 const BEFORE_FRAME := "it was"
 const AFTER_FRAME := "now it is"
@@ -18,6 +19,13 @@ const AFTER_FRAME := "now it is"
 const LENIENT := 0
 const NORMAL := 1
 const EXACT := 2
+
+## Which clause the student was actually asked for. A boolean covered past-vs-whole; the
+## present-tense pass makes it three cases, and judging a clause nobody was set is how
+## students get told they failed at something they were never asked to do.
+const CLAUSE_BOTH := 0
+const CLAUSE_PAST := 1
+const CLAUSE_PRESENT := 2
 
 
 static func expected_sentence(before: String, after: String) -> String:
@@ -29,9 +37,14 @@ static func expected_past(before: String) -> String:
 	return "%s %s" % [BEFORE_FRAME, before]
 
 
-## `past_only` is passed in rather than read off Settings, for the same reason the
-## strictness constants are duplicated here: this class stays testable on its own.
-static func validate(transcript: String, before: String, after: String, strictness: int, past_only := false) -> Dictionary:
+## Just the present half, said one creature-trait at a time in Settings.SAY_SPLIT.
+static func expected_present(after: String) -> String:
+	return "%s %s" % [AFTER_FRAME, after]
+
+
+## `clause` is passed in rather than read off Settings, for the same reason the strictness
+## constants are duplicated here: this class stays testable on its own.
+static func validate(transcript: String, before: String, after: String, strictness: int, clause := CLAUSE_BOTH) -> Dictionary:
 	var normalized := TextNormalizer.strip_edge_filler(TextNormalizer.normalize(transcript))
 	var result := {
 		"ok": false,
@@ -57,17 +70,27 @@ static func validate(transcript: String, before: String, after: String, strictne
 	result["frame_before"] = frame_before >= 0
 	result["frame_after"] = frame_after >= 0
 
-	if past_only:
-		# Only the first clause is asked for, so the second is neither required nor
-		# penalised - a student who runs on into "now it is big" has still said the part
-		# that was set, and is not corrected for volunteering more.
+	# One clause asked for means the other is neither required nor penalised: a student who
+	# runs on into the rest of the sentence has still said the part that was set, and is
+	# not corrected for volunteering more.
+	if clause == CLAUSE_PAST:
 		if strictness >= EXACT:
 			result["ok"] = normalized == expected_past(before)
 		elif strictness <= LENIENT:
 			result["ok"] = word_before >= 0
 		else:
 			result["ok"] = frame_before >= 0
-		result["reason"] = "ok" if result["ok"] else _diagnose_past(result, normalized, before)
+		result["reason"] = "ok" if result["ok"] else _diagnose_half(result, normalized, expected_past(before), "said_before", "frame_before")
+		return result
+
+	if clause == CLAUSE_PRESENT:
+		if strictness >= EXACT:
+			result["ok"] = normalized == expected_present(after)
+		elif strictness <= LENIENT:
+			result["ok"] = word_after >= 0
+		else:
+			result["ok"] = frame_after >= 0
+		result["reason"] = "ok" if result["ok"] else _diagnose_half(result, normalized, expected_present(after), "said_after", "frame_after")
 		return result
 
 	if strictness >= EXACT:
@@ -90,15 +113,16 @@ static func _matches_exactly(normalized: String, before: String, after: String) 
 	return normalized == target.replace(AFTER_FRAME, "and " + AFTER_FRAME)
 
 
-## Past-only never reports no_after or frame_after: the second clause was never asked for,
-## so naming it as missing would teach the student they had failed at something they were
-## not set.
-static func _diagnose_past(result: Dictionary, normalized: String, before: String) -> String:
-	if not bool(result["said_before"]):
+## Single-clause diagnosis never reports the other half as missing - it was never asked
+## for, so naming it would teach the student they had failed at something they were not
+## set. Only three outcomes are reachable: they said nothing of it, they said the word
+## without the frame, or they said it with something extra.
+static func _diagnose_half(result: Dictionary, normalized: String, target: String, said_key: String, frame_key: String) -> String:
+	if not bool(result[said_key]):
 		return "nothing"
-	if not bool(result["frame_before"]):
-		return "frame_before"
-	return "exact" if normalized != expected_past(before) else "ok"
+	if not bool(result[frame_key]):
+		return frame_key
+	return "exact" if normalized != target else "ok"
 
 
 static func _diagnose(result: Dictionary, normalized: String, before: String, after: String, exact: bool) -> String:

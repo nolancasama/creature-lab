@@ -29,6 +29,7 @@ var _override_button: Button = null
 var _before := ""
 var _after := ""
 var _armed := false
+var _clause := GrammarValidator.CLAUSE_BOTH
 
 
 func _ready() -> void:
@@ -130,9 +131,10 @@ func show_idle(message := "") -> void:
 	_set_input_enabled(false)
 
 
-func show_target(before: String, after: String) -> void:
+func show_target(before: String, after: String, clause := GrammarValidator.CLAUSE_BOTH) -> void:
 	_before = before
 	_after = after
+	_clause = clause
 	_armed = true
 	_sentence_label.text = _prompt_text()
 	if Speech.uses_microphone():
@@ -184,8 +186,11 @@ func is_armed() -> bool:
 func _target_sentence() -> String:
 	if _before.is_empty():
 		return ""
-	if Settings.past_only():
-		return CreatureState.past_sentence_for(_before)
+	match _clause:
+		GrammarValidator.CLAUSE_PAST:
+			return CreatureState.past_sentence_for(_before)
+		GrammarValidator.CLAUSE_PRESENT:
+			return CreatureState.present_sentence_for(_after)
 	return CreatureState.sentence_for(_before, _after)
 
 
@@ -193,7 +198,12 @@ func _prompt_text() -> String:
 	if Settings.prompt_mode == Settings.PROMPT_HIDDEN:
 		return "[center][color=#93a6bf]Say your sentence.[/color][/center]"
 	if Settings.prompt_mode == Settings.PROMPT_GAPPED:
-		return _sentence_bbcode("It was ____ ." if Settings.past_only() else "It was ____ . Now it is ____ .")
+		match _clause:
+			GrammarValidator.CLAUSE_PAST:
+				return _sentence_bbcode("It was ____ .")
+			GrammarValidator.CLAUSE_PRESENT:
+				return _sentence_bbcode("Now it is ____ .")
+		return _sentence_bbcode("It was ____ . Now it is ____ .")
 	return _sentence_bbcode(_target_sentence())
 
 
@@ -270,8 +280,10 @@ func _message_for(result: Dictionary) -> String:
 			return "Almost! Start with: It was %s..." % _before
 		"swapped":
 			return "Nearly - say the OLD word first: It was %s. Now it is %s." % [_before, _after]
-		"frame_before":
+		"said_before", "frame_before":
 			return "Remember the whole frame: It was %s." % _before
+		"said_after":
+			return "Remember the whole frame: Now it is %s." % _after
 		"frame_after":
 			return "Remember the second half: Now it is %s." % _after
 		"exact":

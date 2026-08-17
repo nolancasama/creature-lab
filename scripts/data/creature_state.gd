@@ -30,6 +30,11 @@ static func past_sentence_for(before: String) -> String:
 	return "It was %s." % before
 
 
+## The other half, said one per trait in the present-tense pass of Settings.SAY_SPLIT.
+static func present_sentence_for(after: String) -> String:
+	return "Now it is %s." % after
+
+
 func add_entry(category: String, before: String, after: String, assisted := false) -> void:
 	entries.append({
 		"category": category,

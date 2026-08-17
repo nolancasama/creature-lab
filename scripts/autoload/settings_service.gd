@@ -21,6 +21,7 @@ const CHOICE_GUIDED := "guided"
 ## creature still changes both ways either way - this is about speaking, not about what
 ## gets recorded.
 const SAY_PAST := "past" ## "It was small."
+const SAY_SPLIT := "split" ## Past for each card, then all three "Now it is ___" together.
 const SAY_FULL := "full" ## "It was small. Now it is big."
 
 const PROMPT_FULL := "full" ## "It was small. Now it is big."
@@ -136,6 +137,12 @@ static func _toggled(current: PackedStringArray, all: PackedStringArray, key: St
 	return list
 
 
-## True when the student only has to say the "It was ___" half.
+## True when the card-by-card pass only asks for the "It was ___" half. Split mode does
+## too - its present half is a separate pass at the end, not part of the same breath.
 func past_only() -> bool:
-	return say_mode == SAY_PAST
+	return say_mode != SAY_FULL
+
+
+## True when the present tense is collected as its own pass before the transformation.
+func split_pass() -> bool:
+	return say_mode == SAY_SPLIT
