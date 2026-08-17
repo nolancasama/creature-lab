@@ -1,8 +1,8 @@
 extends Node3D
 ## Pick an animal, then record its three sentences - all without ever leaving this
 ## screen. Picking and speaking are one continuous action, not two different places to
-## be: the animal keeps rotating throughout, and only once "Now it is..." is fully
-## programmed does the game cut to the transformation chamber.
+## be: the animal rotates while it is being previewed, then holds still while the
+## player records its sentences.
 ##
 ## Two local UI sub-states, not global FSM phases (the FSM only sees one
 ## Phase.ANIMAL_SELECTION for all of it):
@@ -10,6 +10,8 @@ extends Node3D
 ##   RECORDING - DNA Log on the left, Word Lab + Say It stacked on the right.
 
 const PREVIEW_SPIN := 0.45
+const RECORDING_FACING := -PI * 0.5 ## Godot forward (-Z) turned toward screen-right.
+const DRAG_TURN_SPEED := 0.012
 const SUCCESS_PAUSE := 1.1
 
 const PLATFORM_POS := Vector3(0.4, 0.0, 0.6)
@@ -46,6 +48,7 @@ var _speech: SpeechPanel = null
 var _pending := {}
 var _attempts := 0
 var _busy := false
+var _dragging_view := false
 
 
 func _ready() -> void:
@@ -75,8 +78,21 @@ func _exit_tree() -> void:
 
 
 func _process(delta: float) -> void:
-	if _preview_root != null:
+	if _preview_root != null and _mode == Mode.PICKING:
 		_preview_root.rotation.y += delta * PREVIEW_SPIN
+
+
+## During sentence recording, the player can inspect the still creature without
+## restarting its automatic turntable rotation.
+func _unhandled_input(event: InputEvent) -> void:
+	if _mode != Mode.RECORDING or _preview_root == null:
+		return
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		_dragging_view = event.pressed
+		return
+	if event is InputEventMouseMotion and _dragging_view:
+		_preview_root.rotation.y -= event.relative.x * DRAG_TURN_SPEED
+		get_viewport().set_input_as_handled()
 
 
 # --- Stage ---------------------------------------------------------------------
@@ -191,12 +207,22 @@ func _confirm() -> void:
 ## screen never changes, only what is shown on top of it.
 func _enter_recording() -> void:
 	_mode = Mode.RECORDING
+	_dragging_view = false
+	if _preview_root != null:
+		_preview_root.rotation.y = RECORDING_FACING
 	if _picking_panel != null:
 		_picking_panel.queue_free()
 		_picking_panel = null
 
 	_build_recording_ui()
-	_apply_traits(false)
+	# A freshly confirmed animal is already the correct neutral live rig. Reapplying an
+	# empty trait set calls reset_modifiers(), which snaps body.position to zero and made
+	# the entire animal visibly rise from its current preview pose at selection time.
+	# Restored/debug rounds still need their saved traits rebuilt here.
+	var needs_restore := _rig == null or Game.current == null \
+		or _rig_animal != Game.current.animal_id or not Game.current.entries.is_empty()
+	if needs_restore:
+		_apply_traits(false)
 	_sync_ui()
 
 
@@ -231,6 +257,8 @@ func _build_recording_ui() -> void:
 	_word_lab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_word_lab.pair_selected.connect(_on_pair_selected)
 	word_scroll.add_child(_word_lab)
+	var animal := Content.animal(Game.current.animal_id) if Game.current != null else null
+	_word_lab.set_disabled_categories(animal.disabled_categories if animal != null else PackedStringArray())
 
 	_speech = SpeechPanel.new()
 	_speech.custom_minimum_size = Vector2(0, 340)
@@ -294,8 +322,9 @@ func _assigned_category() -> String:
 		return ""
 	var remaining := PackedStringArray()
 	var used := Game.current.used_categories()
+	var animal := Content.animal(Game.current.animal_id)
 	for pair in Content.enabled_pairs():
-		if not used.has(pair.category):
+		if not used.has(pair.category) and (animal == null or not animal.disabled_categories.has(pair.category)):
 			remaining.append(pair.category)
 	if not Content.enabled_colors().is_empty() and not used.has(Content.COLOR_CATEGORY):
 		remaining.append(Content.COLOR_CATEGORY)

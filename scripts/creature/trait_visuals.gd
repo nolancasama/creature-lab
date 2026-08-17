@@ -26,6 +26,9 @@ static func apply_all(rig: CreatureRig, traits: Dictionary, animate := false) ->
 	var from_body := 1.0
 	var from_leg := 1.0
 	var from_bulk := 1.0
+	var from_feel := 0.0
+	if rig.feel != null:
+		from_feel = rig.feel.feel
 	if rig.deformer != null:
 		from_body = rig.deformer.body_length
 		from_leg = rig.deformer.leg_target
@@ -37,6 +40,7 @@ static func apply_all(rig: CreatureRig, traits: Dictionary, animate := false) ->
 	var body_target := 1.0
 	var leg_target := 1.0
 	var bulk_target := 1.0
+	var feel_target := 0.0
 	# Colour last: it repaints roles that other modifiers may have tinted.
 	var color_word := ""
 	for category in traits:
@@ -53,8 +57,10 @@ static func apply_all(rig: CreatureRig, traits: Dictionary, animate := false) ->
 			leg_target = pair.value_for(word)
 		elif pair.modifier == "BULK":
 			bulk_target = pair.value_for(word)
+		elif pair.modifier == "MATERIAL":
+			feel_target = pair.value_for(word)
 		else:
-			_apply_pair(rig, str(category), word)
+			_apply_pair(rig, str(category), word, animate)
 	if not color_word.is_empty():
 		_apply_color(rig, color_word)
 
@@ -70,6 +76,12 @@ static func apply_all(rig: CreatureRig, traits: Dictionary, animate := false) ->
 			rig.muscle.animate_to(bulk_target)
 		else:
 			rig.muscle.set_state(bulk_target)
+	if rig.feel != null:
+		if animate:
+			rig.feel.set_state(from_feel)
+			rig.feel.animate_to(feel_target)
+		else:
+			rig.feel.set_state(feel_target)
 
 
 static func _apply_color(rig: CreatureRig, word: String) -> void:
@@ -78,7 +90,7 @@ static func _apply_color(rig: CreatureRig, word: String) -> void:
 	rig.recolor(Content.color_of(word, rig.definition.skin_color))
 
 
-static func _apply_pair(rig: CreatureRig, category: String, word: String) -> void:
+static func _apply_pair(rig: CreatureRig, category: String, word: String, animate := false) -> void:
 	var pair := Content.pair_for_category(category)
 	if pair == null:
 		return
@@ -93,20 +105,43 @@ static func _apply_pair(rig: CreatureRig, category: String, word: String) -> voi
 			if value > 1.0:
 				rig.add_fx(Fx.make("motion", Color("#bfe9ff"), 0.5), Vector3(0, mid, -0.5))
 		"THERMAL":
-			_apply_thermal(rig, value, mid)
+			_apply_thermal(rig, value, mid, animate)
 		"AGE":
 			_apply_age(rig, value, mid)
 		"SURFACE":
 			_apply_surface(rig, value, mid)
-		"MATERIAL":
-			_apply_material(rig, value)
 
 
-static func _apply_thermal(rig: CreatureRig, value: float, mid: float) -> void:
+## HOT is layered from several small, cheap pieces rather than one particle system,
+## because that's what actually reads as "fire" instead of "red dots": a warm emissive
+## glow that flickers, licking flame tongues at the feet/back/head/tail, and rising
+## embers as a quieter secondary layer. `animate` adds a one-shot ignite whoosh; the
+## persistent layers apply either way so a zoo creature still reads as hot while just
+## standing there.
+static func _apply_thermal(rig: CreatureRig, value: float, mid: float, animate := false) -> void:
+	var h := rig.definition.stand_height
 	if value > 0.0:
+		var energy := 0.62
 		rig.tint_role("skin", HOT, 0.28)
-		rig.set_emission("skin", HOT, 0.55)
-		rig.add_fx(Fx.make("embers", HOT, 0.7), Vector3(0, mid, 0))
+		rig.set_emission("skin", HOT, energy)
+		rig.set_emission_flicker(1.0)
+		rig.tempo *= 1.06 # a little more energetic, not frantic
+
+		# Base flames licking up around the feet.
+		rig.add_fx(Fx.make("flame", HOT, h * 0.30), Vector3(0, h * 0.03, 0))
+		# The main plume, riding the back.
+		rig.add_fx(Fx.make("flame", HOT, h * 0.20), Vector3(0, h * 0.78, h * 0.05))
+		# Small licks at the head and tail so the silhouette itself looks alight.
+		rig.add_fx(Fx.make("flame", Color("#ffd27a"), h * 0.11), Vector3(0, h * 1.02, h * 0.30))
+		rig.add_fx(Fx.make("flame", Color("#ff5a1f"), h * 0.11), Vector3(0, h * 0.5, -h * 0.42))
+		# Quiet rising embers behind everything else.
+		rig.add_fx(Fx.make("embers", HOT, h * 0.5), Vector3(0, mid, 0))
+
+		if animate:
+			rig.pulse_emission(energy * 1.8, energy, 0.55)
+			var back: Node3D = rig.sockets.get("back", rig.body)
+			Fx.burst(back, Vector3.ZERO, "flame", HOT, 0.45)
+			Fx.burst(back, Vector3(0, 0.2, 0), "embers", HOT, 0.55)
 	else:
 		rig.tint_role("skin", COLD, 0.28)
 		rig.set_surface("skin", 0.55, 0.05)
@@ -136,9 +171,5 @@ static func _apply_surface(rig: CreatureRig, value: float, mid: float) -> void:
 		rig.add_fx(Fx.make("sparkle", Color("#fff2b0"), 0.9), Vector3(0, mid, 0))
 
 
-static func _apply_material(rig: CreatureRig, value: float) -> void:
-	if value > 0.5: # hard
-		rig.set_surface("skin", 0.15, 0.85)
-	else: # soft
-		rig.set_surface("skin", 1.0, 0.0)
+
 		rig.scale_body(Vector3(1.08, 0.95, 1.08)) # squashy

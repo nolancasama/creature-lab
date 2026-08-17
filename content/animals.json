@@ -1,5 +1,5 @@
 {
-  "_comment": "Animals are skinned models from res://models/animals.glb (ITHappy 'Animals FREE' pack, free for commercial use). 'body_bones' are the torso segments the LONG/SHORT trait pushes apart - translating bones rather than scaling them is what stretches the torso without stretching the head, legs or tail. 'legs' lists each leg's telescoping segments in the order they pop out for TALL. 'stand_height' is the display height every animal is normalised to. Socket offsets are in those normalised units, Y up. 'bulk' groups the bones STRONG/WEAK thickens; 'inherits' names the group a group is nested inside so its scale can be divided out and the five controls stay independent. 'veins' are cartoon vein clusters that pop in on the biggest muscles. 'flourish' picks the species finishing pose.",
+  "_comment": "Animals are skinned models from res://models/animals.glb (ITHappy 'Animals FREE' pack, free for commercial use). 'body_bones' are the torso segments the LONG/SHORT trait pushes apart - translating bones rather than scaling them is what stretches the torso without stretching the head, legs or tail. 'legs' lists each leg's telescoping segments in the order they pop out for TALL. 'stand_height' is the display height every animal is normalised to. Socket offsets are in those normalised units, Y up. 'bulk' identifies STRONG muscle bones and the neutral centerlines used by mesh-only WEAK thinning. 'ribs' tunes WEAK's shallow chest grooves. 'foot_contacts' stores explicit sole/hoof offsets for final grounding. 'flourish' picks the species finishing pose. 'feel' tunes HARD/SOFT per species: how far the body puffs and squashes when soft, how strongly it keeps jiggling afterwards, and which appendages go floppy.",
   "roles": {
     "_comment": "Colours for fantasy add-on parts, which are still built from primitives.",
     "dark": "#26262e",
@@ -19,6 +19,8 @@
       "model": "dog_0012",
       "skin": "#c9ced6",
       "stand_height": 1.55,
+      "ribs": {"center": [0.5, 0.57, 0.62], "size": [0.76, 0.30, 0.34], "count": 4, "depth": 0.020},
+      "foot_contacts": {"front_left": [0, -0.30129, 0], "front_right": [0, -0.30129, 0], "rear_left": [0, -0.29074, 0], "rear_right": [0, -0.29074, 0]},
       "walk_speed": 1.6,
       "voice_pitch": 1.0,
       "leg_bones": [
@@ -156,7 +158,17 @@
           "size": 0.187
         }
       ],
-      "flourish": "stomp"
+      "flourish": "stomp",
+      "feel": {
+        "puff": 0.203,
+        "squash": 0.55,
+        "jiggle": 1.0,
+        "floppy_bones": [
+          "ear.L",
+          "ear.R",
+          "spine.003"
+        ]
+      }
     },
     {
       "id": "cat",
@@ -165,6 +177,8 @@
       "model": "kitty_0012",
       "skin": "#3a3a42",
       "stand_height": 1.25,
+      "ribs": {"center": [0.5, 0.57, 0.62], "size": [0.76, 0.30, 0.34], "count": 4, "depth": 0.018},
+      "foot_contacts": {"front_left": [0, -0.11750, 0], "front_right": [0, -0.11750, 0], "rear_left": [0, -0.25831, 0], "rear_right": [0, -0.25831, 0]},
       "walk_speed": 1.8,
       "voice_pitch": 1.25,
       "leg_bones": [
@@ -301,7 +315,17 @@
           "size": 0.153
         }
       ],
-      "flourish": "flex"
+      "flourish": "flex",
+      "feel": {
+        "puff": 0.216,
+        "squash": 0.58,
+        "jiggle": 1.1,
+        "floppy_bones": [
+          "ear.L",
+          "ear.R",
+          "spine.004"
+        ]
+      }
     },
     {
       "id": "tiger",
@@ -310,6 +334,9 @@
       "model": "tiger",
       "skin": "#e08a3c",
       "stand_height": 1.85,
+      "ribs": {"center": [0.5, 0.57, 0.62], "size": [0.78, 0.31, 0.34], "count": 4, "depth": 0.022},
+      "foot_contacts": {"front_left": [0, -0.28005, 0], "front_right": [0, -0.28005, 0], "rear_left": [0, -0.38112, 0], "rear_right": [0, -0.38112, 0]},
+      "ground_neutral": true,
       "walk_speed": 1.4,
       "voice_pitch": 0.8,
       "leg_bones": [
@@ -447,7 +474,16 @@
           "size": 0.238
         }
       ],
-      "flourish": "flex"
+      "flourish": "flex",
+      "feel": {
+        "puff": 0.189,
+        "squash": 0.52,
+        "jiggle": 0.9,
+        "floppy_bones": [
+          "spine.006",
+          "jaw"
+        ]
+      }
     },
     {
       "id": "horse",
@@ -456,6 +492,8 @@
       "model": "horse_0012",
       "skin": "#a9673f",
       "stand_height": 2.15,
+      "ribs": {"center": [0.5, 0.58, 0.62], "size": [0.78, 0.30, 0.34], "count": 4, "depth": 0.022},
+      "foot_contacts": {"front_left": [0, -0.53868, 0], "front_right": [0, -0.53868, 0], "rear_left": [0, -0.56295, 0], "rear_right": [0, -0.56295, 0]},
       "walk_speed": 1.7,
       "voice_pitch": 0.9,
       "leg_bones": [
@@ -611,7 +649,17 @@
           "size": 0.204
         }
       ],
-      "flourish": "rear"
+      "flourish": "rear",
+      "feel": {
+        "puff": 0.135,
+        "squash": 0.44,
+        "jiggle": 0.65,
+        "floppy_bones": [
+          "ear.L",
+          "ear.R",
+          "spine.004"
+        ]
+      }
     },
     {
       "id": "deer",
@@ -620,6 +668,8 @@
       "model": "deer",
       "skin": "#9a6b43",
       "stand_height": 2.0,
+      "ribs": {"center": [0.5, 0.58, 0.62], "size": [0.74, 0.29, 0.32], "count": 4, "depth": 0.019},
+      "foot_contacts": {"front_left": [0, -0.36736, 0], "front_right": [0, -0.36736, 0], "rear_left": [0, -0.44253, 0], "rear_right": [0, -0.44253, 0]},
       "walk_speed": 1.6,
       "voice_pitch": 1.1,
       "leg_bones": [
@@ -766,7 +816,17 @@
           "size": 0.17
         }
       ],
-      "flourish": "rear"
+      "flourish": "rear",
+      "feel": {
+        "puff": 0.162,
+        "squash": 0.48,
+        "jiggle": 0.8,
+        "floppy_bones": [
+          "ear.L",
+          "ear.R",
+          "spine.002"
+        ]
+      }
     },
     {
       "id": "penguin",
@@ -775,6 +835,8 @@
       "model": "pinguin_0012",
       "skin": "#34343c",
       "stand_height": 1.4,
+      "ribs": {"center": [0.5, 0.55, 0.50], "size": [0.70, 0.40, 0.66], "count": 3, "depth": 0.014},
+      "foot_contacts": {"rear_left": [0, -0.01586, 0], "rear_right": [0, -0.01586, 0]},
       "walk_speed": 0.9,
       "voice_pitch": 1.3,
       "leg_bones": [
@@ -818,6 +880,9 @@
       "body_bones": [
         "spine.003",
         "spine.004"
+      ],
+      "disabled_categories": [
+        "LENGTH"
       ],
       "legs": [
         {
@@ -895,7 +960,16 @@
           "size": 0.17
         }
       ],
-      "flourish": "puff"
+      "flourish": "puff",
+      "feel": {
+        "puff": 0.405,
+        "squash": 0.62,
+        "jiggle": 1.7,
+        "floppy_bones": [
+          "fin.L",
+          "fin.R"
+        ]
+      }
     },
     {
       "id": "chicken",
@@ -904,6 +978,8 @@
       "model": "chicken_0012",
       "skin": "#a55f3a",
       "stand_height": 1.15,
+      "ribs": {"center": [0.5, 0.55, 0.52], "size": [0.68, 0.38, 0.60], "count": 3, "depth": 0.013},
+      "foot_contacts": {"rear_left": [0, -0.14141, 0], "rear_right": [0, -0.14141, 0]},
       "walk_speed": 1.5,
       "voice_pitch": 1.45,
       "leg_bones": [
@@ -1025,7 +1101,17 @@
           "size": 0.153
         }
       ],
-      "flourish": "puff"
+      "flourish": "puff",
+      "feel": {
+        "puff": 0.459,
+        "squash": 0.6,
+        "jiggle": 1.55,
+        "floppy_bones": [
+          "Wing.L",
+          "Wing.R",
+          "spine.001"
+        ]
+      }
     }
   ]
 }

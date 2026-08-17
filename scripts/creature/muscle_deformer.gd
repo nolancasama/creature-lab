@@ -1,12 +1,12 @@
 class_name MuscleDeformer
 extends RefCounted
-## STRONG / WEAK: cartoon muscle bulk, veins, posture, and the power-up that gets there.
+## STRONG / WEAK: cartoon muscle bulk, posture, and the power-up that gets there.
 ##
 ## Five bulk controls are driven independently - chest, shoulder, front limb, rear limb,
 ## neck - which is what lets the power-up stage them one after another instead of
 ## inflating everything at once.
 ##
-## Bone scale propagates to every descendant, so naively scaling the chest also inflates
+## STRONG bone scale propagates to every descendant, so naively scaling the chest also inflates
 ## the neck, the legs, the feet and the skull: the animal just gets BIGGER, which is
 ## indistinguishable from the big/small trait. Instead each bone is given a *desired*
 ## thickness and its local scale is set to desired/inherited, walking the skeleton
@@ -14,9 +14,10 @@ extends RefCounted
 ## whatever they would otherwise inherit - so the skull, shins and feet stay their
 ## normal size while the muscles around them swell.
 ##
-## Three systems write to this skeleton and they deliberately do not overlap:
+## Three systems write to this skeleton and they deliberately do not overlap. WEAK is
+## mesh-only and therefore writes none of these components:
 ##   CreatureDeformer -> bone POSITION (body length, telescoping legs)
-##   MuscleDeformer   -> bone SCALE    (muscle bulk)
+##   MuscleDeformer   -> bone SCALE    (STRONG muscle bulk only)
 ##   CreatureRig      -> bone ROTATION (walk cycle, posture)
 ## Keeping one component each is what lets a creature be long, tall, strong and walking
 ## all at the same time without any of them clobbering the others.
@@ -28,32 +29,32 @@ const GROUPS: Array[String] = ["chest", "shoulder", "front_limb", "rear_limb", "
 
 const STRONG_OVERSHOOT := 1.16
 const WEAK_UNDERSHOOT := 0.90
-const VEIN_COLOR := Color("#8c1d2c")
 
-## How much of the overall level each group takes. A powerful animal is mostly chest and
-## haunches; the neck only thickens "somewhat", per the design.
+## How much of the overall level each group takes. The same distribution is used in
+## reverse for WEAK, so the chest, limbs and neck all visibly become slimmer.
 const GROUP_WEIGHT := {
 	"chest": 1.0,
 	"shoulder": 0.92,
 	"front_limb": 0.80,
 	"rear_limb": 0.88,
-	"neck": 0.45,
+	"neck": 0.65,
 }
 
 ## Current bulk per group. 1.0 is the animal's natural build.
 var bulk := {}
-var posture := 0.0 ## +1 proud and lifted, -1 drooping and tired.
-var vein_visibility := 0.0
+var posture := 0.0 ## +1 proud and lifted; WEAK deliberately remains neutral.
 var shake := Vector3.ZERO ## Power-up vibration.
 var squash := Vector3.ONE
 var pitch := 0.0 ## Rearing / head-up flourishes.
 var yaw := 0.0 ## Flex twist.
 var lift := 0.0 ## Posture height, on top of the leg deformer's lift.
+## Single public tuning control for the mesh-only Weak treatment. 0 disables visible
+## thinning, 1 reaches the per-region target scales configured by CreatureRig.
+var weak_visual_intensity := 1.0
 
 var _rig: CreatureRig = null
 var _skeleton: Skeleton3D = null
 var _def: AnimalDefinition = null
-var _vein_nodes: Array[Node3D] = []
 var _tweens: Array[Tween] = []
 var _target := 1.0 ## Last requested bulk level, so transitions know their direction.
 var _order: Array = [] ## Bone indices, shallowest first.
@@ -67,60 +68,6 @@ func _init(rig: CreatureRig) -> void:
 	_def = rig.definition
 	for group in GROUPS:
 		bulk[group] = 1.0
-	_build_veins()
-
-
-# --- Veins --------------------------------------------------------------------
-
-## Veins are little primitive clusters parked on the muscle they belong to, hidden until
-## the animal turns strong. A handful of bold shapes reads far better to a child at
-## screen distance than any attempt at real anatomy - and per the design, too many veins
-## would make the animal look ill rather than powerful.
-func _build_veins() -> void:
-	if _skeleton == null or _def == null:
-		return
-	var material := StandardMaterial3D.new()
-	material.albedo_color = VEIN_COLOR
-	material.roughness = 0.55
-	material.emission_enabled = true
-	material.emission = VEIN_COLOR.lightened(0.15)
-	material.emission_energy_multiplier = 0.22
-
-	for vein in _def.veins:
-		var cluster := Node3D.new()
-		cluster.name = "vein"
-		cluster.position = _vein_position(vein)
-		cluster.scale = Vector3.ZERO
-		cluster.visible = false
-		# A stubby trunk with two branches: the simplest shape that still reads as a vein.
-		var size: float = vein["size"]
-		var thick: float = size * 0.20
-		_add_branch(cluster, material, Vector3.ZERO, Vector3(0, 0, 12), size, thick)
-		_add_branch(cluster, material, Vector3(0, size * 0.34, 0), Vector3(0, 0, 46), size * 0.60, thick * 0.8)
-		_add_branch(cluster, material, Vector3(0, size * 0.30, 0), Vector3(0, 0, -52), size * 0.52, thick * 0.8)
-		_rig.body.add_child(cluster)
-		_vein_nodes.append(cluster)
-
-
-func _add_branch(parent: Node3D, material: StandardMaterial3D, offset: Vector3,
-		rotation_deg: Vector3, length: float, thickness: float) -> void:
-	var spec := BodyPartSpec.new()
-	spec.id = "vein_branch"
-	spec.shape = "capsule"
-	spec.size = Vector3(thickness, maxf(length, thickness * 1.05), thickness)
-	spec.pivot = offset
-	spec.rotation_deg = rotation_deg
-	spec.offset = Vector3(0, length * 0.5, 0)
-	parent.add_child(CreatureRig.build_part_node(spec, material))
-
-
-func _vein_position(vein: Dictionary) -> Vector3:
-	var idx := _skeleton.find_bone(str(vein["bone"]))
-	if idx == -1:
-		return Vector3(0, _def.stand_height * 0.6, 0)
-	var pos: Vector3 = _skeleton.get_bone_global_rest(idx).origin * _rig.normal_scale()
-	pos.y += _rig.model_base_y()
-	return pos + (vein["off"] as Vector3)
 
 
 # --- Applying the state -------------------------------------------------------
@@ -133,7 +80,6 @@ func set_state(level: float) -> void:
 	for group in GROUPS:
 		bulk[group] = level
 	posture = _posture_for(level)
-	vein_visibility = 1.0 if level > 1.02 else 0.0
 	shake = Vector3.ZERO
 	squash = Vector3.ONE
 	pitch = 0.0
@@ -145,10 +91,10 @@ func reset() -> void:
 	set_state(1.0)
 
 
-## Strong stands proud and a little lifted; weak sags. Scaled off how far the bulk went,
-## so it never contradicts the body.
+## Strong may stand proud. WEAK never adds a sag or root-height offset: it changes
+## cross-sections only, preserving the authored skeleton, stance and ground contact.
 func _posture_for(level: float) -> float:
-	return clampf((level - 1.0) * 2.2, -1.0, 1.0)
+	return clampf((level - 1.0) * 2.2, 0.0, 1.0)
 
 
 func apply() -> void:
@@ -158,9 +104,16 @@ func apply() -> void:
 	# What thickness each bone should end up at. Anything unlisted wants 1.0, which is
 	# what keeps heads and feet out of the transformation.
 	var desired := {}
+	var weak_amounts := {}
 	var touched := false
 	for group in GROUPS:
-		var factor: float = 1.0 + (bulk.get(group, 1.0) - 1.0) * float(GROUP_WEIGHT.get(group, 1.0))
+		var group_level: float = float(bulk.get(group, 1.0))
+		# STRONG keeps the existing muscle-bone treatment. WEAK never writes a scale to
+		# any skeletal bone; its volume loss is performed entirely in the mesh shader.
+		var strong_gain := maxf(group_level - 1.0, 0.0)
+		var factor: float = 1.0 + strong_gain * float(GROUP_WEIGHT.get(group, 1.0))
+		weak_amounts[group] = clampf((1.0 - group_level) / 0.40, 0.0, 1.0) \
+			* weak_visual_intensity
 		if not is_equal_approx(factor, 1.0):
 			touched = true
 		for bone in _def.bulk_bones_for(group):
@@ -187,9 +140,13 @@ func apply() -> void:
 	_was_bulked = touched
 
 	lift = posture * _def.stand_height * 0.035
-	for node in _vein_nodes:
-		node.scale = Vector3.ONE * vein_visibility
-		node.visible = vein_visibility > 0.01
+	# Absolute mesh amounts are recomputed from state on every application; transitions
+	# therefore cannot accumulate vertex displacement or retain STRONG features.
+	if _rig != null:
+		weak_amounts["lower_limb"] = maxf(
+			float(weak_amounts.get("front_limb", 0.0)),
+			float(weak_amounts.get("rear_limb", 0.0)))
+		_rig.set_weak_mesh(weak_amounts)
 
 
 ## Bone indices sorted shallowest-first. Godot usually stores them that way already, but
@@ -228,7 +185,7 @@ func animate_to(level: float) -> void:
 
 
 ## Brace, shudder, then swell one muscle group at a time, overshoot into something
-## ridiculous, rebound, pop the veins, and land in the species' own finishing pose.
+## ridiculous, rebound, and land in the species' own finishing pose.
 func _power_up(level: float) -> void:
 	Audio.play("charge", 0.9)
 
@@ -257,14 +214,6 @@ func _power_up(level: float) -> void:
 		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	_squash_between(1.46, 0.24, Vector3.ONE, Vector3(1.10, 1.06, 1.10))
 
-	# 9. Veins pop in with a single pulse and then stay put.
-	var veins := _rig.create_tween()
-	_tweens.append(veins)
-	veins.tween_interval(1.86)
-	veins.tween_callback(func() -> void: Audio.play("pop", 1.35))
-	veins.tween_method(_set_veins, 0.0, 1.35, 0.16).set_trans(Tween.TRANS_SINE)
-	veins.tween_method(_set_veins, 1.35, 1.0, 0.26).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
-
 	# Posture rises through the whole sequence.
 	var stance := _rig.create_tween()
 	_tweens.append(stance)
@@ -272,18 +221,14 @@ func _power_up(level: float) -> void:
 	stance.tween_method(_set_posture, posture, _posture_for(level), 1.3) \
 		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 
-	# 10. Species finishing pose.
+	# 9. Species finishing pose.
 	_flourish(2.02)
 
 
-## The reverse energy: veins vanish, then everything deflates from the chest outward,
-## and the animal sags into a tired stance.
+## The reverse energy: everything deflates from the chest outward while retaining the
+## normal stance and skeletal height.
 func _deflate(level: float) -> void:
 	Audio.play("deflate")
-
-	var veins := _rig.create_tween()
-	_tweens.append(veins)
-	veins.tween_method(_set_veins, vein_visibility, 0.0, 0.28).set_trans(Tween.TRANS_SINE)
 
 	_swell("chest", level, 0.20, 0.42)
 	_swell("shoulder", level, 0.45, 0.40)
@@ -291,7 +236,7 @@ func _deflate(level: float) -> void:
 	_swell("rear_limb", level, 0.72, 0.40)
 	_swell("neck", level, 0.96, 0.38)
 
-	# A slack undershoot and a tired little wobble back.
+	# A slack undershoot and rebound in thickness only: never vertically squash WEAK.
 	var sag := _rig.create_tween()
 	_tweens.append(sag)
 	sag.tween_interval(1.20)
@@ -299,8 +244,6 @@ func _deflate(level: float) -> void:
 		.set_trans(Tween.TRANS_SINE)
 	sag.tween_method(_set_all.bind(level), WEAK_UNDERSHOOT, 1.0, 0.34) \
 		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-
-	_squash_between(1.18, 0.30, Vector3.ONE, Vector3(1.05, 0.92, 1.05))
 
 	var stance := _rig.create_tween()
 	_tweens.append(stance)
@@ -399,6 +342,13 @@ func kill_tweens() -> void:
 	_tweens.clear()
 
 
+func is_animating() -> bool:
+	for t in _tweens:
+		if t != null and t.is_valid() and t.is_running():
+			return true
+	return false
+
+
 # --- Tween setters ------------------------------------------------------------
 
 func _set_group(value: float, group: String) -> void:
@@ -410,11 +360,6 @@ func _set_group(value: float, group: String) -> void:
 func _set_all(value: float, level: float) -> void:
 	for group in GROUPS:
 		bulk[group] = level * value
-	apply()
-
-
-func _set_veins(value: float) -> void:
-	vein_visibility = maxf(value, 0.0)
 	apply()
 
 

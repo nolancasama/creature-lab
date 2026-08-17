@@ -41,7 +41,10 @@ var _rig: CreatureRig = null
 var _skeleton: Skeleton3D = null
 var _def: AnimalDefinition = null
 var _leg_reach: Array[float] = [] ## Rest length of each leg's telescoping section.
+var _leg_vertical_reach: Array[float] = [] ## Downward response when translations extend.
+var _ground_extensions: Array[float] = [] ## Final stance-only reach added per leg, world units.
 var _mean_reach := 0.0
+var _mean_vertical_reach := 0.0
 var _body_tip := -1
 var _tweens: Array[Tween] = []
 
@@ -56,18 +59,29 @@ func _init(rig: CreatureRig) -> void:
 func _cache_rest_metrics() -> void:
 	leg_lengths.clear()
 	_leg_reach.clear()
+	_leg_vertical_reach.clear()
+	_ground_extensions.clear()
+	_mean_reach = 0.0
+	_mean_vertical_reach = 0.0
 	if _skeleton == null or _def == null:
 		return
 	for leg in _def.legs:
 		leg_lengths.append(1.0)
+		_ground_extensions.append(0.0)
 		var reach := 0.0
+		var vertical_reach := 0.0
 		for bone in leg["bones"] as PackedStringArray:
 			var idx := _skeleton.find_bone(bone)
 			if idx != -1:
-				reach += _skeleton.get_bone_rest(idx).origin.length()
+				var rest_offset := _skeleton.get_bone_rest(idx).origin
+				reach += rest_offset.length()
+				vertical_reach += absf(rest_offset.y)
 		_leg_reach.append(reach)
+		_leg_vertical_reach.append(maxf(vertical_reach, reach * 0.35))
 		_mean_reach += reach
+		_mean_vertical_reach += maxf(vertical_reach, reach * 0.35)
 	_mean_reach /= float(maxi(_leg_reach.size(), 1))
+	_mean_vertical_reach /= float(maxi(_leg_vertical_reach.size(), 1))
 	if not _def.body_bones.is_empty():
 		_body_tip = _skeleton.find_bone(_def.body_bones[_def.body_bones.size() - 1])
 
@@ -78,6 +92,7 @@ func _cache_rest_metrics() -> void:
 ## transformed: zoo residents, the naming-screen ghost, the finished creature.
 func set_state(body_value: float, leg_value: float) -> void:
 	kill_tweens()
+	_ground_extensions.fill(0.0)
 	body_length = body_value
 	leg_target = leg_value
 	for i in leg_lengths.size():
@@ -94,16 +109,17 @@ func reset() -> void:
 
 ## Where the body has to ride so the feet land on the floor rather than through it.
 func target_lift(leg_value: float) -> float:
-	return (leg_value - 1.0) * _mean_reach * _rig.normal_scale()
+	return (leg_value - 1.0) * _mean_vertical_reach * _rig.normal_scale()
 
 
-## Leg chains differ in length, so giving every leg the same factor would extend them
-## by different amounts and leave the animal standing lopsided. Normalising to a shared
-## *extension* means they all reach the ground together.
+## Leg chains differ in both raw length and angle. Tall needs equal *vertical* reach,
+## not equal 3D segment length: a diagonal front chain otherwise grows less downward
+## than a rear chain and leaves a tiger's front pair visibly shorter. Neutral remains
+## exactly authored because target == 1 returns a factor of one for every leg.
 func _leg_factor(index: int, target: float) -> float:
-	if index >= _leg_reach.size() or _leg_reach[index] <= 0.0001:
+	if index >= _leg_vertical_reach.size() or _leg_vertical_reach[index] <= 0.0001:
 		return target
-	return 1.0 + (target - 1.0) * _mean_reach / _leg_reach[index]
+	return 1.0 + (target - 1.0) * _mean_vertical_reach / _leg_vertical_reach[index]
 
 
 ## Push the bones into position. Cheap enough to run every frame of a tween: a few bone
@@ -121,6 +137,10 @@ func apply() -> void:
 
 	for i in _def.legs.size():
 		var factor: float = leg_lengths[i] if i < leg_lengths.size() else 1.0
+		if i < _ground_extensions.size() and i < _leg_vertical_reach.size():
+			var response := _leg_vertical_reach[i] * _rig.normal_scale()
+			if response > 0.0001:
+				factor += _ground_extensions[i] / response
 		for bone in _def.legs[i]["bones"] as PackedStringArray:
 			var idx := _skeleton.find_bone(bone)
 			if idx == -1:
@@ -129,6 +149,53 @@ func apply() -> void:
 			_rig.mark_posed(idx)
 
 	_recentre()
+
+
+## Final stance correction. Targets are extra vertical reach in normalised world units,
+## calculated from explicit sole markers after every other adjective and idle pose.
+## The same target is supplied to both members of a pair by CreatureRig.
+func update_ground_extensions(targets: Array[float], delta: float, instant := false) -> bool:
+	var limited := false
+	var changed := false
+	for i in _ground_extensions.size():
+		var requested: float = maxf(targets[i], 0.0) if i < targets.size() else 0.0
+		var max_extension: float = _leg_reach[i] * _rig.normal_scale() * 0.18
+		if requested > max_extension:
+			requested = max_extension
+			limited = true
+		var previous := _ground_extensions[i]
+		_ground_extensions[i] = requested if instant else move_toward(previous, requested,
+			_def.stand_height * 4.0 * delta)
+		changed = changed or not is_equal_approx(previous, _ground_extensions[i])
+	if changed:
+		apply()
+	return limited
+
+
+func clear_ground_extensions(instant := true, delta := 0.0) -> void:
+	var targets: Array[float] = []
+	targets.resize(_ground_extensions.size())
+	targets.fill(0.0)
+	update_ground_extensions(targets, delta, instant)
+
+
+func ground_extension(index: int) -> float:
+	return _ground_extensions[index] if index >= 0 and index < _ground_extensions.size() else 0.0
+
+
+## A newly selected animal already sits on its authored sole plane. Do not recompute
+## that neutral pose from approximate bone contact markers, or it visibly pops upward
+## on the first frame after selection. Grounding is only needed once leg proportions
+## actually change (or while a prior stance correction is being released).
+func requires_grounding() -> bool:
+	if _def != null and _def.ground_neutral:
+		return true
+	if not is_equal_approx(leg_target, 1.0):
+		return true
+	for extension in _ground_extensions:
+		if absf(extension) > 0.00001:
+			return true
+	return false
 
 
 ## A lengthened body grows forward from the hips, which would walk the animal off its
@@ -152,6 +219,7 @@ func animate_to(body_value: float, leg_value: float) -> void:
 	if not is_equal_approx(body_value, body_length):
 		_animate_body(body_value)
 	if not leg_lengths.is_empty() and not is_equal_approx(leg_value, leg_target):
+		_ground_extensions.fill(0.0)
 		_animate_legs(leg_value)
 
 

@@ -139,9 +139,18 @@ naively scaling the chest would inflate the skull and feet too and just make the
 thickness it should end up at and the skeleton is walked parents-first so untouched bones
 actively cancel what they'd inherit. See `scripts/creature/muscle_deformer.gd`.
 
-The three deformation systems each own **one** bone component — position, scale and
+`hard/soft` is one signed control: hardness drives shine, polish and rigidity, softness
+drives puff, squash and jiggle, so the two adjectives can never disagree. HARD solidifies
+from the feet upward (a travelling edge in the shader), overshoots the shine, CLANGs and
+locks rigid; SOFT puffs, gets squashed flat by an invisible weight, boings back past its
+own height and keeps a small wobble for good. Per species, a penguin becomes a pillow and
+a chicken a fluffball while a horse stays comparatively dignified. See
+`scripts/creature/feel_deformer.gd`.
+
+The three bone-deformation systems each own **one** bone component — position, scale and
 rotation respectively — which is what lets a creature be long, tall, strong and walking
-all at once without any of them clobbering the others.
+all at once without any of them clobbering the others. `FeelDeformer` deliberately owns
+no bones at all, working at the body-transform and material level instead.
 
 **Not done (Phase 2/3):** the pack ships **no animations**, so idle and walk are posed
 procedurally in `CreatureRig._swing_legs()`; a real animation set would look considerably

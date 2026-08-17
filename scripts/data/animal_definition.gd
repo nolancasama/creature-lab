@@ -17,6 +17,9 @@ extends Resource
 ## the torso lengthens while the head, legs and tail keep their own proportions.
 @export var body_bones: PackedStringArray = PackedStringArray()
 
+## Trait categories this animal cannot use (for example, a penguin cannot be long/short).
+@export var disabled_categories: PackedStringArray = PackedStringArray()
+
 ## One entry per leg, in the order they pop out during a TALL transformation:
 ## {"id": String, "bones": PackedStringArray}. The bones are the telescoping segments
 ## below the hip, so TALL/SHORT changes leg length without touching the torso.
@@ -26,12 +29,27 @@ extends Resource
 ## groups is resolved by walking the skeleton, not declared here.
 @export var bulk: Dictionary = {}
 
-## Cartoon vein clusters that pop in on the biggest muscles when an animal turns strong:
-## [{"bone": String, "off": Vector3, "size": float}].
-@export var veins: Array[Dictionary] = []
+## Optional STRONG/WEAK rib treatment, expressed as fractions of this mesh's local
+## AABB: {"center": [x,y,z], "size": [x,y,z], "count": 3..5, "depth": number}.
+## Keeping it data-driven lets unusually shaped species tune their chest region without
+## hard-coding model names in the shader.
+@export var rib_profile: Dictionary = {}
+
+## leg id -> sole/hoof contact offset from that leg's final configured foot bone.
+## Values are in normalised creature units and are measured from each neutral mesh,
+## rather than inferred from a whole-model bounding box at runtime.
+@export var foot_contacts: Dictionary = {}
+@export var ground_neutral := false ## Opt-in correction for an authored uneven stance.
 
 ## Which species finishing pose closes the power-up: stomp | rear | puff | flex.
 @export var flourish: String = "puff"
+
+## HARD/SOFT tuning. How far this species puffs and squashes when it turns soft, how
+## much it keeps jiggling afterwards, and which appendages loosen up.
+@export var soft_puff := 0.15
+@export var soft_squash := 0.55
+@export var soft_jiggle := 1.0
+@export var floppy_bones: PackedStringArray = PackedStringArray()
 
 @export var leg_bones: PackedStringArray = PackedStringArray() ## Swung by the walk cycle.
 
@@ -53,6 +71,7 @@ static func from_dict(d: Dictionary) -> AnimalDefinition:
 	a.model = str(d.get("model", ""))
 	a.skin_color = Color.html(str(d.get("skin", "#9aa0a8")))
 	a.body_bones = PackedStringArray(d.get("body_bones", []))
+	a.disabled_categories = PackedStringArray(d.get("disabled_categories", []))
 	for leg in d.get("legs", []):
 		a.legs.append({
 			"id": str(leg.get("id", "leg")),
@@ -61,13 +80,19 @@ static func from_dict(d: Dictionary) -> AnimalDefinition:
 	for group_name in d.get("bulk", {}):
 		var group: Dictionary = d["bulk"][group_name]
 		a.bulk[str(group_name)] = {"bones": PackedStringArray(group.get("bones", []))}
-	for vein in d.get("veins", []):
-		a.veins.append({
-			"bone": str(vein.get("bone", "")),
-			"off": BodyPartSpec.to_v3(vein.get("off", null), Vector3.ZERO),
-			"size": float(vein.get("size", 0.3)),
-		})
+	var ribs = d.get("ribs", {})
+	if ribs is Dictionary:
+		a.rib_profile = ribs.duplicate(true)
+	for leg_id in d.get("foot_contacts", {}):
+		a.foot_contacts[str(leg_id)] = BodyPartSpec.to_v3(
+			d["foot_contacts"][leg_id], Vector3.ZERO)
+	a.ground_neutral = bool(d.get("ground_neutral", false))
 	a.flourish = str(d.get("flourish", "puff"))
+	var feel: Dictionary = d.get("feel", {})
+	a.soft_puff = float(feel.get("puff", 0.15))
+	a.soft_squash = float(feel.get("squash", 0.55))
+	a.soft_jiggle = float(feel.get("jiggle", 1.0))
+	a.floppy_bones = PackedStringArray(feel.get("floppy_bones", []))
 	a.leg_bones = PackedStringArray(d.get("leg_bones", []))
 	for socket_name in d.get("sockets", {}):
 		var entry: Dictionary = d["sockets"][socket_name]
@@ -86,6 +111,10 @@ func bulk_bones_for(group: String) -> PackedStringArray:
 	if bulk.has(group):
 		return bulk[group].get("bones", PackedStringArray())
 	return PackedStringArray()
+
+
+func foot_contact_for(leg_id: String) -> Vector3:
+	return foot_contacts.get(leg_id, Vector3.ZERO)
 
 
 func socket_bone(socket_name: String) -> String:

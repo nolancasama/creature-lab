@@ -63,6 +63,9 @@ func _build_library() -> void:
 	_library["thud"] = _blip(150.0, 62.0, 0.26, 0.55)
 	# A long airy sag for muscles deflating - the "pffft" the design asks for.
 	_library["deflate"] = _blip(540.0, 85.0, 0.72, 0.30)
+	_library["clang"] = _clang()
+	_library["boing"] = _boing()
+	_library["puff"] = _blip(340.0, 620.0, 0.34, 0.18)
 
 
 ## A decaying sine that glides from one pitch to another - the workhorse UI sound.
@@ -130,6 +133,39 @@ func _drone(notes: Array, seconds: float) -> AudioStreamWAV:
 	wav.loop_begin = 0
 	wav.loop_end = count - 1
 	return wav
+
+
+## A metallic hit: inharmonic partials, so it rings rather than sounding like a note.
+func _clang() -> AudioStreamWAV:
+	var count := int(MIX_RATE * 0.85)
+	var samples := PackedFloat32Array()
+	samples.resize(count)
+	var partials := [1.0, 2.76, 5.40, 8.93, 13.34]
+	for i in count:
+		var t := float(i) / float(MIX_RATE)
+		var progress := float(i) / float(count)
+		var value := 0.0
+		for p_index in partials.size():
+			var ratio: float = partials[p_index]
+			# Higher partials die away first, which is what makes metal sound like metal.
+			var decay: float = exp(-t * (5.0 + ratio * 2.2))
+			value += sin(TAU * 320.0 * ratio * t) * decay / float(p_index + 2)
+		samples[i] = clampf(value, -1.0, 1.0) * 0.55 * pow(1.0 - progress, 0.4)
+	return _to_wav(samples)
+
+
+## A springy rebound: pitch wobbles as it decays.
+func _boing() -> AudioStreamWAV:
+	var count := int(MIX_RATE * 0.55)
+	var samples := PackedFloat32Array()
+	samples.resize(count)
+	var phase := 0.0
+	for i in count:
+		var t := float(i) / float(count)
+		var hz: float = lerpf(520.0, 190.0, t) * (1.0 + sin(t * TAU * 5.0) * 0.22)
+		phase += TAU * hz / float(MIX_RATE)
+		samples[i] = sin(phase) * pow(1.0 - t, 1.8) * 0.45
+	return _to_wav(samples)
 
 
 func _to_wav(samples: PackedFloat32Array) -> AudioStreamWAV:

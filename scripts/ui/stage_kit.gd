@@ -96,9 +96,24 @@ static func camera(position: Vector3, look_at: Vector3, fov := 52.0) -> Camera3D
 
 
 ## A glowing platform disc for a creature to stand on.
+## Height of a platform's standing surface. Anything an animal stands on, and any
+## decoration around it, has to agree on this or the contact stops reading.
+const SURFACE_Y := 0.28
+
+
 static func platform(radius: float, base: Color, glow: Color) -> Node3D:
 	var root := Node3D.new()
 	root.name = "Platform"
+	var solid := StaticBody3D.new()
+	solid.name = "PlatformCollider"
+	var collision := CollisionShape3D.new()
+	var shape := CylinderShape3D.new()
+	shape.radius = radius
+	shape.height = 0.28
+	collision.shape = shape
+	collision.position.y = 0.14
+	solid.add_child(collision)
+	root.add_child(solid)
 
 	var disc := MeshInstance3D.new()
 	var mesh := CylinderMesh.new()
@@ -120,7 +135,10 @@ static func platform(radius: float, base: Color, glow: Color) -> Node3D:
 	ring_mesh.inner_radius = radius * 0.92
 	ring_mesh.outer_radius = radius * 1.02
 	ring.mesh = ring_mesh
-	ring.position.y = 0.3
+	# Sit the ring's top flush with the platform surface the animal stands on. Centring
+	# it above the surface made the brightest thing on screen sit higher than the paws,
+	# which read as the animal levitating inside the ring.
+	ring.position.y = SURFACE_Y - radius * 0.05
 	var ring_mat := StandardMaterial3D.new()
 	ring_mat.albedo_color = glow
 	ring_mat.emission_enabled = true

@@ -108,11 +108,16 @@ func _walk(delta: float) -> void:
 		_enter(State.IDLE)
 		return
 	var direction := to_target.normalized()
-	position += direction * _speed * delta
-	position.y = _hover * (0.6 + sin(Time.get_ticks_msec() * 0.002) * 0.12)
-	# Turn towards the heading rather than snapping to it.
-	var wanted := atan2(direction.x, direction.z)
+	# Godot's forward axis is -Z. Turn first, then move along that forward axis, so a
+	# creature never slides toward a target while its body is still facing backwards.
+	var wanted := atan2(-direction.x, -direction.z)
 	rotation.y = lerp_angle(rotation.y, wanted, clampf(delta * 4.0, 0.0, 1.0))
+	var forward := -global_transform.basis.z
+	forward.y = 0.0
+	forward = forward.normalized()
+	if forward.dot(direction) > 0.0:
+		position += forward * _speed * delta
+	position.y = _hover * (0.6 + sin(Time.get_ticks_msec() * 0.002) * 0.12)
 
 
 func _choose_next() -> void:
@@ -166,6 +171,7 @@ func _perform_trait_action() -> void:
 			tween.tween_property(self, "position", position, 0.5)
 			Fx.burst(self, Vector3(0, 0.4, 0.6), "motion", Color("#bfe9ff"), 0.4)
 		"hot":
+			Fx.burst(self, Vector3(0, 1.0, 0), "flame", TraitVisuals.HOT, 0.5)
 			Fx.burst(self, Vector3(0, 1.0, 0), "embers", TraitVisuals.HOT, 0.7)
 			tween.tween_property(rig, "scale", Vector3.ONE * 1.08, 0.18)
 			tween.tween_property(rig, "scale", Vector3.ONE, 0.4)
@@ -200,4 +206,4 @@ func _greet_neighbour() -> void:
 		return
 	var direction := (closest.position - position).normalized()
 	var tween := create_tween()
-	tween.tween_property(self, "rotation:y", atan2(direction.x, direction.z), 0.4)
+	tween.tween_property(self, "rotation:y", atan2(-direction.x, -direction.z), 0.4)

@@ -44,7 +44,7 @@ static func _autoplay(main: Node) -> void:
 
 	var picks := [
 		["LENGTH", "long", "short"],
-		["STRENGTH", "strong", "weak"],
+		["HARDNESS", "hard", "soft"],
 		[Content.COLOR_CATEGORY, "red", "blue"],
 	]
 	for pick in picks:
@@ -120,7 +120,7 @@ static func _goto(phase: String) -> void:
 static func _seed_full_creature(ids: PackedStringArray) -> void:
 	Game.begin_creature("dog" if ids.has("dog") else ids[0])
 	Game.record_sentence("LENGTH", "long", "short")
-	Game.record_sentence("STRENGTH", "strong", "weak")
+	Game.record_sentence("HARDNESS", "hard", "soft")
 	Game.record_sentence(Content.COLOR_CATEGORY, "red", "blue")
 	Game.current.generated_name = NameGenerator.candidates(Game.current)[0]
 
@@ -160,16 +160,16 @@ static func _selftest(main: Node) -> void:
 		for group in MuscleDeformer.GROUPS:
 			_check(failures, not def.bulk_bones_for(group).is_empty(),
 				"%s has no bones for muscle group '%s'" % [def.id, group])
-		_check(failures, not def.veins.is_empty(), "%s has no cartoon veins" % def.id)
 		_check(failures, def.legs.size() >= 2, "%s has fewer than 2 legs configured" % def.id)
+		for leg in def.legs:
+			_check(failures, def.foot_contacts.has(str(leg.get("id", ""))),
+				"%s: explicit sole contact missing for '%s'" % [def.id, leg.get("id", "")])
 
 		if rig.skeleton != null:
 			var all_bones: Array[String] = []
 			all_bones.append_array(Array(def.body_bones))
 			for group in MuscleDeformer.GROUPS:
 				all_bones.append_array(Array(def.bulk_bones_for(group)))
-			for vein in def.veins:
-				all_bones.append(str(vein["bone"]))
 			all_bones.append_array(Array(def.leg_bones))
 			for leg in def.legs:
 				all_bones.append_array(Array(leg["bones"] as PackedStringArray))
@@ -185,6 +185,8 @@ static func _selftest(main: Node) -> void:
 		# Height normalisation is what lets a chicken and a horse share a camera.
 		_check(failures, absf(rig.crown_height() - def.stand_height) < 0.01,
 			"%s: normalised to %.2f, expected %.2f" % [def.id, rig.crown_height(), def.stand_height])
+		_check(failures, rig.deformer.requires_grounding() == def.ground_neutral,
+			"%s: neutral grounding policy was not respected" % def.id)
 
 		# LONG must actually move the torso, TALL must actually lift the body, and both
 		# must return to exactly rest - otherwise a cancelled card leaves a dent.
@@ -204,25 +206,98 @@ static func _selftest(main: Node) -> void:
 		_check(failures, rig.deformer.lift < -0.005,
 			"%s: SHORT legs did not lower the body" % def.id)
 
-		# STRONG has to actually thicken the chest, WEAK has to thin it, and veins must
-		# only exist on the strong form.
+		# STRONG may scale its muscle bones. WEAK must leave every joint transform neutral
+		# and make the visible change exclusively through absolute shader parameters.
+		rig.deformer.reset()
+		var neutral_positions: Array[Vector3] = []
+		for bone_idx in rig.skeleton.get_bone_count():
+			neutral_positions.append(rig.skeleton.get_bone_pose_position(bone_idx))
 		var chest_bone := rig.skeleton.find_bone(def.bulk_bones_for("chest")[0])
 		rig.muscle.set_state(1.35)
 		_check(failures, rig.skeleton.get_bone_pose_scale(chest_bone).x > 1.05,
 			"%s: STRONG did not thicken the chest" % def.id)
-		_check(failures, rig.muscle.vein_visibility > 0.5, "%s: STRONG showed no veins" % def.id)
-		rig.muscle.set_state(0.72)
-		_check(failures, rig.skeleton.get_bone_pose_scale(chest_bone).x < 0.95,
-			"%s: WEAK did not thin the chest" % def.id)
-		_check(failures, rig.muscle.vein_visibility < 0.01, "%s: WEAK still shows veins" % def.id)
+		rig.muscle.set_state(0.60)
+		for bone_idx in rig.skeleton.get_bone_count():
+			_check(failures, rig.skeleton.get_bone_pose_scale(bone_idx).is_equal_approx(Vector3.ONE),
+				"%s: WEAK scaled skeletal bone '%s'" % [def.id, rig.skeleton.get_bone_name(bone_idx)])
+			_check(failures, rig.skeleton.get_bone_pose_position(bone_idx).is_equal_approx(neutral_positions[bone_idx]),
+				"%s: WEAK moved joint '%s'" % [def.id, rig.skeleton.get_bone_name(bone_idx)])
+		_check(failures, is_zero_approx(rig.muscle.lift),
+			"%s: WEAK changed the creature root height" % def.id)
+		var region_amounts: PackedFloat32Array = rig.material.get_shader_parameter("weak_region_amount")
+		var visible_weak := false
+		for amount in region_amounts:
+			visible_weak = visible_weak or amount > 0.9
+		_check(failures, visible_weak, "%s: WEAK mesh thinning did not activate" % def.id)
+		_check(failures, float(rig.material.get_shader_parameter("weak_rib_amount")) > 0.9,
+			"%s: WEAK rib deformation did not activate" % def.id)
+		rig.muscle.set_state(1.35)
+		rig.muscle.set_state(0.60)
+		_check(failures, rig.skeleton.get_bone_pose_scale(chest_bone).is_equal_approx(Vector3.ONE),
+			"%s: STRONG to WEAK retained skeletal bulk" % def.id)
 		rig.muscle.reset()
 		_check(failures, absf(rig.skeleton.get_bone_pose_scale(chest_bone).x - 1.0) < 0.001,
 			"%s: muscle did not return to rest" % def.id)
+		_check(failures, float(rig.material.get_shader_parameter("weak_rib_amount")) < 0.001,
+			"%s: WEAK surface deformation did not reset" % def.id)
+
+		# HARD must shine and stiffen; SOFT must puff and stay loose. The two have to
+		# move opposite directions or the adjectives are not distinguishable.
+		_check(failures, not def.floppy_bones.is_empty(), "%s has no floppy appendages" % def.id)
+		rig.feel.set_state(1.0)
+		var hard_motion := rig.feel.motion_scale()
+		var hard_scale := rig.feel.scale_multiplier
+		_check(failures, rig.feel.hardness() > 0.9 and rig.feel.softness() < 0.01,
+			"%s: HARD did not register" % def.id)
+		rig.feel.set_state(-1.0)
+		_check(failures, rig.feel.softness() > 0.9, "%s: SOFT did not register" % def.id)
+		_check(failures, rig.feel.scale_multiplier.x > hard_scale.x + 0.02,
+			"%s: SOFT is not puffier than HARD" % def.id)
+		_check(failures, rig.feel.motion_scale() > hard_motion + 0.3,
+			"%s: SOFT is not looser than HARD" % def.id)
+		rig.feel.reset()
+		_check(failures, rig.feel.scale_multiplier.is_equal_approx(Vector3.ONE),
+			"%s: feel did not return to rest" % def.id)
 
 		rig.deformer.reset()
 		var back_tip: Vector3 = rig.skeleton.get_bone_pose_position(tip)
 		_check(failures, back_tip.distance_to(rest_tip) < 0.001,
 			"%s: deformation did not return to rest" % def.id)
+
+		# Exercise the real post-animation grounding pass in-tree. Pair extensions must be
+		# symmetrical and every explicit sole point must converge on the flat platform.
+		main.add_child(rig)
+		if def.ground_neutral:
+			var neutral_body_y := rig.body.position.y
+			for ground_step in 4:
+				rig.solve_idle_grounding_immediately()
+			var neutral_contacts := rig.foot_contact_positions()
+			_check(failures, absf(rig.body.position.y - neutral_body_y) < 0.002,
+				"%s: neutral stance correction lifted the whole animal" % def.id)
+			for contact_idx in neutral_contacts.size():
+				_check(failures, absf(neutral_contacts[contact_idx].y - CreatureRig.GROUND_CLEARANCE) < 0.005,
+					"%s: neutral foot '%s' did not ground (y=%.3f)" % [def.id,
+						def.legs[contact_idx].get("id", ""), neutral_contacts[contact_idx].y])
+			_check(failures, rig.deformer.ground_extension(0) > 0.01,
+				"%s: neutral front paws were not lowered" % def.id)
+			_check(failures, is_equal_approx(rig.deformer.ground_extension(0), rig.deformer.ground_extension(1)),
+				"%s: neutral front-paw correction became asymmetric" % def.id)
+			_check(failures, rig.deformer.ground_extension(2) < 0.001 and rig.deformer.ground_extension(3) < 0.001,
+				"%s: neutral correction changed the rear paws" % def.id)
+		rig.deformer.set_state(1.0, 1.35)
+		for ground_step in 4:
+			rig.solve_idle_grounding_immediately()
+		var contacts := rig.foot_contact_positions()
+		for contact_idx in contacts.size():
+			_check(failures, absf(contacts[contact_idx].y - CreatureRig.GROUND_CLEARANCE) < 0.025,
+				"%s: foot '%s' did not ground (y=%.3f)" % [def.id,
+					def.legs[contact_idx].get("id", ""), contacts[contact_idx].y])
+		if def.legs.size() >= 4:
+			_check(failures, is_equal_approx(rig.deformer.ground_extension(0), rig.deformer.ground_extension(1)),
+				"%s: front pair grounding became asymmetric" % def.id)
+			_check(failures, is_equal_approx(rig.deformer.ground_extension(2), rig.deformer.ground_extension(3)),
+				"%s: rear pair grounding became asymmetric" % def.id)
+		main.remove_child(rig)
 		rig.free()
 
 	# Traits and fantasy assembly, exercised across every pair and both directions.

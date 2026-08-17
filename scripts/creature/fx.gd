@@ -3,6 +3,9 @@ extends RefCounted
 ## Particle presets built in code so the project carries no texture assets.
 
 static var _dot: ImageTexture = null
+static var _flame_shape: ImageTexture = null
+static var _flame_ramp: GradientTexture1D = null
+static var _flame_scale_curve: CurveTexture = null
 
 
 ## A soft radial dot used as the billboard for every particle preset.
@@ -19,6 +22,76 @@ static func dot_texture() -> ImageTexture:
 			image.set_pixel(x, y, Color(1, 1, 1, a * a))
 	_dot = ImageTexture.create_from_image(image)
 	return _dot
+
+
+## A teardrop "tongue of flame" silhouette - wide and soft at the base, pinched to a
+## point at the top - so flame particles read as fire instead of generic round dots.
+static func flame_shape_texture() -> ImageTexture:
+	if _flame_shape != null:
+		return _flame_shape
+	var size := 32
+	var image := Image.create(size, size, false, Image.FORMAT_RGBA8)
+	for y in size:
+		# 0 at the base (bottom of the image), 1 at the tip (top).
+		var t := 1.0 - float(y) / float(size - 1)
+		# Widest a third of the way up, tapering to a sharp point at the tip and a
+		# rounded base, with a gentle S-curve so the tongue looks licked, not conical.
+		var width := sin(PI * clampf(1.0 - t, 0.0, 1.0) * 0.92) * (1.0 - t * t * 0.55)
+		width = maxf(width, 0.0)
+		for x in size:
+			var nx := (float(x) / float(size - 1) - 0.5) * 2.0
+			# Lean the tongue slightly as it rises, like a flame caught mid-flicker.
+			nx -= sin(t * PI) * 0.18
+			var d := absf(nx) / maxf(width, 0.001)
+			var a: float = clampf(1.0 - d, 0.0, 1.0)
+			a = a * a * (1.0 - t * 0.15)
+			image.set_pixel(x, y, Color(1, 1, 1, a))
+	_flame_shape = ImageTexture.create_from_image(image)
+	return _flame_shape
+
+
+## Bright pale-yellow core cooling through orange to red as a flame particle ages, then
+## fading out - the colour-over-lifetime that actually sells "fire" rather than "red".
+static func flame_color_ramp() -> GradientTexture1D:
+	if _flame_ramp != null:
+		return _flame_ramp
+	var gradient := Gradient.new()
+	gradient.colors = PackedColorArray([
+		Color("#fff3c4"),
+		Color("#ffcf5c"),
+		Color("#ff8a2f"),
+		Color("#e8481f"),
+		Color("#7a1808"),
+	])
+	gradient.offsets = PackedFloat32Array([0.0, 0.22, 0.5, 0.8, 1.0])
+	# Alpha fade is carried by the gradient's own colour alpha, read by the particle
+	# shader's colour-over-lifetime; without this the flame would cut off hard.
+	var colors := gradient.colors
+	colors[0].a = 0.95
+	colors[3].a = 0.75
+	colors[4].a = 0.0
+	gradient.colors = colors
+	var ramp := GradientTexture1D.new()
+	ramp.gradient = gradient
+	_flame_ramp = ramp
+	return _flame_ramp
+
+
+## Grows quickly out of the emission point, then shrinks to a point as it burns out -
+## the shape change that makes a billboard actually read as "flickering" rather than a
+## particle that merely fades.
+static func flame_scale_curve() -> CurveTexture:
+	if _flame_scale_curve != null:
+		return _flame_scale_curve
+	var curve := Curve.new()
+	curve.add_point(Vector2(0.0, 0.15))
+	curve.add_point(Vector2(0.18, 1.0))
+	curve.add_point(Vector2(0.6, 0.85))
+	curve.add_point(Vector2(1.0, 0.0))
+	var tex := CurveTexture.new()
+	tex.curve = curve
+	_flame_scale_curve = tex
+	return _flame_scale_curve
 
 
 static func _billboard_material() -> StandardMaterial3D:
@@ -44,7 +117,7 @@ static func _base(amount: int, lifetime: float, particle_size: float) -> GPUPart
 	return particles
 
 
-## kind: embers | frost | sparkle | dust | glow | motion
+## kind: flame | embers | frost | sparkle | dust | glow | motion
 static func make(kind: String, tint := Color.WHITE, radius := 0.8) -> GPUParticles3D:
 	var process := ParticleProcessMaterial.new()
 	process.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE
@@ -54,6 +127,41 @@ static func make(kind: String, tint := Color.WHITE, radius := 0.8) -> GPUParticl
 
 	var particles: GPUParticles3D
 	match kind:
+		"flame":
+			# Licking tongues of fire: the shaped billboard plus the yellow->red ramp is
+			# what reads as "flame" instead of "particles"; a narrow emission cone and a
+			# short spread keep the tongues climbing together rather than scattering.
+			particles = _base(16, 0.9, 0.34)
+			var quad := QuadMesh.new()
+			quad.size = Vector2(0.34, 0.5)
+			var mat := _billboard_material()
+			mat.albedo_texture = flame_shape_texture()
+			mat.emission_enabled = true
+			mat.emission = Color(1.0, 0.55, 0.15)
+			mat.emission_energy_multiplier = 1.6
+			quad.material = mat
+			particles.draw_pass_1 = quad
+			process.emission_sphere_radius = radius * 0.35
+			process.direction = Vector3(0, 1, 0)
+			process.spread = 14.0
+			process.gravity = Vector3(0, 0.55, 0)
+			process.initial_velocity_min = 0.35
+			process.initial_velocity_max = 0.75
+			process.scale_min = 0.7
+			process.scale_max = 1.3
+			process.scale_curve = flame_scale_curve()
+			process.color_ramp = flame_color_ramp()
+			process.angle_min = -20.0
+			process.angle_max = 20.0
+			process.angular_velocity_min = -70.0
+			process.angular_velocity_max = 70.0
+			# A gentle side-to-side sway per particle, the cheapest way to fake flicker
+			# without per-frame scripting.
+			process.turbulence_enabled = true
+			process.turbulence_noise_strength = 0.9
+			process.turbulence_noise_scale = 2.2
+			process.turbulence_influence_min = 0.35
+			process.turbulence_influence_max = 0.6
 		"frost":
 			particles = _base(26, 2.6, 0.12)
 			process.direction = Vector3(0, -1, 0)
@@ -97,14 +205,25 @@ static func make(kind: String, tint := Color.WHITE, radius := 0.8) -> GPUParticl
 			process.initial_velocity_max = 3.2
 			process.scale_min = 0.3
 			process.scale_max = 0.9
-		_: # embers
-			particles = _base(30, 1.5, 0.15)
+		_: # embers - small glowing sparks drifting up, secondary to the flame tongues
+			particles = _base(22, 1.7, 0.09)
+			var ember_mat := particles.draw_pass_1.material as StandardMaterial3D
+			ember_mat.emission_enabled = true
+			ember_mat.emission = tint
+			ember_mat.emission_energy_multiplier = 2.2
 			process.direction = Vector3(0, 1, 0)
-			process.gravity = Vector3(0, 0.9, 0)
-			process.initial_velocity_min = 0.4
-			process.initial_velocity_max = 1.3
-			process.scale_min = 0.4
-			process.scale_max = 1.1
+			process.spread = 18.0
+			process.gravity = Vector3(0, 0.55, 0)
+			process.initial_velocity_min = 0.3
+			process.initial_velocity_max = 0.9
+			process.scale_min = 0.35
+			process.scale_max = 0.9
+			process.color_ramp = flame_color_ramp()
+			process.turbulence_enabled = true
+			process.turbulence_noise_strength = 0.6
+			process.turbulence_noise_scale = 3.0
+			process.turbulence_influence_min = 0.5
+			process.turbulence_influence_max = 0.8
 
 	particles.process_material = process
 	return particles

@@ -21,6 +21,7 @@ var _cards := {} ## category -> PanelContainer
 var _color_hint: Label = null
 
 var _used := PackedStringArray()
+var _disabled := PackedStringArray()
 var _locked := false
 var _color_before := ""
 var _restriction := "" ## Guided mode: only this category may be chosen. Empty = free.
@@ -142,6 +143,12 @@ func set_used(categories: PackedStringArray) -> void:
 	_refresh()
 
 
+func set_disabled_categories(categories: PackedStringArray) -> void:
+	_disabled = categories
+	_color_before = ""
+	_refresh()
+
+
 ## Guided mode hands the student one pair at a time instead of the whole board.
 func set_restriction(category: String) -> void:
 	_restriction = category
@@ -149,7 +156,7 @@ func set_restriction(category: String) -> void:
 
 
 func _blocked(category: String) -> bool:
-	return _locked or _used.has(category) or (not _restriction.is_empty() and category != _restriction)
+	return _locked or _used.has(category) or _disabled.has(category) or (not _restriction.is_empty() and category != _restriction)
 
 
 func _refresh() -> void:
