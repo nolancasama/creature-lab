@@ -6,6 +6,8 @@ static var _dot: ImageTexture = null
 static var _flame_shape: ImageTexture = null
 static var _flame_ramp: GradientTexture1D = null
 static var _flame_scale_curve: CurveTexture = null
+static var _puff_scale_curve: CurveTexture = null
+static var _frost_patch: ImageTexture = null
 
 
 ## A soft radial dot used as the billboard for every particle preset.
@@ -97,11 +99,14 @@ static func flame_scale_curve() -> CurveTexture:
 	return _flame_scale_curve
 
 
-static func _billboard_material() -> StandardMaterial3D:
+## Additive suits glowing things (fire, sparks). Cold is the opposite case: breath,
+## snow and mist are opaque pale matter, and adding them to the background turns them
+## into glowing blobs instead of soft white puffs, so those pass `additive = false`.
+static func _billboard_material(additive := true) -> StandardMaterial3D:
 	var mat := StandardMaterial3D.new()
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD if additive else BaseMaterial3D.BLEND_MODE_MIX
 	mat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
 	mat.vertex_color_use_as_albedo = true
 	mat.albedo_texture = dot_texture()
@@ -109,18 +114,49 @@ static func _billboard_material() -> StandardMaterial3D:
 	return mat
 
 
-static func _base(amount: int, lifetime: float, particle_size: float) -> GPUParticles3D:
+static func _base(amount: int, lifetime: float, particle_size: float, additive := true) -> GPUParticles3D:
 	var particles := GPUParticles3D.new()
 	particles.amount = maxi(1, amount)
 	particles.lifetime = lifetime
 	var quad := QuadMesh.new()
 	quad.size = Vector2(particle_size, particle_size)
-	quad.material = _billboard_material()
+	quad.material = _billboard_material(additive)
 	particles.draw_pass_1 = quad
 	return particles
 
 
-## kind: flame | embers | frost | sparkle | dust | glow | motion
+## Grows out of nothing and keeps expanding as it thins away - a puff of breath or mist
+## spreading into cold air, as opposed to a flame tongue which peaks then shrinks.
+static func puff_scale_curve() -> CurveTexture:
+	if _puff_scale_curve != null:
+		return _puff_scale_curve
+	var curve := Curve.new()
+	curve.add_point(Vector2(0.0, 0.25))
+	curve.add_point(Vector2(0.35, 0.85))
+	curve.add_point(Vector2(1.0, 1.35))
+	var tex := CurveTexture.new()
+	tex.curve = curve
+	_puff_scale_curve = tex
+	return _puff_scale_curve
+
+
+## White at full strength fading to nothing, for breath and mist that should thin out
+## rather than change hue.
+static func _fade_ramp(tint: Color) -> GradientTexture1D:
+	var gradient := Gradient.new()
+	var clear := tint
+	clear.a = 0.0
+	var mid := tint
+	mid.a = tint.a * 0.55
+	gradient.colors = PackedColorArray([tint, mid, clear])
+	gradient.offsets = PackedFloat32Array([0.0, 0.45, 1.0])
+	var ramp := GradientTexture1D.new()
+	ramp.gradient = gradient
+	return ramp
+
+
+## kind: flame | embers | snow | breath | cold_mist | frost_cling | sparkle | dust
+##       | glow | motion
 ##
 ## `size_scale` multiplies the individual particle size. Emitters are placed in an
 ## animal's normalised space, so without this a chicken and a horse would get
@@ -172,14 +208,69 @@ static func make(kind: String, tint := Color.WHITE, radius := 0.8, size_scale :=
 			process.turbulence_noise_scale = 2.2
 			process.turbulence_influence_min = 0.35
 			process.turbulence_influence_max = 0.6
-		"frost":
-			particles = _base(26, 2.6, 0.12)
+		"snow":
+			# Flakes drifting down past the animal. Mixed rather than additive so they
+			# read as soft opaque specks instead of glowing motes, and slow enough that
+			# a child tracks individual flakes.
+			particles = _base(80, 5.0, 0.035 * size_scale, false)
 			process.direction = Vector3(0, -1, 0)
-			process.gravity = Vector3(0, -0.45, 0)
-			process.initial_velocity_min = 0.05
-			process.initial_velocity_max = 0.25
+			process.spread = 12.0
+			process.gravity = Vector3(0, -0.14, 0)
+			process.initial_velocity_min = 0.04
+			process.initial_velocity_max = 0.16
+			process.scale_min = 0.45
+			process.scale_max = 1.3
+			# Swirl: without this snow falls in dead-straight lines and looks like rain.
+			process.turbulence_enabled = true
+			process.turbulence_noise_strength = 0.5
+			process.turbulence_noise_scale = 1.6
+			process.turbulence_influence_min = 0.5
+			process.turbulence_influence_max = 1.0
+		"breath":
+			# A puff of visible breath: leaves the muzzle with some speed, then damps
+			# almost to a stop and billows outward as it thins.
+			particles = _base(16, 1.25, 0.13 * size_scale, false)
+			# Every animal model in the pack faces -Z, so breath blows that way.
+			process.direction = Vector3(0, 0.22, -1)
+			process.spread = 28.0
+			process.gravity = Vector3(0, 0.05, 0)
+			process.initial_velocity_min = 0.5
+			process.initial_velocity_max = 1.15
+			process.damping_min = 0.9
+			process.damping_max = 1.5
 			process.scale_min = 0.5
 			process.scale_max = 1.2
+			process.scale_curve = puff_scale_curve()
+			process.color_ramp = _fade_ramp(Color(1, 1, 1, 0.55))
+		"cold_mist":
+			# Slow, wide, low-lying haze pooling around the feet. Large soft particles at
+			# low alpha; the point is a drifting ground fog, not visible individuals.
+			particles = _base(16, 4.0, 0.34 * size_scale, false)
+			# Big soft billboards lying close to the ground cut into the platform and
+			# show their quad edges as hard rectangles. Proximity fade dissolves them
+			# where they meet solid geometry, which is what makes this read as fog.
+			var mist_mat := particles.draw_pass_1.material as StandardMaterial3D
+			mist_mat.proximity_fade_enabled = true
+			mist_mat.proximity_fade_distance = 0.45
+			process.direction = Vector3(0, 1, 0)
+			process.spread = 60.0
+			process.gravity = Vector3(0, 0.015, 0)
+			process.initial_velocity_min = 0.02
+			process.initial_velocity_max = 0.11
+			process.scale_min = 0.7
+			process.scale_max = 1.5
+			process.color_ramp = _fade_ramp(Color(0.83, 0.93, 1.0, 0.30))
+		"frost_cling":
+			# Tiny glints that hang almost still, reading as frost caught on ears, fur
+			# and tail rather than as anything falling or rising.
+			particles = _base(12, 2.2, 0.05 * size_scale)
+			process.direction = Vector3(0, 1, 0)
+			process.spread = 180.0
+			process.gravity = Vector3(0, 0.01, 0)
+			process.initial_velocity_min = 0.0
+			process.initial_velocity_max = 0.05
+			process.scale_min = 0.4
+			process.scale_max = 1.1
 		"sparkle":
 			particles = _base(40, 1.1, 0.16)
 			process.direction = Vector3(0, 1, 0)
@@ -239,6 +330,57 @@ static func make(kind: String, tint := Color.WHITE, radius := 0.8, size_scale :=
 	return particles
 
 
+## A patch of frost for the ground under a cold animal: brightest at the centre and
+## breaking up into an irregular crystalline edge rather than fading as a clean circle,
+## which would read as a spotlight.
+static func frost_patch_texture() -> ImageTexture:
+	if _frost_patch != null:
+		return _frost_patch
+	var noise := FastNoiseLite.new()
+	noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
+	noise.frequency = 0.055
+	var size := 128
+	var image := Image.create(size, size, false, Image.FORMAT_RGBA8)
+	var centre := Vector2(size, size) * 0.5
+	for y in size:
+		for x in size:
+			var p := Vector2(x + 0.5, y + 0.5)
+			var d := p.distance_to(centre) / (size * 0.5)
+			# Push the edge in and out with noise so the rim looks like spreading frost.
+			var edge := 1.0 - d + noise.get_noise_2d(x, y) * 0.22
+			var a: float = clampf(edge, 0.0, 1.0)
+			a = a * a
+			# Fine crystal speckle inside the patch.
+			var speckle: float = 0.75 + 0.25 * (noise.get_noise_2d(x * 2.4 + 40.0, y * 2.4) * 0.5 + 0.5)
+			image.set_pixel(x, y, Color(1, 1, 1, a * speckle))
+	_frost_patch = ImageTexture.create_from_image(image)
+	return _frost_patch
+
+
+## A flat disc of ground frost. Lies just above the platform surface; the caller scales
+## it up as the frost spreads.
+static func frost_patch(radius: float, tint: Color) -> MeshInstance3D:
+	var patch := MeshInstance3D.new()
+	patch.name = "FrostPatch"
+	var quad := QuadMesh.new()
+	quad.size = Vector2(radius * 2.0, radius * 2.0)
+	# Lay it flat: QuadMesh stands upright in XY by default.
+	quad.orientation = PlaneMesh.FACE_Y
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.albedo_texture = frost_patch_texture()
+	mat.albedo_color = tint
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	# It sits flush on the platform, so it must not fight it for depth.
+	mat.no_depth_test = false
+	mat.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_DISABLED
+	mat.disable_receive_shadows = true
+	quad.material = mat
+	patch.mesh = quad
+	return patch
+
+
 ## Spread an emitter over a volume instead of a point, so flames cover a whole back or
 ## footprint rather than rising as a single candle-like column beside the animal.
 static func spread_along(particles: GPUParticles3D, extents: Vector3) -> void:
@@ -250,10 +392,10 @@ static func spread_along(particles: GPUParticles3D, extents: Vector3) -> void:
 
 
 ## One-shot burst that removes itself once the last particle has died.
-static func burst(parent: Node3D, at: Vector3, kind: String, tint: Color, radius := 0.6) -> void:
+static func burst(parent: Node3D, at: Vector3, kind: String, tint: Color, radius := 0.6, size_scale := 1.0) -> void:
 	if not is_instance_valid(parent):
 		return
-	var particles := make(kind, tint, radius)
+	var particles := make(kind, tint, radius, size_scale)
 	particles.one_shot = true
 	particles.explosiveness = 0.9
 	particles.position = at

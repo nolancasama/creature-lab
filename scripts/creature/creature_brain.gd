@@ -176,9 +176,13 @@ func _perform_trait_action() -> void:
 			tween.tween_property(rig, "scale", Vector3.ONE * 1.08, 0.18)
 			tween.tween_property(rig, "scale", Vector3.ONE, 0.4)
 		"cold":
-			Fx.burst(self, Vector3(0, 1.2, 0), "frost", TraitVisuals.COLD, 0.8)
+			# A big visible breath and a hard shudder - the two things that read as
+			# "freezing" rather than "blue".
+			var face: Node3D = rig.sockets.get("face", rig) if rig != null else self
+			Fx.burst(face, Vector3.ZERO, "breath", Color(1, 1, 1, 0.9), 0.09)
 			tween.tween_property(rig, "rotation:z", 0.08, 0.08)
 			tween.tween_property(rig, "rotation:z", -0.08, 0.12)
+			tween.tween_property(rig, "rotation:z", 0.05, 0.08)
 			tween.tween_property(rig, "rotation:z", 0.0, 0.1)
 		"big", "strong":
 			tween.tween_property(self, "position:y", position.y + 0.5, 0.22)

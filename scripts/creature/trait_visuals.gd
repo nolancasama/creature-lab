@@ -179,9 +179,19 @@ static func _apply_thermal(rig: CreatureRig, value: float, mid: float, animate :
 			Fx.burst(back, Vector3.ZERO, "flame", HOT, 0.45)
 			Fx.burst(back, Vector3(0, 0.2, 0), "embers", HOT, 0.55)
 	else:
-		rig.tint_role("skin", COLD, 0.28)
-		rig.set_surface("skin", 0.55, 0.05)
-		rig.add_fx(Fx.make("frost", COLD, 0.8), Vector3(0, mid * 1.4, 0))
+		# Deliberately NOT glossy. HARD owns shine, and a cold animal rendered as polished
+		# ice would collide with it; frost is matte and dusty, so pushing roughness up and
+		# metallic to zero separates the two adjectives with no extra shader work. The
+		# tint stays light so the animal's own colours read through it - the student has
+		# to see it is still the same animal, only cold.
+		rig.tint_role("skin", COLD, 0.16)
+		rig.set_surface("skin", 0.95, 0.0)
+		rig.tempo *= 0.9 # hunkered down, moving a little less
+
+		var cold := ColdEffect.create(rig)
+		rig.add_fx(cold, Vector3.ZERO)
+		if animate:
+			cold.play_intro()
 
 
 ## Where a socket's bone actually sits, ignoring the mounting offset authored to float

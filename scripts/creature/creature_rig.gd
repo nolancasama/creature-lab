@@ -69,6 +69,12 @@ var muscle: MuscleDeformer = null ## STRONG/WEAK bulk and posture.
 var feel: FeelDeformer = null ## HARD/SOFT shine, puff, squash and jiggle.
 
 var tempo := 1.0 ## Idle animation speed; the SPEED modifier drives this.
+
+## COLD's shivering, written by ColdEffect and folded into the idle pass. It lives on
+## the rig rather than on the effect node so that freeing the effect - which happens on
+## every trait re-apply, via clear_fx() - restores the neutral stance by itself.
+var shiver_offset := Vector3.ZERO
+var shiver_roll := 0.0
 var moving := false ## Zoo creatures set this to swing their legs.
 
 var _model_root: Node3D = null
@@ -363,6 +369,8 @@ func reset_modifiers() -> void:
 	body.rotation = Vector3.ZERO
 	_model_root.position = _base_model_pos
 	tempo = 1.0
+	shiver_offset = Vector3.ZERO
+	shiver_roll = 0.0
 	if deformer != null:
 		deformer.reset()
 	if muscle != null:
@@ -550,11 +558,13 @@ func _process(delta: float) -> void:
 	# Grounded animals must not translate vertically during neutral idle. A newly built
 	# preview starts at clock zero, so the old sine bob made every selected animal rise
 	# during its first half-second. Only explicitly hovering species retain vertical bob.
-	body.position = offset + Vector3(0.0, lift
+	# COLD's shiver is horizontal only, deliberately: a vertical component would fight
+	# the grounding pass below and lift the feet off the platform.
+	body.position = offset + shiver_offset + Vector3(0.0, lift
 		+ sin(_clock * 1.1) * 0.05 * definition.hover, 0.0)
 	body.rotation.x = lean
 	body.rotation.y = twist
-	body.rotation.z = sin(_clock * 0.9) * 0.01 * (1.0 - posture * 0.4) * motion
+	body.rotation.z = sin(_clock * 0.9) * 0.01 * (1.0 - posture * 0.4) * motion + shiver_roll
 	body.scale = _trait_scale * squash
 	_swing_legs((sin(_clock * 5.0) * 0.5 if moving else 0.0) * motion)
 	_sway_appendages(motion)
