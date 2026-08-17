@@ -11,6 +11,11 @@ func _ready() -> void:
 	_register_actions()
 	_build_layers()
 	Router.attach(scene_root, fade)
+	# Before anything is picked: get the driver to compile the trait effects' shaders
+	# while the title screen is up, not when a student taps HOT or COLD. See ShaderWarmup
+	# for the measurements - on the web renderer this is the difference between a first
+	# HOT pick taking ten seconds and taking a frame.
+	ShaderWarmup.run(self)
 	DevHarness.run_if_requested(self)
 
 

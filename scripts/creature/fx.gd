@@ -201,13 +201,15 @@ static func make(kind: String, tint := Color.WHITE, radius := 0.8, size_scale :=
 			# point up.
 			process.angle_min = -9.0
 			process.angle_max = 9.0
-			# A gentle side-to-side sway per particle, the cheapest way to fake flicker
-			# without per-frame scripting.
-			process.turbulence_enabled = true
-			process.turbulence_noise_strength = 0.9
-			process.turbulence_noise_scale = 2.2
-			process.turbulence_influence_min = 0.35
-			process.turbulence_influence_max = 0.6
+			# Curl and taper instead of turbulence. Turbulence looks slightly better but
+			# compiles a large noise function into the particle shader, and on the
+			# Compatibility renderer the web build uses that cost about five SECONDS of
+			# blocked main thread per turbulent preset the first time it is drawn - see
+			# ShaderWarmup. Accel parameters are part of the base shader and free.
+			process.tangential_accel_min = -0.7
+			process.tangential_accel_max = 0.7
+			process.radial_accel_min = -0.3
+			process.radial_accel_max = 0.05
 		"snow":
 			# Flakes drifting down past the animal. Mixed rather than additive so they
 			# read as soft opaque specks instead of glowing motes, and slow enough that
@@ -220,12 +222,15 @@ static func make(kind: String, tint := Color.WHITE, radius := 0.8, size_scale :=
 			process.initial_velocity_max = 0.16
 			process.scale_min = 0.45
 			process.scale_max = 1.3
-			# Swirl: without this snow falls in dead-straight lines and looks like rain.
-			process.turbulence_enabled = true
-			process.turbulence_noise_strength = 0.5
-			process.turbulence_noise_scale = 1.6
-			process.turbulence_influence_min = 0.5
-			process.turbulence_influence_max = 1.0
+			# Spiral, so snow does not fall in dead-straight lines and look like rain.
+			# Turbulence did this better but was far too expensive to compile on the web
+			# renderer - see the flame preset above and ShaderWarmup.
+			process.tangential_accel_min = -0.4
+			process.tangential_accel_max = 0.4
+			process.radial_accel_min = -0.12
+			process.radial_accel_max = 0.12
+			process.damping_min = 0.0
+			process.damping_max = 0.35
 		"breath":
 			# A puff of visible breath: leaves the muzzle with some speed, then damps
 			# almost to a stop and billows outward as it thins.
@@ -320,11 +325,11 @@ static func make(kind: String, tint := Color.WHITE, radius := 0.8, size_scale :=
 			process.scale_min = 0.35
 			process.scale_max = 0.9
 			process.color_ramp = flame_color_ramp()
-			process.turbulence_enabled = true
-			process.turbulence_noise_strength = 0.6
-			process.turbulence_noise_scale = 3.0
-			process.turbulence_influence_min = 0.5
-			process.turbulence_influence_max = 0.8
+			# Drift, without turbulence's compile cost (see the flame preset above).
+			process.tangential_accel_min = -0.5
+			process.tangential_accel_max = 0.5
+			process.radial_accel_min = 0.0
+			process.radial_accel_max = 0.3
 
 	particles.process_material = process
 	return particles
