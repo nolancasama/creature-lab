@@ -33,7 +33,7 @@ const PANEL_LEFT := -680
 const PANEL_RIGHT := -32
 const HUD_TOP := 24 ## Top edge of the floating buttons, above the panel on both sub-states.
 const HUD_BUTTON := 52
-const HUD_TEACHER_WIDTH := 132
+const GEAR_ICON := preload("res://ui/gear.svg")
 const PANEL_TOP := HUD_TOP + HUD_BUTTON + 12 ## Clears the gear rather than sitting under it.
 const PANEL_BOTTOM := -24 ## Tighter than the top margin: the height lost to the gear row
                           ## above comes back here, so the Word Lab still shows every card.
@@ -222,14 +222,16 @@ func _clear_overlays() -> void:
 ## so moving only one edge leaves a rect narrower than the button, which renders clipped
 ## off the screen edge.
 func _add_gear_button() -> void:
-	# Spelled out rather than a gear glyph: the web export's font atlas does not carry
-	# U+2699, so it rendered as the tofu box of hex digits the player reported. Same trap
-	# the pair separator hit - see the note in word_lab.gd. "Teacher" is also what the zoo
-	# screen calls this button.
-	var gear := UiKit.button("Teacher", UiKit.SMALL)
+	# A drawn gear, not the "⚙" character: the export bundles only Godot's default font,
+	# which has no U+2699, and the web build has no system font to fall back on the way
+	# the desktop editor silently did - so the glyph arrived as a tofu box of hex digits.
+	# Same trap the pair separator hit; see the note in word_lab.gd.
+	var gear := UiKit.icon_button("", HUD_BUTTON)
+	gear.icon = GEAR_ICON
+	gear.expand_icon = true
 	gear.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
 	gear.offset_right = PANEL_RIGHT
-	gear.offset_left = PANEL_RIGHT - HUD_TEACHER_WIDTH
+	gear.offset_left = PANEL_RIGHT - HUD_BUTTON
 	gear.offset_top = HUD_TOP
 	gear.offset_bottom = HUD_TOP + HUD_BUTTON
 	gear.pressed.connect(func() -> void: Game.open_settings())
