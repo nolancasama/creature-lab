@@ -86,6 +86,10 @@ func finish_creature(final_name: String) -> void:
 	zoo_changed.emit()
 
 
+func abandon_creature() -> void:
+	current = null
+
+
 func reset_zoo() -> void:
 	zoo.clear()
 	SaveService.clear_zoo()

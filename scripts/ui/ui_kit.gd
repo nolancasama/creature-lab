@@ -133,6 +133,17 @@ static func line_edit(placeholder: String) -> LineEdit:
 	return e
 
 
+## Small square icon button for toolbar use.
+static func icon_button(icon: String, size := 48) -> Button:
+	var b := Button.new()
+	b.text = icon
+	b.focus_mode = Control.FOCUS_NONE
+	b.custom_minimum_size = Vector2(size, size)
+	b.add_theme_font_size_override("font_size", H2)
+	style_button(b, PANEL_HI, false)
+	return b
+
+
 ## Full-screen background wash used by the 2D screens.
 static func backdrop() -> ColorRect:
 	var rect := ColorRect.new()

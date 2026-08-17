@@ -14,9 +14,9 @@ const RECORDING_FACING := -PI * 0.5 ## Godot forward (-Z) turned toward screen-r
 const DRAG_TURN_SPEED := 0.012
 const SUCCESS_PAUSE := 1.1
 
-const PLATFORM_POS := Vector3(0.4, 0.0, 0.6)
-const CAMERA_POS := Vector3(1.9, 2.4, 6.5)
-const CAMERA_AIM := Vector3(0.4, 0.95, 0.0)
+const PLATFORM_POS := Vector3(-0.5, 0.0, 0.6)
+const CAMERA_POS := Vector3(0.5, 2.4, 6.5)
+const CAMERA_AIM := Vector3(-0.5, 0.95, 0.0)
 
 const DNA_PANEL_WIDTH := 380
 const RIGHT_PANEL_WIDTH := 480
@@ -39,9 +39,7 @@ var _rig_animal := "" ## Which animal the live rig was built for.
 
 # Recording UI
 var _root: Control = null
-var _top_bar: Control = null
 var _progress: Label = null
-var _dna_log: DnaLog = null
 var _word_lab: WordLab = null
 var _speech: SpeechPanel = null
 
@@ -227,23 +225,13 @@ func _enter_recording() -> void:
 
 
 func _build_recording_ui() -> void:
-	_top_bar = _build_top_bar()
-	_root.add_child(_top_bar)
-
-	_dna_log = DnaLog.new()
-	_dna_log.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
-	_dna_log.offset_left = 24
-	_dna_log.offset_top = 78
-	_dna_log.offset_right = 24 + DNA_PANEL_WIDTH
-	_dna_log.offset_bottom = 78 + 320
-	_root.add_child(_dna_log)
-
 	var right := UiKit.vbox(12)
 	right.set_anchors_and_offsets_preset(Control.PRESET_RIGHT_WIDE)
 	right.offset_left = -(RIGHT_PANEL_WIDTH + RIGHT_MARGIN)
 	right.offset_right = -RIGHT_MARGIN
-	right.offset_top = 78
+	right.offset_top = 24
 	right.offset_bottom = -24
+	right.custom_minimum_size = Vector2(RIGHT_PANEL_WIDTH, 0)
 	_root.add_child(right)
 
 	# Word Lab has more content than a narrow column can always guarantee height for;
@@ -266,49 +254,40 @@ func _build_recording_ui() -> void:
 	_speech.accepted_by_teacher.connect(func() -> void: _commit(true))
 	right.add_child(_speech)
 
+	# Floating HUD
+	var back_btn := UiKit.icon_button("<", 52)
+	back_btn.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
+	back_btn.offset_left = 24
+	back_btn.offset_top = 24
+	back_btn.pressed.connect(func() -> void:
+		Audio.play("click")
+		Game.abandon_creature()
+		Game.set_phase(Game.Phase.ANIMAL_SELECTION))
+	_root.add_child(back_btn)
 
-func _build_top_bar() -> Control:
-	var bar := UiKit.panel(Color(0.05, 0.09, 0.15, 0.9), 0)
-	bar.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
-	bar.offset_bottom = 62
-
-	var row := UiKit.hbox(14)
-	bar.add_child(row)
-
-	var def: AnimalDefinition = null
-	if Game.current != null:
-		def = Content.animal(Game.current.animal_id)
-	row.add_child(UiKit.label("CREATURE LAB", UiKit.H3, UiKit.ACCENT))
-	row.add_child(UiKit.label("-", UiKit.H3, UiKit.MUTED))
-	row.add_child(UiKit.label(def.display_name if def != null else "-", UiKit.H3, UiKit.TEXT))
+	var gear_btn := UiKit.icon_button("⚙", 52)
+	gear_btn.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
+	gear_btn.offset_right = -RIGHT_MARGIN
+	gear_btn.offset_top = 24
+	gear_btn.pressed.connect(func() -> void: Game.open_settings())
+	_root.add_child(gear_btn)
 
 	_progress = UiKit.label("", UiKit.BODY, UiKit.GOLD)
-	row.add_child(_progress)
-	row.add_child(UiKit.expander())
-
-	var settings := UiKit.button("Teacher", UiKit.SMALL)
-	settings.pressed.connect(func() -> void: Game.open_settings())
-	row.add_child(settings)
-
-	var quit := UiKit.button("Menu", UiKit.SMALL)
-	quit.pressed.connect(func() -> void: Game.set_phase(Game.Phase.TITLE))
-	row.add_child(quit)
-
-	return bar
+	_progress.set_anchors_and_offsets_preset(Control.PRESET_TOP_CENTER)
+	_progress.add_theme_font_size_override("font_size", UiKit.SMALL)
+	_progress.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_progress.offset_top = 32
+	_root.add_child(_progress)
 
 
 func _sync_ui() -> void:
 	if Game.current == null:
 		return
 	var assigned := _assigned_category()
-	var text := "Sentence %d of %d" % [mini(Game.current.slots_filled() + 1, CreatureState.SLOTS), CreatureState.SLOTS]
-	if not assigned.is_empty():
-		var pair := Content.pair_for_category(assigned)
-		text += "  -  use %s" % ("colours" if pair == null else "%s / %s" % [pair.word_a, pair.word_b])
+	var text := "Before / %d of %d" % [mini(Game.current.slots_filled() + 1, CreatureState.SLOTS), CreatureState.SLOTS]
 	if _progress != null:
 		_progress.text = text
 
-	_dna_log.sync(Game.current)
 	_word_lab.set_used(Game.current.used_categories())
 	_word_lab.set_restriction(assigned)
 	_word_lab.set_locked(not _pending.is_empty() or _busy)
