@@ -8,10 +8,10 @@ extends PanelContainer
 ## let the teacher accept it. Nothing here can dead-end a lesson.
 
 signal accepted_by_teacher()
-signal change_requested()
 
 const HELP_AFTER_MODEL := 2 ## Failed attempts before the sentence is read aloud.
 const HELP_AFTER_OVERRIDE := 3 ## Failed attempts before the teacher override appears.
+const MIC_ICON := preload("res://ui/mic.svg")
 
 var _sentence_label: RichTextLabel = null
 var _chips: HBoxContainer = null
@@ -19,7 +19,6 @@ var _feedback: Label = null
 var _mic_button: Button = null
 var _entry: LineEdit = null
 var _listen_button: Button = null
-var _change_button: Button = null
 var _override_button: Button = null
 
 var _before := ""
@@ -46,11 +45,6 @@ func _build() -> void:
 	_listen_button = UiKit.button("Listen", UiKit.SMALL)
 	_listen_button.pressed.connect(func() -> void: Tts.speak(_target_sentence()))
 	header.add_child(_listen_button)
-	_change_button = UiKit.button("Change card", UiKit.SMALL)
-	_change_button.pressed.connect(func() -> void:
-		Audio.play("click")
-		change_requested.emit())
-	header.add_child(_change_button)
 
 	_sentence_label = UiKit.rich("", UiKit.H2)
 	_sentence_label.custom_minimum_size = Vector2(0, 104)
@@ -59,24 +53,28 @@ func _build() -> void:
 	_chips = UiKit.hbox(8)
 	column.add_child(_chips)
 
-	var input_row := UiKit.hbox(8)
-	column.add_child(input_row)
-
 	_entry = UiKit.line_edit("Type the sentence, then press Enter")
 	_entry.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_entry.text_submitted.connect(func(text: String) -> void: _submit_typed(text))
-	input_row.add_child(_entry)
-
-	_mic_button = UiKit.button("", UiKit.H3, true)
-	_mic_button.custom_minimum_size = Vector2(230, 52)
-	_mic_button.button_down.connect(_on_mic_down)
-	_mic_button.button_up.connect(_on_mic_up)
-	input_row.add_child(_mic_button)
+	column.add_child(_entry)
 
 	_feedback = UiKit.label("", UiKit.BODY, UiKit.MUTED)
 	_feedback.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_feedback.custom_minimum_size = Vector2(0, 44)
 	column.add_child(_feedback)
+
+	# The mic sits alone at the foot of the panel, centred: it is the one thing the student
+	# is meant to reach for, and it carries the instruction now that the feedback line no
+	# longer repeats it.
+	column.add_child(UiKit.expander())
+	_mic_button = UiKit.button("Hold to speak  (Space)", UiKit.H3, true)
+	_mic_button.icon = MIC_ICON
+	_mic_button.custom_minimum_size = Vector2(0, 60)
+	_mic_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_mic_button.add_theme_constant_override("h_separation", 10)
+	_mic_button.button_down.connect(_on_mic_down)
+	_mic_button.button_up.connect(_on_mic_up)
+	column.add_child(_mic_button)
 
 	_override_button = UiKit.button("That was right - accept it", UiKit.SMALL)
 	_override_button.visible = false
@@ -92,7 +90,6 @@ func _sync_input_mode() -> void:
 	var mic := Speech.uses_microphone()
 	_mic_button.visible = mic
 	_entry.visible = not mic
-	_mic_button.text = "Hold to speak  (Space)"
 
 
 # --- Public API --------------------------------------------------------------
@@ -106,7 +103,6 @@ func show_idle(message := "") -> void:
 	_feedback.text = message
 	_feedback.add_theme_color_override("font_color", UiKit.MUTED)
 	_override_button.visible = false
-	_change_button.visible = false
 	_listen_button.visible = false
 	_set_input_enabled(false)
 
@@ -117,10 +113,9 @@ func show_target(before: String, after: String) -> void:
 	_armed = true
 	_sentence_label.text = _prompt_text()
 	_set_chips([before, after])
-	_feedback.text = "Read it out loud." if Speech.uses_microphone() else "Type the whole sentence."
+	_feedback.text = "" if Speech.uses_microphone() else "Type the whole sentence."
 	_feedback.add_theme_color_override("font_color", UiKit.MUTED)
 	_override_button.visible = false
-	_change_button.visible = true
 	_listen_button.visible = Tts.available() and Settings.prompt_mode != Settings.PROMPT_HIDDEN
 	_set_input_enabled(true)
 	if not Speech.uses_microphone():
@@ -186,6 +181,7 @@ func _set_chips(words: Array) -> void:
 		child.queue_free()
 	if words.is_empty():
 		return
+	_chips.add_child(UiKit.expander())
 	_chips.add_child(_chip("was", str(words[0])))
 	_chips.add_child(UiKit.label("->", UiKit.H3, UiKit.MUTED))
 	_chips.add_child(_chip("now", str(words[1])))

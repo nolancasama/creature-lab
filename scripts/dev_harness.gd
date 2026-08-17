@@ -5,6 +5,7 @@ extends RefCounted
 ##   godot --path . -- --selftest          content, assembly and grammar checks, then quit
 ##   godot --path . -- --phase=lab         jump straight to a screen
 ##   godot --path . -- --shot=lab          jump there, save user://shot_lab.png, quit
+##   godot --path . -- --shot=say          the recording screen with a card chosen
 ##   godot --path . -- --backtest          abandon a half-finished round, then restart it
 
 const SHOT_DELAY := 1.6
@@ -127,7 +128,7 @@ static func _backtest(main: Node) -> void:
 	# The regression itself: start over and check a card still registers.
 	var go := _find_button(Router.current_scene, "Start")
 	if go == null:
-		printerr("[backtest] FAIL: no Start Creating button after backing out")
+		printerr("[backtest] FAIL: no Start button after backing out")
 		tree.quit(1)
 		return
 	go.pressed.emit()
@@ -217,8 +218,16 @@ static func _seed_full_creature(ids: PackedStringArray) -> void:
 
 
 static func _screenshot(main: Node, phase: String) -> void:
-	_goto(phase)
+	# "say" is the recording screen with a card already chosen. Worth its own target
+	# because Say It looks nothing like its idle self once armed - the chips, the mic and
+	# Change card only exist in that state, and none of them can be seen from --shot=lab.
+	_goto("lab" if phase == "say" else phase)
 	await main.get_tree().create_timer(SHOT_DELAY).timeout
+	if phase == "say":
+		var word_lab := _find_word_lab(Router.current_scene)
+		if word_lab != null:
+			word_lab.pair_selected.emit("HARDNESS", "soft", "hard")
+		await main.get_tree().create_timer(1.0).timeout
 	await RenderingServer.frame_post_draw
 	var image := main.get_viewport().get_texture().get_image()
 	var path := "user://shot_%s.png" % phase

@@ -7,6 +7,9 @@ extends PanelContainer
 ## which is the only instruction a beginner needs to hold in their head.
 
 signal pair_selected(category: String, before: String, after: String)
+## Raised by the Change card button, which lives here rather than in Say It: the cards
+## are what is being changed, so the way out belongs beside them.
+signal change_requested()
 
 ## Sized for a narrow vertical side panel rather than a wide horizontal strip - this
 ## sits stacked above the Say It panel now, not spanning the bottom of the screen.
@@ -19,6 +22,7 @@ var _pair_buttons := {} ## "category|word" -> Button
 var _color_buttons := {} ## word -> Button
 var _cards := {} ## category -> PanelContainer
 var _color_hint: Label = null
+var _change_button: Button = null
 
 var _used := PackedStringArray()
 var _disabled := PackedStringArray()
@@ -43,6 +47,16 @@ func _ready() -> void:
 	_color_hint.visible = false
 	column.add_child(_color_hint)
 	column.add_child(_build_colors())
+
+	# Pushed to the bottom of whatever height the panel is given, centred under the cards.
+	column.add_child(UiKit.expander())
+	_change_button = UiKit.button("Change card", UiKit.SMALL)
+	_change_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_change_button.visible = false
+	_change_button.pressed.connect(func() -> void:
+		Audio.play("click")
+		change_requested.emit())
+	column.add_child(_change_button)
 
 
 func _build_pairs() -> Control:
@@ -137,6 +151,8 @@ func set_locked(value: bool) -> void:
 	_locked = value
 	if value:
 		_color_before = ""
+	if _change_button != null:
+		_change_button.visible = value
 	_refresh()
 
 
@@ -190,7 +206,7 @@ func _refresh_colors() -> void:
 	if colors_done:
 		_color_hint.text = "Colours - already used this round."
 	elif colors_blocked:
-		_color_hint.text = "Colours - not this time."
+		_color_hint.text = "" ## Disabled swatches say this without a line of text.
 	elif _color_before.is_empty():
 		_color_hint.text = "" ## The standing prompt is gone; the swatches say it themselves.
 	else:

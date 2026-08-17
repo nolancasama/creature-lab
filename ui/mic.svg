@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28">
+  <!-- Drawn, not typed, for the same reason as gear.svg: the export carries no font with
+       a microphone glyph, and the web build has no system font to fall back on. Sized 28
+       so it sits beside button text at H3 without expand_icon rescaling it. -->
+  <g fill="none" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round">
+    <rect x="11" y="3" width="6" height="12.5" rx="3" fill="#ffffff" stroke="none"/>
+    <path d="M7 13.2a7 7 0 0 0 14 0"/>
+    <line x1="14" y1="20.4" x2="14" y2="24.2"/>
+    <line x1="10.2" y1="24.6" x2="17.8" y2="24.6"/>
+  </g>
+</svg>

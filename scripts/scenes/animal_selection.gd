@@ -340,6 +340,7 @@ func _build_recording_ui() -> void:
 	# headings came out would have left a band of empty screen above Say It.
 	_word_lab.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_word_lab.pair_selected.connect(_on_pair_selected)
+	_word_lab.change_requested.connect(_cancel_pending)
 	word_scroll.add_child(_word_lab)
 	var animal := Content.animal(Game.current.animal_id) if Game.current != null else null
 	_word_lab.set_disabled_categories(animal.disabled_categories if animal != null else PackedStringArray())
@@ -349,7 +350,6 @@ func _build_recording_ui() -> void:
 	# leftover height instead. The floor still exists to stop Say It resizing between
 	# sentence stages; it just no longer reserves space the cards could be using.
 	_speech.custom_minimum_size = Vector2(0, 280)
-	_speech.change_requested.connect(_cancel_pending)
 	_speech.accepted_by_teacher.connect(func() -> void: _commit(true))
 	right.add_child(_speech)
 
@@ -478,7 +478,7 @@ func _cancel_pending() -> void:
 	_attempts = 0
 	_apply_traits(true)
 	_word_lab.set_locked(false)
-	_speech.show_idle("Pick another card.")
+	_speech.show_idle()
 
 
 func _on_heard(alternatives: PackedStringArray, is_final: bool) -> void:
