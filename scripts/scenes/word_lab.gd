@@ -13,7 +13,7 @@ signal pair_selected(category: String, before: String, after: String)
 const CARD_SIZE := Vector2(140, 44)
 const SWATCH_SIZE := Vector2(82, 44)
 const PAIR_COLUMNS := 3
-const COLOR_COLUMNS := 4
+const COLOR_COLUMNS := 5 ## Five fits all ten swatches in two even rows, no short last row.
 
 var _pair_buttons := {} ## "category|word" -> Button
 var _color_buttons := {} ## word -> Button
@@ -32,12 +32,15 @@ func _ready() -> void:
 	var column := UiKit.vbox(6)
 	add_child(column)
 
-	column.add_child(UiKit.label("WORD LAB", UiKit.H3, UiKit.ACCENT))
-	column.add_child(UiKit.label("Tap the word it WAS.", UiKit.SMALL, UiKit.GOLD))
+	# No headings: the cards are the instruction, and a title plus two standing prompts
+	# cost three lines of the panel's height to say what tapping one card teaches anyway.
 	column.add_child(_build_pairs())
 	column.add_child(UiKit.spacer(2))
 
-	_color_hint = UiKit.label("Colours - tap the colour it WAS.", UiKit.SMALL, UiKit.MUTED)
+	# Kept, but silent by default - it is the only place the second half of a colour round
+	# ("now tap the colour it is NOW") can be asked for. See _sync_colors().
+	_color_hint = UiKit.label("", UiKit.SMALL, UiKit.MUTED)
+	_color_hint.visible = false
 	column.add_child(_color_hint)
 	column.add_child(_build_colors())
 
@@ -189,6 +192,7 @@ func _refresh_colors() -> void:
 	elif colors_blocked:
 		_color_hint.text = "Colours - not this time."
 	elif _color_before.is_empty():
-		_color_hint.text = "Colours - tap the colour it WAS."
+		_color_hint.text = "" ## The standing prompt is gone; the swatches say it themselves.
 	else:
 		_color_hint.text = "It was %s... now tap the colour it is NOW." % _color_before
+	_color_hint.visible = not _color_hint.text.is_empty()

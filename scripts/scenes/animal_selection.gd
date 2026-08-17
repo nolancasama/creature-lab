@@ -16,7 +16,14 @@ const DRAG_TURN_SPEED := 0.012
 const SUCCESS_PAUSE := 1.1
 
 const PLATFORM_POS := Vector3(-0.5, 0.0, 0.6)
-const CAMERA_POS := Vector3(0.5, 2.4, 6.5)
+
+## A long lens, further back. Anything off the optical axis shears under perspective, and
+## the platform has to sit off-axis to be centred in the gap beside the panel - the disc
+## came out visibly tilted at the original 48 degrees. Shear scales with tan(fov/2), so
+## backing off to 22 degrees leaves about 44% of it while keeping the animal the same size
+## on screen: distance and fov are traded against each other, not chosen independently.
+const CAMERA_FOV := 22.0
+const CAMERA_POS := Vector3(1.791, 4.271, 14.888)
 const CAMERA_AIM := Vector3(-0.5, 0.95, 0.0)
 
 ## Picking and recording are overlays on one screen, so they share one panel rect: the
@@ -26,6 +33,7 @@ const PANEL_LEFT := -680
 const PANEL_RIGHT := -32
 const HUD_TOP := 24 ## Top edge of the floating buttons, above the panel on both sub-states.
 const HUD_BUTTON := 52
+const HUD_TEACHER_WIDTH := 132
 const PANEL_TOP := HUD_TOP + HUD_BUTTON + 12 ## Clears the gear rather than sitting under it.
 const PANEL_BOTTOM := -24 ## Tighter than the top margin: the height lost to the gear row
                           ## above comes back here, so the Word Lab still shows every card.
@@ -123,7 +131,7 @@ func _build_stage() -> void:
 	_preview_root.position = PLATFORM_POS + Vector3(0, 0.28, 0)
 	add_child(_preview_root)
 
-	var cam := StageKit.camera(CAMERA_POS, CAMERA_AIM, 48.0)
+	var cam := StageKit.camera(CAMERA_POS, CAMERA_AIM, CAMERA_FOV)
 	add_child(cam)
 	_lens_shift(cam, CAMERA_SHIFT)
 
@@ -165,7 +173,6 @@ func _build_picking_panel() -> void:
 
 	var column := UiKit.vbox(14)
 	panel.add_child(column)
-	column.add_child(UiKit.label("Choose an animal", UiKit.H2, UiKit.ACCENT))
 
 	var grid := GridContainer.new()
 	grid.columns = 3
@@ -215,10 +222,14 @@ func _clear_overlays() -> void:
 ## so moving only one edge leaves a rect narrower than the button, which renders clipped
 ## off the screen edge.
 func _add_gear_button() -> void:
-	var gear := UiKit.icon_button("⚙", HUD_BUTTON)
+	# Spelled out rather than a gear glyph: the web export's font atlas does not carry
+	# U+2699, so it rendered as the tofu box of hex digits the player reported. Same trap
+	# the pair separator hit - see the note in word_lab.gd. "Teacher" is also what the zoo
+	# screen calls this button.
+	var gear := UiKit.button("Teacher", UiKit.SMALL)
 	gear.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
 	gear.offset_right = PANEL_RIGHT
-	gear.offset_left = PANEL_RIGHT - HUD_BUTTON
+	gear.offset_left = PANEL_RIGHT - HUD_TEACHER_WIDTH
 	gear.offset_top = HUD_TOP
 	gear.offset_bottom = HUD_TOP + HUD_BUTTON
 	gear.pressed.connect(func() -> void: Game.open_settings())
@@ -323,13 +334,19 @@ func _build_recording_ui() -> void:
 
 	_word_lab = WordLab.new()
 	_word_lab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	# Fills the height it is given rather than shrinking to its cards, which since the
+	# headings came out would have left a band of empty screen above Say It.
+	_word_lab.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_word_lab.pair_selected.connect(_on_pair_selected)
 	word_scroll.add_child(_word_lab)
 	var animal := Content.animal(Game.current.animal_id) if Game.current != null else null
 	_word_lab.set_disabled_categories(animal.disabled_categories if animal != null else PackedStringArray())
 
 	_speech = SpeechPanel.new()
-	_speech.custom_minimum_size = Vector2(0, 340)
+	# Floored well below what the panel actually needs, so the Word Lab above takes the
+	# leftover height instead. The floor still exists to stop Say It resizing between
+	# sentence stages; it just no longer reserves space the cards could be using.
+	_speech.custom_minimum_size = Vector2(0, 280)
 	_speech.change_requested.connect(_cancel_pending)
 	_speech.accepted_by_teacher.connect(func() -> void: _commit(true))
 	right.add_child(_speech)

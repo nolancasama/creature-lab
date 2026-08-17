@@ -5,11 +5,11 @@
     {"word": "blue",   "hex": "#3f7bd6"},
     {"word": "green",  "hex": "#4aa85a"},
     {"word": "yellow", "hex": "#e8c341"},
+    {"word": "purple", "hex": "#8a5ac9"},
     {"word": "black",  "hex": "#33333d"},
     {"word": "white",  "hex": "#ecEEF2"},
     {"word": "brown",  "hex": "#8a5a34"},
     {"word": "pink",   "hex": "#e58bb4"},
-    {"word": "purple", "hex": "#8a5ac9"},
     {"word": "orange", "hex": "#e5883c"}
   ]
 }
