@@ -5,15 +5,17 @@ changing gameplay; several things that look like bugs are deliberate.
 
 ## Git
 
-Work on `main` in this repo (`github.com/nolancasama/creature-lab`), and **push before
-you finish**:
+Work on `main` in this repo (`github.com/nolancasama/creature-lab`). `main` already
+tracks `origin/main`, so plain `git push` needs no arguments.
 
-    git push
+**If you can push, push before you finish.** Claude Code can (the `gh` login and the
+`wincred` helper are both in place).
 
-`main` already tracks `origin/main`, so plain `git push` needs no arguments.
-
-Commits that stay local look like lost work to the next tool that opens the repo. On
-2026-08-18 three commits sat unpushed and a UI redesign appeared to have vanished.
+**If you cannot push — Codex runs sandboxed with no network — say so in your last
+message, with the number of unpushed commits.** That is the part that actually matters:
+a commit that never leaves the machine looks like lost work to the next tool that opens
+the repo, and silence about it is what makes it look lost. On 2026-08-18 four commits sat
+unpushed and a UI redesign appeared to have vanished.
 
 ## Before saying a change works
 
