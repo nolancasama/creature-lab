@@ -12,10 +12,19 @@
 # 2026-08-06 and was never resolved there either. deploy-web.sh still works and is kept
 # around in case Pages ever recovers; this script is the one that actually publishes.
 #
-# One-time setup already done: `vercel link --project creature-lab` inside web-build,
-# and the SSO deployment protection that new Vercel projects get by default was turned
-# off (`vercel project protection disable creature-lab --sso`) - with it on, the site
-# 302s every visitor to a Vercel login page, which is useless for a classroom.
+# The SSO deployment protection that new Vercel projects get by default has to stay off
+# (`vercel project protection disable creature-lab --sso`) - with it on, the site 302s
+# every visitor to a Vercel login page, which is useless for a classroom.
+#
+# The project link lives in web-build/.vercel/project.json, but web-build/ is gitignored
+# and is recreated by every export, so that link cannot be trusted to survive. Linking
+# was once treated as one-time setup, and on 2026-08-17 the consequence showed up: the
+# link had gone missing, a bare `vercel deploy` in there silently created a SECOND
+# project named after the folder ("web-build") rather than failing, and every deploy
+# after that landed in it. The alias pointed into that stray project, whose default SSO
+# protection 302'd every visitor - while `vercel project protection disable creature-lab
+# --sso` kept reporting success, because it was clearing protection on the project that
+# no longer served the alias. Hence the re-link on every run below.
 
 set -euo pipefail
 
@@ -24,6 +33,7 @@ cd "$SCRIPT_DIR"
 
 GODOT="/c/Users/nolan/Downloads/godot462/Godot_v4.6.2-stable_win64_console.exe"
 ALIAS="creature-lab-esl.vercel.app"
+PROJECT="creature-lab"
 
 if [ ! -f "$GODOT" ]; then
 	echo "error: Godot not found at $GODOT" >&2
@@ -49,6 +59,11 @@ echo "    built: $(du -h web-build/index.wasm | cut -f1) wasm"
 
 echo "==> Deploying to Vercel..."
 pushd web-build >/dev/null
+# Re-assert the link before deploying, every time (see the note at the top of this file).
+# Without it, a missing .vercel makes `vercel deploy` invent a project named after this
+# folder and publish there, which looks like a successful deploy and isn't one.
+vercel link --project "$PROJECT" --yes >/dev/null
+
 # --prod publishes to the project's production deployment; the stable alias below is
 # what people actually visit, so it is re-pointed at whatever this run produced.
 #
@@ -65,5 +80,29 @@ fi
 vercel alias set "$URL" "$ALIAS"
 popd >/dev/null
 
+# A "successful" deploy still fails the classroom if the alias answers with a login
+# redirect, so confirm an actual 200 rather than trusting the CLI's output. Retried a
+# couple of times because the alias takes a moment to propagate to the edge.
+echo "==> Verifying https://$ALIAS is publicly reachable..."
+STATUS=000
+for _ in 1 2 3; do
+	STATUS=$(curl -so /dev/null -w '%{http_code}' "https://$ALIAS/" || echo 000)
+	[ "$STATUS" = "200" ] && break
+	sleep 3
+done
+
+if [ "$STATUS" != "200" ]; then
+	echo "error: https://$ALIAS/ returned HTTP $STATUS, not 200." >&2
+	case "$STATUS" in
+	302 | 401)
+		echo "       a redirect or 401 here means deployment protection is back on. Check" >&2
+		echo "       which project actually serves the alias, then clear it there:" >&2
+		echo "         vercel alias ls | grep $ALIAS" >&2
+		echo "         vercel project protection disable $PROJECT --sso" >&2
+		;;
+	esac
+	exit 1
+fi
+
 echo "==> Live at: https://$ALIAS"
-echo "    (verify with: curl -sI https://$ALIAS/index.pck | grep -i content-length)"
+echo "    pack: $(curl -sI "https://$ALIAS/index.pck" | grep -i '^content-length' | tr -d '\r' | cut -d' ' -f2) bytes"
