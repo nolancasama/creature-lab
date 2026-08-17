@@ -63,12 +63,15 @@ static func flame_color_ramp() -> GradientTexture1D:
 		Color("#e8481f"),
 		Color("#7a1808"),
 	])
-	gradient.offsets = PackedFloat32Array([0.0, 0.22, 0.5, 0.8, 1.0])
+	gradient.offsets = PackedFloat32Array([0.0, 0.16, 0.38, 0.62, 1.0])
 	# Alpha fade is carried by the gradient's own colour alpha, read by the particle
-	# shader's colour-over-lifetime; without this the flame would cut off hard.
+	# shader's colour-over-lifetime; without this the flame would cut off hard. The tail
+	# thins early and hard: these particles blend additively, so a tongue that lingers as
+	# dull red goes magenta against the blue sky and reads as smoke rather than fire.
 	var colors := gradient.colors
 	colors[0].a = 0.95
-	colors[3].a = 0.75
+	colors[2].a = 0.80
+	colors[3].a = 0.22
 	colors[4].a = 0.0
 	gradient.colors = colors
 	var ramp := GradientTexture1D.new()
@@ -118,7 +121,11 @@ static func _base(amount: int, lifetime: float, particle_size: float) -> GPUPart
 
 
 ## kind: flame | embers | frost | sparkle | dust | glow | motion
-static func make(kind: String, tint := Color.WHITE, radius := 0.8) -> GPUParticles3D:
+##
+## `size_scale` multiplies the individual particle size. Emitters are placed in an
+## animal's normalised space, so without this a chicken and a horse would get
+## identically-sized flames and the chicken would look like a birthday candle.
+static func make(kind: String, tint := Color.WHITE, radius := 0.8, size_scale := 1.0) -> GPUParticles3D:
 	var process := ParticleProcessMaterial.new()
 	process.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE
 	process.emission_sphere_radius = radius
@@ -131,9 +138,11 @@ static func make(kind: String, tint := Color.WHITE, radius := 0.8) -> GPUParticl
 			# Licking tongues of fire: the shaped billboard plus the yellow->red ramp is
 			# what reads as "flame" instead of "particles"; a narrow emission cone and a
 			# short spread keep the tongues climbing together rather than scattering.
-			particles = _base(16, 0.9, 0.34)
+			# Many small short-lived tongues rather than a few large ones, so they
+			# overlap into one moving mass instead of being individually countable.
+			particles = _base(34, 0.85, 0.2)
 			var quad := QuadMesh.new()
-			quad.size = Vector2(0.34, 0.5)
+			quad.size = Vector2(0.20, 0.30) * size_scale
 			var mat := _billboard_material()
 			mat.albedo_texture = flame_shape_texture()
 			mat.emission_enabled = true
@@ -151,10 +160,11 @@ static func make(kind: String, tint := Color.WHITE, radius := 0.8) -> GPUParticl
 			process.scale_max = 1.3
 			process.scale_curve = flame_scale_curve()
 			process.color_ramp = flame_color_ramp()
-			process.angle_min = -20.0
-			process.angle_max = 20.0
-			process.angular_velocity_min = -70.0
-			process.angular_velocity_max = 70.0
+			# A few degrees of lean for variety, but NO angular velocity: a rotating
+			# tongue stops reading as fire and starts reading as a falling leaf. Flames
+			# point up.
+			process.angle_min = -9.0
+			process.angle_max = 9.0
 			# A gentle side-to-side sway per particle, the cheapest way to fake flicker
 			# without per-frame scripting.
 			process.turbulence_enabled = true
@@ -206,7 +216,7 @@ static func make(kind: String, tint := Color.WHITE, radius := 0.8) -> GPUParticl
 			process.scale_min = 0.3
 			process.scale_max = 0.9
 		_: # embers - small glowing sparks drifting up, secondary to the flame tongues
-			particles = _base(22, 1.7, 0.09)
+			particles = _base(22, 1.7, 0.09 * size_scale)
 			var ember_mat := particles.draw_pass_1.material as StandardMaterial3D
 			ember_mat.emission_enabled = true
 			ember_mat.emission = tint
@@ -227,6 +237,16 @@ static func make(kind: String, tint := Color.WHITE, radius := 0.8) -> GPUParticl
 
 	particles.process_material = process
 	return particles
+
+
+## Spread an emitter over a volume instead of a point, so flames cover a whole back or
+## footprint rather than rising as a single candle-like column beside the animal.
+static func spread_along(particles: GPUParticles3D, extents: Vector3) -> void:
+	var process := particles.process_material as ParticleProcessMaterial
+	if process == null:
+		return
+	process.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_BOX
+	process.emission_box_extents = extents
 
 
 ## One-shot burst that removes itself once the last particle has died.

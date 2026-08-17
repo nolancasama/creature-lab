@@ -14,6 +14,10 @@ const HOT := Color("#ff7a2f")
 const COLD := Color("#8fd6ff")
 const AGED := Color("#8f8c86")
 
+## The stand height the HOT flames were visually tuned against (the dog). Other species
+## scale their flame size by their own height over this.
+const FLAME_TUNED_HEIGHT := 1.55
+
 
 ## `animate` plays the transition into the new shape; without it the creature simply
 ## starts out transformed, which is what the zoo, the ghost and the finished creature
@@ -114,28 +118,60 @@ static func _apply_pair(rig: CreatureRig, category: String, word: String, animat
 
 ## HOT is layered from several small, cheap pieces rather than one particle system,
 ## because that's what actually reads as "fire" instead of "red dots": a warm emissive
-## glow that flickers, licking flame tongues at the feet/back/head/tail, and rising
-## embers as a quieter secondary layer. `animate` adds a one-shot ignite whoosh; the
-## persistent layers apply either way so a zoo creature still reads as hot while just
-## standing there.
+## glow that flickers, licking flame tongues at the feet/back/head/tail, rising embers
+## as a quieter secondary layer, and a flickering light so the platform underneath is
+## lit by the fire rather than staying cold. `animate` adds a one-shot ignite whoosh;
+## the persistent layers apply either way so a zoo creature still reads as hot while
+## just standing there.
 static func _apply_thermal(rig: CreatureRig, value: float, mid: float, animate := false) -> void:
 	var h := rig.definition.stand_height
 	if value > 0.0:
 		var energy := 0.62
+		# Animals are normalised to their own stand height, which ranges from a 1.15
+		# chicken to a 2.15 horse. Flames are sized against the dog and scaled from
+		# there, so every species gets proportionally the same fire.
+		var flame_scale := h / FLAME_TUNED_HEIGHT
 		rig.tint_role("skin", HOT, 0.28)
 		rig.set_emission("skin", HOT, energy)
 		rig.set_emission_flicker(1.0)
 		rig.tempo *= 1.06 # a little more energetic, not frantic
 
-		# Base flames licking up around the feet.
-		rig.add_fx(Fx.make("flame", HOT, h * 0.30), Vector3(0, h * 0.03, 0))
-		# The main plume, riding the back.
-		rig.add_fx(Fx.make("flame", HOT, h * 0.20), Vector3(0, h * 0.78, h * 0.05))
-		# Small licks at the head and tail so the silhouette itself looks alight.
-		rig.add_fx(Fx.make("flame", Color("#ffd27a"), h * 0.11), Vector3(0, h * 1.02, h * 0.30))
-		rig.add_fx(Fx.make("flame", Color("#ff5a1f"), h * 0.11), Vector3(0, h * 0.5, -h * 0.42))
+		# Where the body actually is, per species. A fraction of stand_height cannot find
+		# the torso on both a chicken and a horse - long legs and a raised neck move it a
+		# long way relative to the crown - and getting this wrong is what made the fire
+		# look like a separate bonfire standing behind the animal.
+		var spine := _bone_point(rig, "back", Vector3(0, h * 0.62, 0))
+		var skull := _bone_point(rig, "head_top", Vector3(0, h * 0.90, h * 0.20))
+		var rear := _bone_point(rig, "rear", Vector3(0, h * 0.55, -h * 0.35))
+
+		# Base flames licking up around the feet, spread across the footprint but kept
+		# narrow enough that they stay a skirt around the legs rather than reading as
+		# separate little campfires dotted over the platform.
+		var feet := Fx.make("flame", HOT, h * 0.26, flame_scale)
+		Fx.spread_along(feet, Vector3(h * 0.10, h * 0.01, h * 0.20))
+		rig.add_fx(feet, Vector3(0, h * 0.02, 0))
+
+		# The main sheet of fire, running the length of the spine. The emission box is
+		# deliberately TALL - it spans from inside the torso to above the back line - so
+		# it does not matter that the spine bone sits anywhere from 0.51 to 0.85 of stand
+		# height depending on species: some tongues always spawn clear of the body and
+		# the rest rise out through it, which is what fire on a back should look like.
+		var back_fire := Fx.make("flame", HOT, h * 0.10, flame_scale)
+		Fx.spread_along(back_fire, Vector3(h * 0.05, h * 0.14, h * 0.22))
+		rig.add_fx(back_fire, spine)
+
+		# Small licks at the head and tail so the silhouette itself looks alight. The
+		# head one is deliberately small and sits at the skull bone rather than above the
+		# crown: a big plume rising off the top of the head reads as a candle wick.
+		rig.add_fx(Fx.make("flame", Color("#ffd27a"), h * 0.07, flame_scale * 0.5), skull)
+		rig.add_fx(Fx.make("flame", Color("#ff5a1f"), h * 0.08, flame_scale * 0.65), rear)
 		# Quiet rising embers behind everything else.
-		rig.add_fx(Fx.make("embers", HOT, h * 0.5), Vector3(0, mid, 0))
+		rig.add_fx(Fx.make("embers", HOT, h * 0.5, flame_scale), Vector3(0, mid, 0))
+
+		# The fire has to light its surroundings or it reads as a decal stuck on top of
+		# the scene. Kept broad and dim rather than bright and tight - a hot puddle on
+		# the platform looks like a spotlight, a wide wash looks like firelight.
+		rig.add_fx(FlameLight.create(Color("#ff9a3c"), 1.5, h * 3.6), Vector3(0, h * 0.5, 0))
 
 		if animate:
 			rig.pulse_emission(energy * 1.8, energy, 0.55)
@@ -146,6 +182,16 @@ static func _apply_thermal(rig: CreatureRig, value: float, mid: float, animate :
 		rig.tint_role("skin", COLD, 0.28)
 		rig.set_surface("skin", 0.55, 0.05)
 		rig.add_fx(Fx.make("frost", COLD, 0.8), Vector3(0, mid * 1.4, 0))
+
+
+## Where a socket's bone actually sits, ignoring the mounting offset authored to float
+## fantasy horns and wings clear of the body. Flames want the body surface itself, not
+## the point a hat would hover at.
+static func _bone_point(rig: CreatureRig, socket: String, fallback: Vector3) -> Vector3:
+	var node: Node3D = rig.sockets.get(socket)
+	if node == null:
+		return fallback
+	return node.position - rig.definition.socket_offset(socket)
 
 
 static func _apply_age(rig: CreatureRig, value: float, mid: float) -> void:
