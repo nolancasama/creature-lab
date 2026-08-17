@@ -57,6 +57,7 @@ const ROLE_FALLBACKS := {
 var definition: AnimalDefinition = null
 var body: Node3D = null ## Trait scaling lives here.
 var fx_root: Node3D = null
+var thermal_fx_root: Node3D = null ## HOT/COLD's particle systems - see thermal_applied.
 var skeleton: Skeleton3D = null
 var mesh_instance: MeshInstance3D = null
 var material: ShaderMaterial = null
@@ -75,6 +76,16 @@ var tempo := 1.0 ## Idle animation speed; the SPEED modifier drives this.
 ## every trait re-apply, via clear_fx() - restores the neutral stance by itself.
 var shiver_offset := Vector3.ZERO
 var shiver_roll := 0.0
+
+## The THERMAL value (see traits.json) that thermal_fx_root currently shows, or NAN if
+## nothing has ever been built. Every card tap re-applies the WHOLE committed trait set
+## - see TraitVisuals.apply_all - so without this, tapping an unrelated card would tear
+## down and rebuild HOT/COLD's particle systems too. A freshly-built GPUParticles3D
+## starts with zero active particles and takes up to its own `lifetime` (snow is 5s,
+## mist 4s) to look full again, which is exactly the "takes a few seconds" a repeated,
+## needless rebuild produces. TraitVisuals checks this before touching
+## thermal_fx_root, so an unchanged HOT/COLD is left running untouched.
+var thermal_applied := NAN
 var moving := false ## Zoo creatures set this to swing their legs.
 
 var _model_root: Node3D = null
@@ -103,6 +114,9 @@ func _build(def: AnimalDefinition) -> void:
 	fx_root = Node3D.new()
 	fx_root.name = "Fx"
 	add_child(fx_root)
+	thermal_fx_root = Node3D.new()
+	thermal_fx_root.name = "ThermalFx"
+	add_child(thermal_fx_root)
 
 	_model_root = _instantiate_model(def.model)
 	if _model_root == null:
@@ -500,6 +514,22 @@ func add_fx(node: Node3D, at := Vector3.ZERO) -> void:
 
 func clear_fx() -> void:
 	for child in fx_root.get_children():
+		child.queue_free()
+
+
+## Same as add_fx, but for HOT/COLD's own root, which reset_modifiers() deliberately
+## does not sweep - see thermal_applied.
+func add_thermal_fx(node: Node3D, at := Vector3.ZERO) -> void:
+	node.position = at
+	thermal_fx_root.add_child(node)
+	if node is GPUParticles3D:
+		(node as GPUParticles3D).emitting = true
+
+
+## Does not touch thermal_applied: TraitVisuals sets that itself, either to the value
+## it is about to build (rebuilding) or to NAN (nothing left to show).
+func clear_thermal_fx() -> void:
+	for child in thermal_fx_root.get_children():
 		child.queue_free()
 
 

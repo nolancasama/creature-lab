@@ -47,6 +47,7 @@ static func apply_all(rig: CreatureRig, traits: Dictionary, animate := false) ->
 	var feel_target := 0.0
 	# Colour last: it repaints roles that other modifiers may have tinted.
 	var color_word := ""
+	var saw_thermal := false
 	for category in traits:
 		var word := str(traits[category])
 		if str(category) == Content.COLOR_CATEGORY:
@@ -64,9 +65,16 @@ static func apply_all(rig: CreatureRig, traits: Dictionary, animate := false) ->
 		elif pair.modifier == "MATERIAL":
 			feel_target = pair.value_for(word)
 		else:
+			if pair.modifier == "THERMAL":
+				saw_thermal = true
 			_apply_pair(rig, str(category), word, animate)
 	if not color_word.is_empty():
 		_apply_color(rig, color_word)
+	# A pending HOT/COLD pick was cancelled: nothing else clears thermal_fx_root, since
+	# reset_modifiers() deliberately leaves it alone (see thermal_applied).
+	if not saw_thermal and not is_nan(rig.thermal_applied):
+		rig.clear_thermal_fx()
+		rig.thermal_applied = NAN
 
 	if rig.deformer != null:
 		if animate:
@@ -123,18 +131,33 @@ static func _apply_pair(rig: CreatureRig, category: String, word: String, animat
 ## lit by the fire rather than staying cold. `animate` adds a one-shot ignite whoosh;
 ## the persistent layers apply either way so a zoo creature still reads as hot while
 ## just standing there.
+##
+## The particle systems (and COLD's ColdEffect) live in thermal_fx_root, which -
+## unlike fx_root - survives apply_all's reset. `changed` gates rebuilding them: every
+## card tap re-applies the WHOLE committed trait set, so without this, tapping ANY
+## other card while HOT/COLD is already committed would tear down and recreate these
+## particle systems too. A freshly-built one starts empty and takes seconds to look
+## full again (snow's lifetime alone is 5s) - that repeated, needless rebuild is what
+## reads as "the animation takes a few seconds to activate" on every interaction.
 static func _apply_thermal(rig: CreatureRig, value: float, mid: float, animate := false) -> void:
 	var h := rig.definition.stand_height
+	var changed := not is_equal_approx(rig.thermal_applied, value)
+	rig.thermal_applied = value
 	if value > 0.0:
 		var energy := 0.62
-		# Animals are normalised to their own stand height, which ranges from a 1.15
-		# chicken to a 2.15 horse. Flames are sized against the dog and scaled from
-		# there, so every species gets proportionally the same fire.
-		var flame_scale := h / FLAME_TUNED_HEIGHT
 		rig.tint_role("skin", HOT, 0.28)
 		rig.set_emission("skin", HOT, energy)
 		rig.set_emission_flicker(1.0)
 		rig.tempo *= 1.06 # a little more energetic, not frantic
+
+		if not changed:
+			return
+		rig.clear_thermal_fx()
+
+		# Animals are normalised to their own stand height, which ranges from a 1.15
+		# chicken to a 2.15 horse. Flames are sized against the dog and scaled from
+		# there, so every species gets proportionally the same fire.
+		var flame_scale := h / FLAME_TUNED_HEIGHT
 
 		# Where the body actually is, per species. A fraction of stand_height cannot find
 		# the torso on both a chicken and a horse - long legs and a raised neck move it a
@@ -149,7 +172,7 @@ static func _apply_thermal(rig: CreatureRig, value: float, mid: float, animate :
 		# separate little campfires dotted over the platform.
 		var feet := Fx.make("flame", HOT, h * 0.26, flame_scale)
 		Fx.spread_along(feet, Vector3(h * 0.10, h * 0.01, h * 0.20))
-		rig.add_fx(feet, Vector3(0, h * 0.02, 0))
+		rig.add_thermal_fx(feet, Vector3(0, h * 0.02, 0))
 
 		# The main sheet of fire, running the length of the spine. The emission box is
 		# deliberately TALL - it spans from inside the torso to above the back line - so
@@ -158,20 +181,20 @@ static func _apply_thermal(rig: CreatureRig, value: float, mid: float, animate :
 		# the rest rise out through it, which is what fire on a back should look like.
 		var back_fire := Fx.make("flame", HOT, h * 0.10, flame_scale)
 		Fx.spread_along(back_fire, Vector3(h * 0.05, h * 0.14, h * 0.22))
-		rig.add_fx(back_fire, spine)
+		rig.add_thermal_fx(back_fire, spine)
 
 		# Small licks at the head and tail so the silhouette itself looks alight. The
 		# head one is deliberately small and sits at the skull bone rather than above the
 		# crown: a big plume rising off the top of the head reads as a candle wick.
-		rig.add_fx(Fx.make("flame", Color("#ffd27a"), h * 0.07, flame_scale * 0.5), skull)
-		rig.add_fx(Fx.make("flame", Color("#ff5a1f"), h * 0.08, flame_scale * 0.65), rear)
+		rig.add_thermal_fx(Fx.make("flame", Color("#ffd27a"), h * 0.07, flame_scale * 0.5), skull)
+		rig.add_thermal_fx(Fx.make("flame", Color("#ff5a1f"), h * 0.08, flame_scale * 0.65), rear)
 		# Quiet rising embers behind everything else.
-		rig.add_fx(Fx.make("embers", HOT, h * 0.5, flame_scale), Vector3(0, mid, 0))
+		rig.add_thermal_fx(Fx.make("embers", HOT, h * 0.5, flame_scale), Vector3(0, mid, 0))
 
 		# The fire has to light its surroundings or it reads as a decal stuck on top of
 		# the scene. Kept broad and dim rather than bright and tight - a hot puddle on
 		# the platform looks like a spotlight, a wide wash looks like firelight.
-		rig.add_fx(FlameLight.create(Color("#ff9a3c"), 1.5, h * 3.6), Vector3(0, h * 0.5, 0))
+		rig.add_thermal_fx(FlameLight.create(Color("#ff9a3c"), 1.5, h * 3.6), Vector3(0, h * 0.5, 0))
 
 		if animate:
 			rig.pulse_emission(energy * 1.8, energy, 0.55)
@@ -188,8 +211,12 @@ static func _apply_thermal(rig: CreatureRig, value: float, mid: float, animate :
 		rig.set_surface("skin", 0.95, 0.0)
 		rig.tempo *= 0.9 # hunkered down, moving a little less
 
+		if not changed:
+			return
+		rig.clear_thermal_fx()
+
 		var cold := ColdEffect.create(rig)
-		rig.add_fx(cold, Vector3.ZERO)
+		rig.add_thermal_fx(cold, Vector3.ZERO)
 		if animate:
 			cold.play_intro()
 
