@@ -5,6 +5,7 @@ extends RefCounted
 ##   godot --path . -- --selftest          content, assembly and grammar checks, then quit
 ##   godot --path . -- --phase=lab         jump straight to a screen
 ##   godot --path . -- --shot=lab          jump there, save user://shot_lab.png, quit
+##   godot --path . -- --backtest          abandon a half-finished round, then restart it
 
 const SHOT_DELAY := 1.6
 
@@ -28,6 +29,8 @@ static func run_if_requested(main: Node) -> void:
 		return
 	if args.has("--autoplay"):
 		_autoplay(main)
+	elif args.has("--backtest"):
+		_backtest(main)
 	elif not shot.is_empty():
 		_screenshot(main, shot)
 	elif not phase.is_empty():
@@ -69,6 +72,84 @@ static func _autoplay(main: Node) -> void:
 	else:
 		printerr("[autoplay] FAIL: expected NAMING")
 	tree.quit(0 if ok else 1)
+
+
+## Abandoning a half-finished round used to leave the Word Lab on screen with
+## Game.current already null, so every adjective card was silently dead against its own
+## guard. Presses the real back button and checks a fresh round can still be recorded.
+static func _backtest(main: Node) -> void:
+	var tree := main.get_tree()
+	_goto("lab")
+	await tree.create_timer(1.4).timeout
+
+	# Record one sentence first, so the round is genuinely half-finished when abandoned.
+	var word_lab := _find_word_lab(Router.current_scene)
+	if word_lab == null:
+		printerr("[backtest] FAIL: no Word Lab to start from")
+		tree.quit(1)
+		return
+	word_lab.pair_selected.emit("LENGTH", "long", "short")
+	await tree.create_timer(0.7).timeout
+	Speech.submit_typed(GrammarValidator.expected_sentence("long", "short"))
+	await tree.create_timer(2.6).timeout
+	print("[backtest] %d slot(s) recorded, now backing out" % Game.current.slots_filled())
+
+	var back := _find_button(Router.current_scene, "<")
+	if back == null:
+		printerr("[backtest] FAIL: no back button on the recording screen")
+		tree.quit(1)
+		return
+	back.pressed.emit()
+	await tree.create_timer(1.0).timeout
+
+	if Game.current != null:
+		printerr("[backtest] FAIL: abandoned creature is still current")
+		tree.quit(1)
+		return
+	if _find_word_lab(Router.current_scene) != null:
+		printerr("[backtest] FAIL: Word Lab still on screen after backing out")
+		tree.quit(1)
+		return
+	print("[backtest] back returned to picking")
+
+	# The regression itself: start over and check a card still registers.
+	var go := _find_button(Router.current_scene, "Start Creating  ->")
+	if go == null:
+		printerr("[backtest] FAIL: no Start Creating button after backing out")
+		tree.quit(1)
+		return
+	go.pressed.emit()
+	await tree.create_timer(1.0).timeout
+
+	word_lab = _find_word_lab(Router.current_scene)
+	if word_lab == null:
+		printerr("[backtest] FAIL: no Word Lab after restarting")
+		tree.quit(1)
+		return
+	word_lab.pair_selected.emit("LENGTH", "long", "short")
+	await tree.create_timer(0.7).timeout
+	Speech.submit_typed(GrammarValidator.expected_sentence("long", "short"))
+	await tree.create_timer(2.6).timeout
+
+	var slots := Game.current.slots_filled() if Game.current != null else 0
+	if slots == 1:
+		print("[backtest] PASS")
+		tree.quit(0)
+	else:
+		printerr("[backtest] FAIL: card did not register after backing out (%d slots)" % slots)
+		tree.quit(1)
+
+
+static func _find_button(node: Node, text: String) -> Button:
+	if node == null:
+		return null
+	if node is Button and (node as Button).text == text:
+		return node
+	for child in node.get_children():
+		var found := _find_button(child, text)
+		if found != null:
+			return found
+	return null
 
 
 static func _find_word_lab(node: Node) -> WordLab:

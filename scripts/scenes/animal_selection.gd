@@ -199,6 +199,51 @@ func _confirm() -> void:
 	_enter_recording()
 
 
+## The mirror of _enter_recording(), for the back button abandoning a half-finished
+## round. It has to rebuild the picking overlay locally: both sub-states are one screen,
+## so there is no phase to move to, and Game.set_phase(ANIMAL_SELECTION) from inside
+## ANIMAL_SELECTION returns early without emitting anything - which is how the back
+## button previously left the Word Lab on screen with Game.current already null, every
+## adjective button silently dead against its own null guard.
+func _enter_picking() -> void:
+	Speech.stop()
+	_mode = Mode.PICKING
+	_dragging_view = false
+	_pending = {}
+	_attempts = 0
+	_busy = false
+
+	# _root holds nothing but the overlays, so clearing it drops the whole recording UI -
+	# right-hand panel and floating HUD alike - without tracking each piece.
+	for child in _root.get_children():
+		child.queue_free()
+	_picking_panel = null
+	_word_lab = null
+	_speech = null
+	_progress = null
+	_name_label = null
+	_buttons.clear() ## Freed with the panel above; _preview() would iterate corpses.
+
+	_build_picking_panel()
+
+	# The rig still wears the abandoned round's BEFORE traits, so it must be rebuilt
+	# rather than left standing. _preview() early-returns on an unchanged id, hence the
+	# clear first - otherwise the stale rig survives and no button looks selected.
+	#
+	# _selected is empty when the round was entered without picking (a --phase=lab jump,
+	# or returning from Teacher Settings), and something must end up selected regardless
+	# or Start Creating comes back dead - the same trap this whole function exists to fix.
+	var previous := _selected
+	if previous.is_empty():
+		previous = _rig_animal
+	if previous.is_empty():
+		var ids := Content.animal_ids()
+		previous = str(ids[0]) if not ids.is_empty() else ""
+	_selected = ""
+	if not previous.is_empty():
+		_preview(previous)
+
+
 # --- Recording sub-state -----------------------------------------------------------
 
 ## Swaps the picking panel for the Word Lab / Say It layout in place - the screen never
@@ -262,7 +307,7 @@ func _build_recording_ui() -> void:
 	back_btn.pressed.connect(func() -> void:
 		Audio.play("click")
 		Game.abandon_creature()
-		Game.set_phase(Game.Phase.ANIMAL_SELECTION))
+		_enter_picking())
 	_root.add_child(back_btn)
 
 	var gear_btn := UiKit.icon_button("⚙", 52)
