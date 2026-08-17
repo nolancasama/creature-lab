@@ -90,7 +90,7 @@ func _build_ui() -> void:
 	row.add_child(settings)
 
 	var menu := UiKit.button("Menu", UiKit.SMALL)
-	menu.pressed.connect(func() -> void: Game.set_phase(Game.Phase.TITLE))
+	menu.pressed.connect(func() -> void: Game.set_phase(Game.Phase.ANIMAL_SELECTION))
 	row.add_child(menu)
 
 	_info = UiKit.panel(Color(0.05, 0.09, 0.15, 0.95), 16, 2, UiKit.GOLD)

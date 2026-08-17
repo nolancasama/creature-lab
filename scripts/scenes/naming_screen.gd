@@ -17,7 +17,7 @@ var _creature_root: Node3D = null
 
 func _ready() -> void:
 	if Game.current == null:
-		Game.set_phase(Game.Phase.TITLE)
+		Game.set_phase(Game.Phase.ANIMAL_SELECTION)
 		return
 	_candidates = NameGenerator.candidates(Game.current)
 	if Game.current.generated_name.is_empty() and not _candidates.is_empty():

@@ -10,6 +10,18 @@ extends RefCounted
 const SHOT_DELAY := 1.6
 
 
+## True when a harness run is about to drive the game itself. Boot code checks this before
+## moving the FSM: the harness sets its own phases, and set_phase() into a phase the game
+## is already in returns early without ever reloading the scene.
+static func is_requested() -> bool:
+	for arg in OS.get_cmdline_user_args():
+		var text := str(arg)
+		if text in ["--selftest", "--autoplay", "--backtest"] \
+				or text.begins_with("--shot=") or text.begins_with("--phase="):
+			return true
+	return false
+
+
 static func run_if_requested(main: Node) -> void:
 	var args := OS.get_cmdline_user_args()
 	var shot := ""
@@ -113,7 +125,7 @@ static func _backtest(main: Node) -> void:
 	print("[backtest] back returned to picking")
 
 	# The regression itself: start over and check a card still registers.
-	var go := _find_button(Router.current_scene, "Start Creating  ->")
+	var go := _find_button(Router.current_scene, "Start")
 	if go == null:
 		printerr("[backtest] FAIL: no Start Creating button after backing out")
 		tree.quit(1)

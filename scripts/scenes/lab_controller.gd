@@ -84,7 +84,7 @@ func _build_top_bar() -> Control:
 	row.add_child(skip)
 
 	var quit := UiKit.button("Menu", UiKit.SMALL)
-	quit.pressed.connect(func() -> void: Game.set_phase(Game.Phase.TITLE))
+	quit.pressed.connect(func() -> void: Game.set_phase(Game.Phase.ANIMAL_SELECTION))
 	row.add_child(quit)
 
 	return bar

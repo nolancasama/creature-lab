@@ -19,20 +19,22 @@ const PLATFORM_POS := Vector3(-0.5, 0.0, 0.6)
 const CAMERA_POS := Vector3(0.5, 2.4, 6.5)
 const CAMERA_AIM := Vector3(-0.5, 0.95, 0.0)
 
-## Slides the camera along its own X so the platform sits centred in the gap beside the
-## panel instead of centred on the screen. h_offset translates the camera rather than
-## turning it, so the animal keeps its profile and the platform stays square to view.
-const CAMERA_H_OFFSET := 1.9
-
 ## Picking and recording are overlays on one screen, so they share one panel rect: the
 ## Word Lab / Say It stack lands exactly where the animal grid was, and nothing resizes
 ## or jumps underneath the player at the moment of confirming.
 const PANEL_LEFT := -680
 const PANEL_RIGHT := -32
-const PANEL_TOP := 40
-const PANEL_BOTTOM := -40
-const PANEL_WIDTH := -PANEL_LEFT + PANEL_RIGHT ## 648 - the rect's actual width.
+const HUD_TOP := 24 ## Top edge of the floating buttons, above the panel on both sub-states.
 const HUD_BUTTON := 52
+const PANEL_TOP := HUD_TOP + HUD_BUTTON + 12 ## Clears the gear rather than sitting under it.
+const PANEL_BOTTOM := -24 ## Tighter than the top margin: the height lost to the gear row
+                          ## above comes back here, so the Word Lab still shows every card.
+const PANEL_WIDTH := -PANEL_LEFT + PANEL_RIGHT ## 648 - the rect's actual width.
+
+## The animal sits centred in the gap beside the panel, which is always half the panel's
+## span left of screen centre, whatever the window is doing. Applied as a lens shift - see
+## _lens_shift() for why it is not simply a camera move.
+const CAMERA_SHIFT := -PANEL_LEFT / 2.0
 
 enum Mode { PICKING, RECORDING }
 
@@ -45,7 +47,6 @@ var _rig: CreatureRig = null
 # Picking UI
 var _picking_panel: Control = null
 var _buttons := {}
-var _name_label: Label = null
 var _selected := ""
 var _rig_animal := "" ## Which animal the live rig was built for.
 
@@ -123,8 +124,22 @@ func _build_stage() -> void:
 	add_child(_preview_root)
 
 	var cam := StageKit.camera(CAMERA_POS, CAMERA_AIM, 48.0)
-	cam.h_offset = CAMERA_H_OFFSET
 	add_child(cam)
+	_lens_shift(cam, CAMERA_SHIFT)
+
+
+## Shifts the rendered image sideways by a number of screen pixels, by offsetting the
+## camera's frustum - the lens moves, the camera does not. Moving the camera itself
+## (h_offset) changes the direction the animal is seen from, so it stopped reading as a
+## profile and started looking turned away; a frustum offset keeps the framing identical
+## and only slides where it lands on screen.
+func _lens_shift(cam: Camera3D, pixels: float) -> void:
+	var view := get_viewport().get_visible_rect().size
+	if view.x <= 0.0 or view.y <= 0.0:
+		return
+	var near_height := 2.0 * cam.near * tan(deg_to_rad(cam.fov) * 0.5)
+	var near_width := near_height * view.x / view.y
+	cam.set_frustum(near_height, Vector2(pixels / view.x * near_width, 0.0), cam.near, cam.far)
 
 
 func _build_root() -> void:
@@ -167,25 +182,47 @@ func _build_picking_panel() -> void:
 
 	column.add_child(UiKit.expander())
 
-	_name_label = UiKit.label("", UiKit.H3, UiKit.GOLD)
-	column.add_child(_name_label)
-
-	var row := UiKit.hbox(10)
-	column.add_child(row)
-
-	var back := UiKit.button("Back", UiKit.H3)
-	back.custom_minimum_size = Vector2(140, 58)
-	back.pressed.connect(func() -> void:
-		Audio.play("click")
-		Game.set_phase(Game.Phase.TITLE))
-	row.add_child(back)
-
-	row.add_child(UiKit.expander())
-
-	var go := UiKit.button("Start Creating  ->", UiKit.H3, true)
-	go.custom_minimum_size = Vector2(300, 58)
+	# One full-width action and nothing beside it: the selected animal is already named on
+	# its own button and standing on the platform, so a separate name label repeated it,
+	# and Back led to a title screen that no longer exists.
+	var go := UiKit.button("Start", UiKit.H3, true)
+	go.custom_minimum_size = Vector2(0, 58)
+	go.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	go.pressed.connect(_confirm)
-	row.add_child(go)
+	column.add_child(go)
+
+	_add_gear_button()
+
+
+## Each sub-state owns the whole of _root, so entering either clears all of it instead of
+## tracking individual pieces. The gear is built by both and would otherwise stack up one
+## invisible copy per transition.
+func _clear_overlays() -> void:
+	for child in _root.get_children():
+		child.queue_free()
+	_picking_panel = null
+	_word_lab = null
+	_speech = null
+	_progress = null
+	_buttons.clear() ## Freed with the panel; _preview() would otherwise iterate corpses.
+
+
+## Teacher Settings has to be reachable from both sub-states, and from the same corner in
+## each - picking and recording are one screen, so a control that moved between them would
+## read as a different screen.
+##
+## Both offsets are set explicitly: the preset derives them from the button's current size,
+## so moving only one edge leaves a rect narrower than the button, which renders clipped
+## off the screen edge.
+func _add_gear_button() -> void:
+	var gear := UiKit.icon_button("⚙", HUD_BUTTON)
+	gear.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
+	gear.offset_right = PANEL_RIGHT
+	gear.offset_left = PANEL_RIGHT - HUD_BUTTON
+	gear.offset_top = HUD_TOP
+	gear.offset_bottom = HUD_TOP + HUD_BUTTON
+	gear.pressed.connect(func() -> void: Game.open_settings())
+	_root.add_child(gear)
 
 
 func _preview(animal_id: String) -> void:
@@ -197,9 +234,6 @@ func _preview(animal_id: String) -> void:
 	_build_rig(animal_id)
 	_preview_root.rotation.y = -0.7
 
-	var def := Content.animal(animal_id)
-	if def != null and _name_label != null:
-		_name_label.text = def.display_name
 	for id in _buttons:
 		var b: Button = _buttons[id]
 		UiKit.style_button(b, UiKit.ACCENT if id == animal_id else UiKit.PANEL_HI, id == animal_id)
@@ -227,17 +261,7 @@ func _enter_picking() -> void:
 	_attempts = 0
 	_busy = false
 
-	# _root holds nothing but the overlays, so clearing it drops the whole recording UI -
-	# right-hand panel and floating HUD alike - without tracking each piece.
-	for child in _root.get_children():
-		child.queue_free()
-	_picking_panel = null
-	_word_lab = null
-	_speech = null
-	_progress = null
-	_name_label = null
-	_buttons.clear() ## Freed with the panel above; _preview() would iterate corpses.
-
+	_clear_overlays()
 	_build_picking_panel()
 
 	# The rig still wears the abandoned round's BEFORE traits, so it must be rebuilt
@@ -267,10 +291,7 @@ func _enter_recording() -> void:
 	_dragging_view = false
 	if _preview_root != null:
 		_preview_root.rotation.y = RECORDING_FACING
-	if _picking_panel != null:
-		_picking_panel.queue_free()
-		_picking_panel = null
-
+	_clear_overlays()
 	_build_recording_ui()
 	# A freshly confirmed animal is already the correct neutral live rig. Reapplying an
 	# empty trait set calls reset_modifiers(), which snaps body.position to zero and made
@@ -326,17 +347,7 @@ func _build_recording_ui() -> void:
 		_enter_picking())
 	_root.add_child(back_btn)
 
-	# Both offsets are set explicitly: the preset derives them from the button's current
-	# size, so moving only one edge leaves a rect narrower than the button and it renders
-	# clipped off the screen edge.
-	var gear_btn := UiKit.icon_button("⚙", HUD_BUTTON)
-	gear_btn.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
-	gear_btn.offset_right = PANEL_RIGHT
-	gear_btn.offset_left = PANEL_RIGHT - HUD_BUTTON
-	gear_btn.offset_top = 24
-	gear_btn.offset_bottom = 24 + HUD_BUTTON
-	gear_btn.pressed.connect(func() -> void: Game.open_settings())
-	_root.add_child(gear_btn)
+	_add_gear_button()
 
 	# Spans the gap to the left of the panel rather than the whole screen, so the progress
 	# line reads as a caption over the animal instead of drifting toward the Word Lab.

@@ -10,9 +10,17 @@ var debug_overlay: Control = null
 func _ready() -> void:
 	_register_actions()
 	_build_layers()
+
+	# Open on animal selection instead of the title screen: it was one tap between the
+	# student and the game, carrying nothing they needed. Set before attach, not with
+	# set_phase() after, so the router opens straight onto selection rather than fading
+	# through a title nobody is meant to see. The harness drives its own phases and must
+	# find the FSM where it expects it.
+	if not DevHarness.is_requested():
+		Game.phase = Game.Phase.ANIMAL_SELECTION
 	Router.attach(scene_root, fade)
 	# Before anything is picked: get the driver to compile the trait effects' shaders
-	# while the title screen is up, not when a student taps HOT or COLD. See ShaderWarmup
+	# while the animal picker is up, not when a student taps HOT or COLD. See ShaderWarmup
 	# for the measurements - on the web renderer this is the difference between a first
 	# HOT pick taking ten seconds and taking a frame.
 	ShaderWarmup.run(self)
