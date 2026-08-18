@@ -44,10 +44,27 @@ const PANEL_TOP := HUD_TOP + GEAR_BUTTON_SIZE + HUD_GAP ## Clears the gear, now 
 const PANEL_BOTTOM := -24 ## Tighter than the top margin: the height lost to the HUD row
                           ## above comes back here, so the Word Lab still shows every card.
 const PANEL_WIDTH := -PANEL_LEFT + PANEL_RIGHT ## 648 - the rect's actual width.
-const PRESENT_SIZE := Vector2(720, 460) ## The centred present-tense panel.
-const SAY_IT_WIDTH := 720 ## The docked Say It panel below the platform.
-const SAY_IT_HEIGHT := 320
+## The centred present-tense panel. Height hugs content the same way SAY_IT_HEIGHT does -
+## SpeechPanel no longer has an internal expander to fill leftover space with, now that the
+## docked Say It panel needs it to hug its own content, so a modal reusing that same class
+## has to be sized to match or it just leaves a blank band at the bottom.
+const PRESENT_SIZE := Vector2(720, 360)
+const SAY_IT_WIDTH := 540 ## 720 less a quarter - the docked panel below the platform.
+const SAY_IT_HEIGHT := 300 ## Content-hugging - see SpeechPanel's own layout notes for why
+                           ## there is no expander left inside it to fill beyond this; hand-
+                           ## summed the same way PICKING_PANEL_HEIGHT is, then checked.
 const SAY_IT_BOTTOM_MARGIN := 24
+
+## Content-hugging rather than the tall shared rect: three animal-button rows plus Start,
+## no more. Hand-summed from the picking panel's own children (10 top pad + 3 rows of 62 +
+## 2 row gaps of 10 + 14 vbox gap + 58 Start + 10 bottom pad) and checked against a render
+## rather than trusted blind, since nothing here is a container that reports its own
+## natural size back to the anchor math that positions it.
+const PICKING_PANEL_HEIGHT := 298
+const PROGRESS_SUB_FONT := UiKit.H2 ## The "(n of 3)" line beneath "Before" - present but
+                                    ## secondary, not competing with PROGRESS_FONT's scale.
+const PROGRESS_WIDTH := 420 ## Wide enough for "Before" at PROGRESS_FONT with room to spare.
+const PROGRESS_HEIGHT := 100 ## Both lines plus the small gap between them.
 
 ## The animal sits centred in the gap beside the panel, which is always half the panel's
 ## span left of screen centre, whatever the window is doing. Applied as a lens shift - see
@@ -71,6 +88,7 @@ var _rig_animal := "" ## Which animal the live rig was built for.
 # Recording UI
 var _root: Control = null
 var _progress: Label = null
+var _progress_count: Label = null
 var _word_lab: WordLab = null
 var _speech: SpeechPanel = null
 
@@ -173,6 +191,17 @@ func _clause() -> int:
 	return GrammarValidator.CLAUSE_PAST if Settings.past_only() else GrammarValidator.CLAUSE_BOTH
 
 
+## Left edge (in pixels from the screen's left edge) that centres a `width`-wide element
+## within the free-space region beside the panel - the same region the camera centres the
+## animal in. Reads the actual viewport rather than assuming a fixed window size, the same
+## way _lens_shift() does, so the platform, the progress line, and the Say It dock all
+## agree on where "centred above the platform" is regardless of how the window is sized.
+func _center_left(width: float) -> float:
+	var view_width := get_viewport().get_visible_rect().size.x
+	var free_width: float = view_width + PANEL_LEFT ## PANEL_LEFT is negative.
+	return maxf(0.0, (free_width - width) * 0.5)
+
+
 func _build_root() -> void:
 	var layer := StageKit.ui_layer()
 	add_child(layer)
@@ -186,11 +215,18 @@ func _build_root() -> void:
 
 func _build_picking_panel() -> void:
 	var panel := UiKit.panel(Color(0.06, 0.1, 0.16, 0.92), 18, 2, UiKit.PANEL_HI)
-	panel.set_anchors_and_offsets_preset(Control.PRESET_RIGHT_WIDE)
+	# Vertically centred and sized to its own content (PICKING_PANEL_HEIGHT), not stretched
+	# to the shared PANEL_TOP/PANEL_BOTTOM rect the way Word Lab is - a grid of seven
+	# buttons plus one Start does not need the picking screen to be as tall as the recording
+	# screen's card board.
+	panel.anchor_left = 1.0
+	panel.anchor_right = 1.0
+	panel.anchor_top = 0.5
+	panel.anchor_bottom = 0.5
 	panel.offset_left = PANEL_LEFT
 	panel.offset_right = PANEL_RIGHT
-	panel.offset_top = PANEL_TOP
-	panel.offset_bottom = PANEL_BOTTOM
+	panel.offset_top = -PICKING_PANEL_HEIGHT * 0.5
+	panel.offset_bottom = PICKING_PANEL_HEIGHT * 0.5
 	_root.add_child(panel)
 	_picking_panel = panel
 
@@ -210,12 +246,15 @@ func _build_picking_panel() -> void:
 		grid.add_child(b)
 		_buttons[def.id] = b
 
-	column.add_child(UiKit.expander())
-
+	# No expander: Start sits directly below the grid - below Chicken, the last animal -
+	# rather than pinned to the foot of a much taller panel.
+	#
 	# One full-width action and nothing beside it: the selected animal is already named on
 	# its own button and standing on the platform, so a separate name label repeated it,
 	# and Back led to a title screen that no longer exists.
 	var go := UiKit.button("Start", UiKit.H3, true)
+	UiKit.style_button(go, UiKit.CTA, true) ## The one action that starts the round gets
+	## the palette's call-to-action colour, not the ambient ACCENT every header already uses.
 	go.custom_minimum_size = Vector2(0, 58)
 	go.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	go.pressed.connect(_confirm)
@@ -234,6 +273,7 @@ func _clear_overlays() -> void:
 	_word_lab = null
 	_speech = null
 	_progress = null
+	_progress_count = null
 	_buttons.clear() ## Freed with the panel; _preview() would otherwise iterate corpses.
 
 
@@ -461,29 +501,42 @@ func _build_recording_ui() -> void:
 	_root.add_child(back_btn)
 
 	_add_gear_button()
+	_build_progress_display()
 
-	# Spans the gap to the left of the panel rather than the whole screen, so the progress
-	# line reads as a caption over the animal instead of drifting toward the Word Lab.
+
+## "Before" and its "(n of 3)" count as two stacked lines rather than one, both centred
+## through _center_left() - the same dynamic, viewport-aware centring the platform and the
+## Say It dock use - so all three agree on where "above the platform" actually is.
+func _build_progress_display() -> void:
+	var box := UiKit.vbox(2)
+	box.anchor_left = 0.0
+	box.anchor_right = 0.0
+	box.anchor_top = 0.0
+	box.anchor_bottom = 0.0
+	var left := _center_left(PROGRESS_WIDTH)
+	box.offset_left = left
+	box.offset_right = left + PROGRESS_WIDTH
+	box.offset_top = 24
+	box.offset_bottom = 24 + PROGRESS_HEIGHT
+	_root.add_child(box)
+
 	_progress = UiKit.label("", UiKit.BODY, UiKit.GOLD)
-	_progress.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
-	_progress.offset_left = 0
-	_progress.offset_right = PANEL_LEFT
 	_progress.add_theme_font_size_override("font_size", PROGRESS_FONT)
 	_progress.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_progress.offset_top = 32
-	_root.add_child(_progress)
+	box.add_child(_progress)
+
+	_progress_count = UiKit.label("", UiKit.BODY, UiKit.GOLD)
+	_progress_count.add_theme_font_size_override("font_size", PROGRESS_SUB_FONT)
+	_progress_count.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(_progress_count)
 
 
-## Docked under the platform rather than beside it: centred in the same free-space region
-## the camera already centres the animal in (see CAMERA_SHIFT's math), computed the same
-## dynamic way _lens_shift() reads the actual viewport rather than assuming a fixed window
-## size. The panel itself starts hidden - see SpeechPanel.show_idle() - and only appears
-## once a card is picked.
+## Docked under the platform rather than beside it, centred through _center_left() - the
+## same free-space region the camera already centres the animal in. The panel itself starts
+## hidden - see SpeechPanel.show_idle() - and only appears once a card is picked.
 func _build_say_it_dock() -> void:
 	_speech = SpeechPanel.new()
-	var view_width := get_viewport().get_visible_rect().size.x
-	var free_width: float = view_width + PANEL_LEFT ## PANEL_LEFT is negative.
-	var left := maxf(0.0, (free_width - SAY_IT_WIDTH) * 0.5)
+	var left := _center_left(SAY_IT_WIDTH)
 	_speech.anchor_left = 0.0
 	_speech.anchor_right = 0.0
 	_speech.anchor_top = 1.0
@@ -501,9 +554,10 @@ func _sync_ui() -> void:
 	if Game.current == null:
 		return
 	var assigned := _assigned_category()
-	var text := "Before (%d of %d)" % [mini(Game.current.slots_filled() + 1, CreatureState.SLOTS), CreatureState.SLOTS]
 	if _progress != null:
-		_progress.text = text
+		_progress.text = "Before"
+	if _progress_count != null:
+		_progress_count.text = "(%d of %d)" % [mini(Game.current.slots_filled() + 1, CreatureState.SLOTS), CreatureState.SLOTS]
 
 	_word_lab.set_used(Game.current.used_categories())
 	_word_lab.set_restriction(assigned)

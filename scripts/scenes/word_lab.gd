@@ -8,12 +8,19 @@ extends PanelContainer
 
 signal pair_selected(category: String, before: String, after: String)
 
-## One size for both grids: a pair card (two words) and a colour swatch (one word) occupy
-## the same footprint, so the board reads as one system of equally weighted choices rather
-## than two different densities stacked on top of each other.
-const WORD_CARD_SIZE := Vector2(180, 70)
+## The visible unit is one word, not one pair: a pair "card" has no border of its own, so
+## what a player actually sees is two individual word buttons sitting close together. A
+## colour swatch is the same kind of thing - one word, one tap - so it is sized to that
+## same unit rather than to the wider two-word pair. WORD_UNIT is that shared size;
+## PAIR_CARD_SIZE is derived from it so a pair card is exactly two units plus the gap
+## between them, never independently tuned.
+const WORD_UNIT := Vector2(82, 54)
+const PAIR_GAP := 8 ## Between the two words inside one pair card.
+const PAIR_PADDING := 6
+const PAIR_CARD_SIZE := Vector2(WORD_UNIT.x * 2 + PAIR_GAP + PAIR_PADDING * 2, WORD_UNIT.y + PAIR_PADDING * 2)
 const PAIR_COLUMNS := 3
-const COLOR_COLUMNS := 3 ## Matches PAIR_COLUMNS, so both grids line up at the same width.
+const COLOR_COLUMNS := 6 ## Narrower cells than the pair grid's 3, since each is one word
+                        ## wide (WORD_UNIT) rather than a pair card's two.
 
 var _pair_buttons := {} ## "category|word" -> Button
 var _color_buttons := {} ## word -> Button
@@ -52,16 +59,14 @@ func _build_pairs() -> Control:
 	var grid := GridContainer.new()
 	grid.columns = PAIR_COLUMNS
 	grid.add_theme_constant_override("h_separation", 16)
-	grid.add_theme_constant_override("v_separation", 20)
+	grid.add_theme_constant_override("v_separation", 22)
 
 	for pair in Content.enabled_pairs():
-		var card := UiKit.panel(Color("#101a2b"), 10, 0, Color.TRANSPARENT, 8)
-		card.custom_minimum_size = WORD_CARD_SIZE
-		var row := UiKit.hbox(4)
+		var card := UiKit.panel(Color("#101a2b"), 10, 0, Color.TRANSPARENT, PAIR_PADDING)
+		card.custom_minimum_size = PAIR_CARD_SIZE
+		var row := UiKit.hbox(PAIR_GAP)
 		card.add_child(row)
 		row.add_child(_word_button(pair, pair.word_a))
-		row.add_child(UiKit.spacer(12)) ## A gap rather than a "/" - simpler, and there is
-		## no glyph the web export's font is guaranteed to carry that reads better.
 		row.add_child(_word_button(pair, pair.word_b))
 		grid.add_child(card)
 		_cards[pair.category] = card
@@ -70,8 +75,9 @@ func _build_pairs() -> Control:
 
 func _word_button(pair: TraitDefinition, word: String) -> Button:
 	var b := UiKit.button(word, UiKit.SMALL)
-	b.custom_minimum_size = Vector2(66, 52)
-	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	# Fixed, not stretched: PAIR_CARD_SIZE is built to hold exactly two of these plus
+	# PAIR_GAP between them, so there is never slack for size_flags to expand into.
+	b.custom_minimum_size = WORD_UNIT
 	b.pressed.connect(func() -> void: _choose_pair(pair, word))
 	# A long press reads the pair aloud without selecting anything.
 	b.gui_input.connect(func(event: InputEvent) -> void:
@@ -85,11 +91,11 @@ func _build_colors() -> Control:
 	var grid := GridContainer.new()
 	grid.columns = COLOR_COLUMNS
 	grid.add_theme_constant_override("h_separation", 16)
-	grid.add_theme_constant_override("v_separation", 20)
+	grid.add_theme_constant_override("v_separation", 22)
 
 	for swatch in Content.enabled_colors():
 		var b := UiKit.button(swatch.word, UiKit.SMALL)
-		b.custom_minimum_size = WORD_CARD_SIZE
+		b.custom_minimum_size = WORD_UNIT
 		UiKit.style_button(b, swatch.color)
 		b.add_theme_color_override("font_color", swatch.label_color())
 		b.add_theme_color_override("font_hover_color", swatch.label_color())
@@ -170,7 +176,7 @@ func _refresh() -> void:
 		var done: bool = _used.has(str(category))
 		card.add_theme_stylebox_override("panel",
 			UiKit.stylebox(Color("#0d1524") if done else Color("#101a2b"), 10,
-				2 if done else 0, UiKit.OK.darkened(0.5), 8))
+				2 if done else 0, UiKit.OK.darkened(0.5), PAIR_PADDING))
 	_refresh_colors()
 
 

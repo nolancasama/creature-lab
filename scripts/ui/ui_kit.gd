@@ -14,6 +14,11 @@ const ACCENT := Color("#4fd1ff")
 const GOLD := Color("#ffd166")
 const OK := Color("#6ee7a0")
 const BAD := Color("#ff8080")
+## Reserved for the one or two actions that actually move the lesson forward (Start, the
+## mic). Everything else in the palette is chrome - ACCENT included, which is already the
+## standing colour of headers and the progress line - so a call-to-action needs a colour
+## that never appears anywhere else on screen.
+const CTA := Color("#ff8c42")
 const TEXT := Color("#e8f0fa")
 const MUTED := Color("#93a6bf")
 

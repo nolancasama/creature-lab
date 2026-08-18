@@ -72,15 +72,12 @@ func _build() -> void:
 	_listen_button.pressed.connect(func() -> void: Tts.speak(_target_sentence()))
 	header.add_child(_listen_button)
 
-	# Two expanders around the sentence, rather than a fixed spacer, so it lands centred
-	# between the header and the entry/mic block below regardless of how tall this panel
-	# is given - the same class is a short dock under the platform and the tall centred
-	# panel of the present-tense pass.
-	column.add_child(UiKit.expander())
+	# No expander below the sentence any more: the panel is sized to hug its content now
+	# (SAY_IT_HEIGHT in animal_selection.gd), so a flexible gap here would just be empty
+	# space with nothing to fill. The vbox's own separation is the only gap left.
 	_sentence_label = UiKit.rich("", UiKit.H2)
 	_sentence_label.custom_minimum_size = Vector2(0, 60)
 	column.add_child(_sentence_label)
-	column.add_child(UiKit.expander())
 
 	_entry = UiKit.line_edit("Type the sentence, then press Enter")
 	_entry.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -93,6 +90,9 @@ func _build() -> void:
 	column.add_child(_feedback)
 
 	_mic_button = UiKit.button(MIC_IDLE, UiKit.H3, true)
+	UiKit.style_button(_mic_button, UiKit.CTA, true) ## The call-to-action colour, not the
+	## ambient ACCENT the "true" flag would otherwise apply - _on_listening_changed()
+	## switches it to OK while actually listening and back to this otherwise.
 	_mic_button.icon = MIC_ICON
 	_mic_button.custom_minimum_size = Vector2(0, 60)
 	_mic_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -133,6 +133,10 @@ func _build() -> void:
 		Audio.play("success")
 		accepted_by_teacher.emit())
 	column.add_child(_override_button)
+
+	# Last child regardless of what is visible above it, so Cancel (or the override button,
+	# on the rare round that reaches it) never sits flush against the panel's bottom edge.
+	column.add_child(UiKit.spacer(16))
 
 	_sync_input_mode()
 
@@ -288,7 +292,7 @@ func _on_listening_changed(listening: bool) -> void:
 	else:
 		_listen_timer.stop()
 	_mic_button.text = MIC_LISTENING if listening else MIC_IDLE
-	UiKit.style_button(_mic_button, UiKit.OK if listening else UiKit.ACCENT, true)
+	UiKit.style_button(_mic_button, UiKit.OK if listening else UiKit.CTA, true)
 
 
 func _unhandled_input(event: InputEvent) -> void:
