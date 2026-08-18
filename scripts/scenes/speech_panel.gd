@@ -72,12 +72,15 @@ func _build() -> void:
 	_listen_button.pressed.connect(func() -> void: Tts.speak(_target_sentence()))
 	header.add_child(_listen_button)
 
-	# No expander below the sentence any more: the panel is sized to hug its content now
-	# (SAY_IT_HEIGHT in animal_selection.gd), so a flexible gap here would just be empty
-	# space with nothing to fill. The vbox's own separation is the only gap left.
+	# Two expanders, not a fixed spacer, so the sentence centres between the header and the
+	# entry/mic block below however much slack the panel actually has - SAY_IT_HEIGHT
+	# carries a deliberate margin above the tight-content minimum for exactly this, and the
+	# present-tense pass's taller modal has plenty of its own regardless.
+	column.add_child(UiKit.expander())
 	_sentence_label = UiKit.rich("", UiKit.H2)
 	_sentence_label.custom_minimum_size = Vector2(0, 60)
 	column.add_child(_sentence_label)
+	column.add_child(UiKit.expander())
 
 	_entry = UiKit.line_edit("Type the sentence, then press Enter")
 	_entry.size_flags_horizontal = Control.SIZE_EXPAND_FILL

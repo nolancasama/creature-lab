@@ -44,15 +44,16 @@ const PANEL_TOP := HUD_TOP + GEAR_BUTTON_SIZE + HUD_GAP ## Clears the gear, now 
 const PANEL_BOTTOM := -24 ## Tighter than the top margin: the height lost to the HUD row
                           ## above comes back here, so the Word Lab still shows every card.
 const PANEL_WIDTH := -PANEL_LEFT + PANEL_RIGHT ## 648 - the rect's actual width.
-## The centred present-tense panel. Height hugs content the same way SAY_IT_HEIGHT does -
-## SpeechPanel no longer has an internal expander to fill leftover space with, now that the
-## docked Say It panel needs it to hug its own content, so a modal reusing that same class
-## has to be sized to match or it just leaves a blank band at the bottom.
+## The centred present-tense panel. Tall enough on its own that SpeechPanel's internal
+## centring expanders (see its _build()) already have real slack to work with here without
+## any extra tuning.
 const PRESENT_SIZE := Vector2(720, 360)
 const SAY_IT_WIDTH := 540 ## 720 less a quarter - the docked panel below the platform.
-const SAY_IT_HEIGHT := 300 ## Content-hugging - see SpeechPanel's own layout notes for why
-                           ## there is no expander left inside it to fill beyond this; hand-
-                           ## summed the same way PICKING_PANEL_HEIGHT is, then checked.
+## Tight-content minimum is ~298 (hand-summed the same way PICKING_PANEL_HEIGHT is); this
+## carries roughly 50px past that on purpose, so SpeechPanel's two expanders have slack to
+## centre the sentence between the header and the entry/mic block instead of collapsing to
+## nothing.
+const SAY_IT_HEIGHT := 350
 const SAY_IT_BOTTOM_MARGIN := 24
 
 ## Content-hugging rather than the tall shared rect: three animal-button rows plus Start,
@@ -161,6 +162,10 @@ func _build_stage() -> void:
 	_preview_root = Node3D.new()
 	_preview_root.name = "PreviewRoot"
 	_preview_root.position = PLATFORM_POS + Vector3(0, 0.28, 0)
+	_preview_root.rotation.y = -0.7 ## Starting pose for the very first animal shown. Picking
+	## a different one later must not repeat this - see _preview(), which deliberately
+	## leaves rotation alone so the turntable keeps spinning through a switch instead of
+	## snapping back to this angle every time.
 	add_child(_preview_root)
 
 	var cam := StageKit.camera(CAMERA_POS, CAMERA_AIM, CAMERA_FOV)
@@ -308,8 +313,9 @@ func _preview(animal_id: String) -> void:
 	Audio.play("select")
 
 	_build_rig(animal_id)
-	_preview_root.rotation.y = -0.7
-
+	# No rotation reset here: _preview_root is one persistent node the whole time the
+	# picking grid is up, only the rig child underneath it gets swapped, so the turntable
+	# is already exactly where it needs to be to continue uninterrupted.
 	for id in _buttons:
 		var b: Button = _buttons[id]
 		UiKit.style_button(b, UiKit.ACCENT if id == animal_id else UiKit.PANEL_HI, id == animal_id)
