@@ -265,7 +265,7 @@ static func _apply_age(rig: CreatureRig, value: float, mid: float, animate := fa
 	var head := _bone_point(rig, "head_top", Vector3(0, rig.definition.stand_height * 0.9, 0))
 	YoungKit.apply(rig, head, head_scale)
 
-	rig.tint_role("skin", def.skin_color.lightened(0.45), 0.28)
+	rig.tint_role("skin", def.young_tint(), 0.32)
 	rig.tempo *= 1.25
 
 	# Once, on becoming young - not on every re-apply of an unchanged trait set, and not

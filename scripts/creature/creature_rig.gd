@@ -204,6 +204,7 @@ func _reset_material() -> void:
 	material.set_shader_parameter("emission_flicker", 0.0)
 	material.set_shader_parameter("roughness_value", 0.85)
 	material.set_shader_parameter("metallic_value", 0.0)
+	material.set_shader_parameter("cheek_amount", 0.0)
 	set_weak_mesh({})
 
 
@@ -463,6 +464,28 @@ func pulse_emission(peak: float, settle: float, duration: float) -> void:
 		settle, peak, duration * 0.25).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 	tween.tween_method(func(v: float) -> void: material.set_shader_parameter("emission_energy", v),
 		peak, settle, duration * 0.75).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+
+
+## Where a point in normalised body space lands in the mesh's own model space - the space
+## the shader's VERTEX (and so its cheek centres) live in. Sockets, accessories and every
+## trait offset are authored in body space, which is the model scaled by _normal_scale and
+## lifted onto the floor, so anything handed to the shader has to come back out of it.
+func to_model_space(body_point: Vector3) -> Vector3:
+	if _model_root == null or is_zero_approx(_normal_scale):
+		return body_point
+	return (body_point - _model_root.position) / _normal_scale
+
+
+## YOUNG's blush. Centres and radius arrive in body space and are converted here, so
+## callers never have to know the model's internal scale.
+func set_cheeks(left: Vector3, right: Vector3, radius: float, color: Color, amount: float) -> void:
+	if material == null:
+		return
+	material.set_shader_parameter("cheek_left", to_model_space(left))
+	material.set_shader_parameter("cheek_right", to_model_space(right))
+	material.set_shader_parameter("cheek_radius", maxf(radius / maxf(_normal_scale, 0.0001), 0.0001))
+	material.set_shader_parameter("cheek_colour", color)
+	material.set_shader_parameter("cheek_amount", clampf(amount, 0.0, 1.0))
 
 
 func set_surface(role: String, roughness: float, metallic: float) -> void:

@@ -51,8 +51,20 @@ uniform vec3 rib_size = vec3(1.0);
 uniform float rib_count : hint_range(3.0, 5.0) = 4.0;
 uniform float rib_depth : hint_range(0.0, 0.08) = 0.02;
 
+// YOUNG's rosy cheeks. Painted into the surface rather than stuck on it as geometry: a
+// blush is a marking, and a flattened ball of pink parked on the muzzle read as something
+// growing out of the face. Two model-space centres with a soft radial falloff, so the
+// patch follows the head wherever the skinning puts it and curves with the cheek instead
+// of hovering flat against it.
+uniform float cheek_amount : hint_range(0.0, 1.0) = 0.0;
+uniform vec4 cheek_colour : source_color = vec4(1.0, 0.62, 0.77, 1.0);
+uniform vec3 cheek_left = vec3(0.0);
+uniform vec3 cheek_right = vec3(0.0);
+uniform float cheek_radius = 0.001;
+
 varying float model_height;
 varying float rib_groove;
+varying vec3 model_pos;
 
 void vertex() {
 	// VERTEX is model space here, which is what the sweep needs; in fragment() it would
@@ -99,6 +111,10 @@ void vertex() {
 	rib_groove = weak_rib_amount * vertical_mask * side_mask * depth_mask * bands;
 	VERTEX -= NORMAL * rib_groove * rib_depth;
 	model_height = VERTEX.y;
+	// Carried to fragment() so the blush can be evaluated per pixel: computing its falloff
+	// here instead would interpolate across these very low-poly faces and turn a round
+	// patch into a faceted one.
+	model_pos = VERTEX;
 }
 
 void fragment() {
@@ -116,6 +132,16 @@ void fragment() {
 	// Just enough occlusion/roughness variation to make the genuine shallow geometry
 	// readable at normal camera distance. With weak_rib_amount == 0 this is neutral.
 	albedo *= 1.0 - rib_groove * 0.12;
+
+	// Rosy cheeks, painted over whatever colour the creature ended up. Applied AFTER the
+	// recolour and the wash on purpose: a blush sits on top of the skin, so a blue young
+	// animal still has pink cheeks rather than blue-tinted ones.
+	float blush = 0.0;
+	if (cheek_amount > 0.0) {
+		float near = min(length(model_pos - cheek_left), length(model_pos - cheek_right));
+		blush = (1.0 - smoothstep(0.45, 1.0, near / max(cheek_radius, 0.0001))) * cheek_amount;
+		albedo = mix(albedo, cheek_colour.rgb, blush * 0.85);
+	}
 
 	// How hardened this particular fragment is: 1 below the travelling edge, 0 above.
 	float hardened = hardness * smoothstep(harden_edge + harden_width, harden_edge - harden_width, model_height);

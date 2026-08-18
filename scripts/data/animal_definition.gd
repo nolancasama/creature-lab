@@ -68,13 +68,14 @@ extends Resource
 ## odd angle, not to be filled in seven times. Keys, all optional:
 ##   head_scale   float  - how much larger the head bone gets.
 ##   cheek        {size, spacing, forward, down}
-##   pacifier     {size, forward, down}
-##   bib          {size (Vector3), forward, down}
+##   pacifier     {size, forward, down, tilt}  - tilt in degrees, negative = nose-down
 ##
-## Every distance is a MULTIPLE of face_reach() - the same unit the built-in defaults are
-## written in - so an override reads on the same scale as the value it replaces, and a
-## chicken and a horse can share one number. `up` and `down` may be negative to reach a
-## head that is carried at an angle.
+##   tint         "#rrggbb" - the young coat colour; defaults to a lightened skin colour.
+##
+## Every distance is a MULTIPLE of CreatureRig.muzzle_reach() - the same unit the built-in
+## defaults are written in - so an override reads on the same scale as the value it
+## replaces, and a chicken and a horse can share one number. `down` may be negative to
+## reach a head that is carried at an angle.
 @export var young: Dictionary = {}
 
 
@@ -149,25 +150,17 @@ func socket_offset(socket_name: String) -> Vector3:
 
 # --- YOUNG tuning ------------------------------------------------------------
 #
-# Read through one pair of accessors so TraitVisuals never branches on species. Every
-# value falls back to something derived from this animal's own proportions: `face_reach()`
-# is how far its muzzle sticks out, which is the one measurement that separates a horse
-# from a chicken, and stand_height scales everything vertical. A species only needs an
-# entry in `young` when those two are not enough.
-
-## How far the face socket sits in front of the head bone - the muzzle's reach. Falls back
-## to a fraction of stand height for an animal with no face socket authored at all.
-func face_reach() -> float:
-	var reach := socket_offset("face").z
-	return reach if reach > 0.001 else stand_height * 0.14
-
+# Read through these accessors so TraitVisuals never branches on species. Distances fall
+# back to fractions of the muzzle length the rig measures off the model itself, so a
+# species only needs an entry in `young` when that measurement is not enough - a head
+# carried at an angle, or a coat that should not simply be its adult colour lightened.
 
 func young_head_scale() -> float:
 	return float(young.get("head_scale", 1.30))
 
 
-## `group` is eye | cheek | pacifier | bib; `key` a field inside it. Both the override and
-## `fallback` are multiples of face_reach(), which the caller applies - so the two are
+## `group` is cheek | pacifier; `key` a field inside it. Both the override and `fallback`
+## are multiples of the measured muzzle length, which the caller applies - so the two are
 ## always in the same unit and an override can be read against the default it replaces.
 func young_value(group: String, key: String, fallback: float) -> float:
 	var cfg = young.get(group, {})
@@ -176,8 +169,10 @@ func young_value(group: String, key: String, fallback: float) -> float:
 	return fallback
 
 
-func young_size(group: String, key: String, fallback: Vector3) -> Vector3:
-	var cfg = young.get(group, {})
-	if cfg is Dictionary and (cfg as Dictionary).has(key):
-		return BodyPartSpec.to_v3((cfg as Dictionary)[key], fallback)
-	return fallback
+## The coat a young animal wears. Most species just lighten toward their adult colour, but
+## that is wrong for a chick (yellow down, not a pale hen) and for a penguin chick (grey-
+## white fluff, not a washed-out tuxedo), so it is overridable.
+func young_tint() -> Color:
+	if young.has("tint"):
+		return Color.html(str(young["tint"]))
+	return skin_color.lightened(0.45)
