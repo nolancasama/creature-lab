@@ -66,6 +66,7 @@ func _build_library() -> void:
 	_library["clang"] = _clang()
 	_library["boing"] = _boing()
 	_library["puff"] = _blip(340.0, 620.0, 0.34, 0.18)
+	_library["baby"] = _coo()
 
 
 ## A decaying sine that glides from one pitch to another - the workhorse UI sound.
@@ -151,6 +152,41 @@ func _clang() -> AudioStreamWAV:
 			var decay: float = exp(-t * (5.0 + ratio * 2.2))
 			value += sin(TAU * 320.0 * ratio * t) * decay / float(p_index + 2)
 		samples[i] = clampf(value, -1.0, 1.0) * 0.55 * pow(1.0 - progress, 0.4)
+	return _to_wav(samples)
+
+
+## The YOUNG cue: two short rising chirps, the second a little higher than the first, with
+## a light vibrato. Deliberately a playful squeak rather than anything resembling an infant
+## crying - this fires every time a student turns a creature young, so it has to stay
+## welcome on the twentieth hearing in a classroom. Kept brief and quiet for the same
+## reason: it greets the change, it does not announce it.
+func _coo() -> AudioStreamWAV:
+	var syllables := [
+		{"from": 620.0, "to": 880.0, "seconds": 0.11},
+		{"from": 780.0, "to": 1080.0, "seconds": 0.13},
+	]
+	var gap := int(MIX_RATE * 0.035)
+	var total := gap
+	for s in syllables:
+		total += int(MIX_RATE * float(s["seconds"])) + gap
+	var samples := PackedFloat32Array()
+	samples.resize(total)
+	var index := gap ## A beat of silence first, so it never clips the tap that caused it.
+	for s in syllables:
+		var count := int(MIX_RATE * float(s["seconds"]))
+		var phase := 0.0
+		for i in count:
+			var t := float(i) / float(count)
+			# Vibrato is what makes it read as a voice rather than a UI beep.
+			var hz: float = lerpf(float(s["from"]), float(s["to"]), sqrt(t)) \
+				* (1.0 + sin(t * TAU * 7.0) * 0.035)
+			phase += TAU * hz / float(MIX_RATE)
+			# Rounded in and out: a hard attack on a high sine is what stings the ear.
+			var envelope: float = sin(PI * t)
+			# A quiet second harmonic softens the tone without muddying it.
+			samples[index] = (sin(phase) * 0.82 + sin(phase * 2.0) * 0.18) * envelope * 0.30
+			index += 1
+		index += gap
 	return _to_wav(samples)
 
 

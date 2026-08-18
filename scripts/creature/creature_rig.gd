@@ -56,6 +56,7 @@ const ROLE_FALLBACKS := {
 
 var definition: AnimalDefinition = null
 var body: Node3D = null ## Trait scaling lives here.
+var accessory_root: Node3D = null ## Worn items (YOUNG's bib, pacifier); inherits body scale.
 var fx_root: Node3D = null
 var thermal_fx_root: Node3D = null ## HOT/COLD's particle systems - see thermal_applied.
 var skeleton: Skeleton3D = null
@@ -86,6 +87,11 @@ var shiver_roll := 0.0
 ## needless rebuild produces. TraitVisuals checks this before touching
 ## thermal_fx_root, so an unchanged HOT/COLD is left running untouched.
 var thermal_applied := NAN
+## Whether YOUNG's accessories are currently on. Survives reset_modifiers() for the same
+## reason thermal_applied does: every card tap re-applies the whole committed trait set,
+## and the baby sound must greet the student once when the creature becomes young - not
+## again on every unrelated tap that happens afterwards.
+var young_applied := false
 var moving := false ## Zoo creatures set this to swing their legs.
 
 var _model_root: Node3D = null
@@ -111,6 +117,12 @@ func _build(def: AnimalDefinition) -> void:
 	body = Node3D.new()
 	body.name = "Body"
 	add_child(body)
+	# Deliberately under Body, unlike fx_root: accessories are worn, so they have to
+	# inherit whatever scale SIZE gave the animal. A bib parented beside Body instead of
+	# inside it would stay its own size while a BIG creature grew out from under it.
+	accessory_root = Node3D.new()
+	accessory_root.name = "Accessories"
+	body.add_child(accessory_root)
 	fx_root = Node3D.new()
 	fx_root.name = "Fx"
 	add_child(fx_root)
@@ -393,6 +405,7 @@ func reset_modifiers() -> void:
 		feel.reset()
 	_reset_material()
 	clear_fx()
+	clear_accessories()
 
 
 func scale_body(factor: Vector3) -> void:
@@ -505,6 +518,29 @@ func material_for(role: String) -> StandardMaterial3D:
 	return mat
 
 
+## Worn accessories, in the same normalised space as the sockets. Cleared and rebuilt on
+## every apply_all like the rest of the trait surface - these are a handful of static
+## primitives, so unlike the thermal particle systems there is nothing expensive to
+## preserve across a rebuild.
+func add_accessory(node: Node3D, at := Vector3.ZERO) -> void:
+	node.position = at
+	accessory_root.add_child(node)
+
+
+func clear_accessories() -> void:
+	if accessory_root == null:
+		return
+	for child in accessory_root.get_children():
+		accessory_root.remove_child(child)
+		child.queue_free()
+
+
+## Pose-scale one named bone. YOUNG uses this for the head; keeping it public means
+## TraitVisuals never reaches into the skeleton itself.
+func scale_bone(bone: String, factor: Vector3) -> void:
+	_scale_bones(PackedStringArray([bone]), factor)
+
+
 func add_fx(node: Node3D, at := Vector3.ZERO) -> void:
 	node.position = at
 	fx_root.add_child(node)
@@ -534,6 +570,27 @@ func clear_thermal_fx() -> void:
 
 
 ## Roughly where the top of the creature is right now, for labels and camera framing.
+## How far the muzzle reaches in front of the head bone, measured from the model itself
+## rather than inferred from an authored socket offset.
+##
+## The `face` socket's offset is a hand-tuned mounting point for fantasy parts; its
+## magnitude happens to track head size on most species but is wildly wrong on some - the
+## tiger's is 0.22 against a muzzle that actually runs 0.76 in front of its head bone, so
+## accessories sized from it ended up buried inside the skull. The models all face -Z, so
+## the front of the mesh AABB is the nose (or beak), and the gap between that and the head
+## bone is the real measurement every species can be sized against.
+func muzzle_reach() -> float:
+	if mesh_instance == null or skeleton == null or definition == null:
+		return definition.stand_height * 0.25 if definition != null else 0.25
+	var head_bone := definition.socket_bone("head_top")
+	var idx := skeleton.find_bone(head_bone)
+	if idx == -1:
+		return definition.stand_height * 0.25
+	var head_z := skeleton.get_bone_global_rest(idx).origin.z * _normal_scale
+	var front_z := mesh_instance.get_aabb().position.z * _normal_scale
+	return maxf(head_z - front_z, definition.stand_height * 0.08)
+
+
 func crown_height() -> float:
 	var deform_lift: float = deformer.lift if deformer != null else 0.0
 	return definition.stand_height * _trait_scale.y + deform_lift

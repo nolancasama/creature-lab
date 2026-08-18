@@ -9,6 +9,9 @@ extends RefCounted
 ##   godot --path . -- --backtest          abandon a half-finished round, then restart it
 ##   godot --path . -- --splittest         the SAY_SPLIT present-tense pass, end to end
 ##   godot --path . -- --shot=present      the centred present-tense panel
+##   godot --path . -- --look=young        one creature wearing one trait word, then quit
+##   godot --path . -- --look=young:horse  the same, on a named animal
+##   godot --path . -- --look=young+big    several traits stacked on one creature
 
 const SHOT_DELAY := 1.6
 
@@ -26,7 +29,7 @@ static func is_requested() -> bool:
 	for arg in OS.get_cmdline_user_args():
 		var text := str(arg)
 		if text in ["--selftest", "--autoplay", "--backtest", "--splittest"] \
-				or text.begins_with("--shot=") or text.begins_with("--phase="):
+				or text.begins_with("--shot=") or text.begins_with("--phase=") or text.begins_with("--look="):
 			return true
 	return false
 
@@ -35,6 +38,7 @@ static func run_if_requested(main: Node) -> void:
 	var args := OS.get_cmdline_user_args()
 	var shot := ""
 	var phase := ""
+	var look := ""
 	var selftest := false
 	for arg in args:
 		var text := str(arg)
@@ -44,6 +48,8 @@ static func run_if_requested(main: Node) -> void:
 			shot = text.substr(7)
 		elif text.begins_with("--phase="):
 			phase = text.substr(8)
+		elif text.begins_with("--look="):
+			look = text.substr(7)
 
 	if selftest:
 		_selftest(main)
@@ -54,6 +60,8 @@ static func run_if_requested(main: Node) -> void:
 		_backtest(main)
 	elif args.has("--splittest"):
 		_splittest(main)
+	elif not look.is_empty():
+		_look(main, look)
 	elif not shot.is_empty():
 		_screenshot(main, shot)
 	elif not phase.is_empty():
@@ -220,6 +228,42 @@ static func _splittest(main: Node) -> void:
 	print("[splittest] ended in phase %s" % Game.Phase.keys()[Game.phase])
 	print("[splittest] PASS" if ok else "[splittest] FAIL: expected NAMING")
 	tree.quit(0 if ok else 1)
+
+
+## Renders one creature wearing one trait, so a look can actually be seen rather than
+## inferred from the code that builds it. `spec` is a trait word, optionally "word:animal"
+## - "young", "young:horse", "cold:penguin". The word is committed as the creature's BEFORE
+## trait, which is exactly the state the platform shows during recording.
+static func _look(main: Node, spec: String) -> void:
+	var tree := main.get_tree()
+	var parts := spec.split(":")
+	var words := str(parts[0]).split("+") ## "young+big" stacks two traits on one creature.
+	var ids := Content.animal_ids()
+	if ids.is_empty():
+		printerr("[look] FAIL: no animals")
+		tree.quit(1)
+		return
+	var animal_id: String = str(parts[1]) if parts.size() > 1 else ("dog" if ids.has("dog") else str(ids[0]))
+
+	Game.begin_creature(animal_id)
+	for word in words:
+		var found: TraitDefinition = null
+		for pair in Content.enabled_pairs():
+			if pair.word_a == str(word) or pair.word_b == str(word):
+				found = pair
+				break
+		if found == null:
+			printerr("[look] FAIL: no trait pair contains '%s'" % word)
+			tree.quit(1)
+			return
+		Game.record_sentence(found.category, str(word), found.opposite_of(str(word)))
+	Game.set_phase(Game.Phase.ANIMAL_SELECTION)
+	await tree.create_timer(SHOT_DELAY).timeout
+	await RenderingServer.frame_post_draw
+	var path := "user://look_%s_%s.png" % [str(parts[0]).replace("+", "_"), animal_id]
+	main.get_viewport().get_texture().get_image().save_png(path)
+	print("[look] %s on %s -> %s" % [str(parts[0]), animal_id, ProjectSettings.globalize_path(path)])
+	tree.quit(0)
 
 
 static func _find_button(node: Node, text: String) -> Button:

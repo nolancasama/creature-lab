@@ -48,6 +48,7 @@ static func apply_all(rig: CreatureRig, traits: Dictionary, animate := false) ->
 	# Colour last: it repaints roles that other modifiers may have tinted.
 	var color_word := ""
 	var saw_thermal := false
+	var saw_age := false
 	for category in traits:
 		var word := str(traits[category])
 		if str(category) == Content.COLOR_CATEGORY:
@@ -67,6 +68,8 @@ static func apply_all(rig: CreatureRig, traits: Dictionary, animate := false) ->
 		else:
 			if pair.modifier == "THERMAL":
 				saw_thermal = true
+			elif pair.modifier == "AGE":
+				saw_age = true
 			_apply_pair(rig, str(category), word, animate)
 	if not color_word.is_empty():
 		_apply_color(rig, color_word)
@@ -75,6 +78,10 @@ static func apply_all(rig: CreatureRig, traits: Dictionary, animate := false) ->
 	if not saw_thermal and not is_nan(rig.thermal_applied):
 		rig.clear_thermal_fx()
 		rig.thermal_applied = NAN
+	# The accessories are already gone with reset_modifiers(); this clears the flag that
+	# remembers they were there, so re-picking young greets the student again.
+	if not saw_age:
+		rig.young_applied = false
 
 	if rig.deformer != null:
 		if animate:
@@ -119,7 +126,7 @@ static func _apply_pair(rig: CreatureRig, category: String, word: String, animat
 		"THERMAL":
 			_apply_thermal(rig, value, mid, animate)
 		"AGE":
-			_apply_age(rig, value, mid)
+			_apply_age(rig, value, mid, animate)
 		"SURFACE":
 			_apply_surface(rig, value, mid)
 
@@ -231,16 +238,40 @@ static func _bone_point(rig: CreatureRig, socket: String, fallback: Vector3) -> 
 	return node.position - rig.definition.socket_offset(socket)
 
 
-static func _apply_age(rig: CreatureRig, value: float, mid: float) -> void:
+## YOUNG must never touch overall size - see YoungKit for why, and for what it builds
+## instead. OLD keeps its slight stoop: that is a posture, and the student reads it as
+## age rather than as the SMALL card.
+static func _apply_age(rig: CreatureRig, value: float, mid: float, animate := false) -> void:
+	var was_young := rig.young_applied
+	rig.young_applied = value <= 0.5
+
 	if value > 0.5: # old
 		rig.tint_role("skin", AGED, 0.32)
 		rig.scale_body(Vector3(1.0, 0.94, 1.0)) # a little stooped
 		rig.tempo *= 0.75
 		rig.add_fx(Fx.make("dust", Color("#c9c2b4"), 0.6), Vector3(0, mid * 0.5, 0))
-	else: # young
-		rig.scale_body(Vector3(0.92, 0.86, 0.92))
-		rig.tint_role("skin", rig.definition.skin_color.lightened(0.45), 0.28)
-		rig.tempo *= 1.25
+		return
+
+	# young
+	var def := rig.definition
+	var head_scale := def.young_head_scale()
+	var head_bone := def.socket_bone("head_top")
+	if not head_bone.is_empty():
+		# Scaling the one head bone, not the body. Verified against all seven skeletons:
+		# the head_top socket's bone is the skull on every species, carrying at most the
+		# jaw and ears with it, so nothing below the neck moves.
+		rig.scale_bone(head_bone, Vector3.ONE * head_scale)
+
+	var head := _bone_point(rig, "head_top", Vector3(0, rig.definition.stand_height * 0.9, 0))
+	YoungKit.apply(rig, head, head_scale)
+
+	rig.tint_role("skin", def.skin_color.lightened(0.45), 0.28)
+	rig.tempo *= 1.25
+
+	# Once, on becoming young - not on every re-apply of an unchanged trait set, and not
+	# in the zoo or the ghost, which render finished creatures without animating into them.
+	if animate and not was_young:
+		Audio.play("baby", def.voice_pitch)
 
 
 static func _apply_surface(rig: CreatureRig, value: float, mid: float) -> void:

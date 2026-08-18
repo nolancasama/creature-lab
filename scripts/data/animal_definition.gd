@@ -62,6 +62,21 @@ extends Resource
 @export var voice_pitch: float = 1.0
 @export var hover: float = 0.0 ## 1.0 for animals that swim instead of walk.
 
+## YOUNG tuning. Everything here has a default derived from this animal's own stand height
+## and face socket, so a new animal reads as a baby without authoring any of it - the
+## entries exist to correct species whose muzzle is unusually long or whose head sits at an
+## odd angle, not to be filled in seven times. Keys, all optional:
+##   head_scale   float  - how much larger the head bone gets.
+##   cheek        {size, spacing, forward, down}
+##   pacifier     {size, forward, down}
+##   bib          {size (Vector3), forward, down}
+##
+## Every distance is a MULTIPLE of face_reach() - the same unit the built-in defaults are
+## written in - so an override reads on the same scale as the value it replaces, and a
+## chicken and a horse can share one number. `up` and `down` may be negative to reach a
+## head that is carried at an angle.
+@export var young: Dictionary = {}
+
 
 static func from_dict(d: Dictionary) -> AnimalDefinition:
 	var a := AnimalDefinition.new()
@@ -104,6 +119,9 @@ static func from_dict(d: Dictionary) -> AnimalDefinition:
 	a.walk_speed = float(d.get("walk_speed", 1.2))
 	a.voice_pitch = float(d.get("voice_pitch", 1.0))
 	a.hover = float(d.get("hover", 0.0))
+	var young_cfg = d.get("young", {})
+	if young_cfg is Dictionary:
+		a.young = (young_cfg as Dictionary).duplicate(true)
 	return a
 
 
@@ -127,3 +145,39 @@ func socket_offset(socket_name: String) -> Vector3:
 	if sockets.has(socket_name):
 		return sockets[socket_name].get("off", Vector3.ZERO)
 	return Vector3.ZERO
+
+
+# --- YOUNG tuning ------------------------------------------------------------
+#
+# Read through one pair of accessors so TraitVisuals never branches on species. Every
+# value falls back to something derived from this animal's own proportions: `face_reach()`
+# is how far its muzzle sticks out, which is the one measurement that separates a horse
+# from a chicken, and stand_height scales everything vertical. A species only needs an
+# entry in `young` when those two are not enough.
+
+## How far the face socket sits in front of the head bone - the muzzle's reach. Falls back
+## to a fraction of stand height for an animal with no face socket authored at all.
+func face_reach() -> float:
+	var reach := socket_offset("face").z
+	return reach if reach > 0.001 else stand_height * 0.14
+
+
+func young_head_scale() -> float:
+	return float(young.get("head_scale", 1.30))
+
+
+## `group` is eye | cheek | pacifier | bib; `key` a field inside it. Both the override and
+## `fallback` are multiples of face_reach(), which the caller applies - so the two are
+## always in the same unit and an override can be read against the default it replaces.
+func young_value(group: String, key: String, fallback: float) -> float:
+	var cfg = young.get(group, {})
+	if cfg is Dictionary and (cfg as Dictionary).has(key):
+		return float((cfg as Dictionary)[key])
+	return fallback
+
+
+func young_size(group: String, key: String, fallback: Vector3) -> Vector3:
+	var cfg = young.get(group, {})
+	if cfg is Dictionary and (cfg as Dictionary).has(key):
+		return BodyPartSpec.to_v3((cfg as Dictionary)[key], fallback)
+	return fallback
