@@ -288,8 +288,8 @@ static func _seed_full_creature(ids: PackedStringArray) -> void:
 
 static func _screenshot(main: Node, phase: String) -> void:
 	# "say" is the recording screen with a card already chosen. Worth its own target
-	# because Say It looks nothing like its idle self once armed - the chips, the mic and
-	# Change card only exist in that state, and none of them can be seen from --shot=lab.
+	# because Say It is hidden entirely until armed - it, the mic, and Cancel cannot be
+	# seen from --shot=lab, which only ever shows the idle screen.
 	if phase == "present":
 		Settings.say_mode = Settings.SAY_SPLIT
 	_goto("lab" if phase in ["say", "present"] else phase)

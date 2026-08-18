@@ -6,8 +6,13 @@ extends PanelContainer
 ## that decides whether a child keeps going, so this panel implements a scaffold ladder:
 ## retry, then tell them which half was heard, then model the sentence aloud, and finally
 ## let the teacher accept it. Nothing here can dead-end a lesson.
+##
+## Hidden until there is something to say - show_idle() turns it off, show_target() turns
+## it on - so it appears the moment a card is picked and disappears the moment the sentence
+## is done, rather than sitting on screen empty between turns.
 
 signal accepted_by_teacher()
+signal change_requested()
 
 const HELP_AFTER_MODEL := 2 ## Failed attempts before the sentence is read aloud.
 const HELP_AFTER_OVERRIDE := 3 ## Failed attempts before the teacher override appears.
@@ -25,6 +30,7 @@ var _entry: LineEdit = null
 var _listen_button: Button = null
 var _listen_timer: Timer = null
 var _override_button: Button = null
+var _cancel_label: Button = null
 
 var _before := ""
 var _after := ""
@@ -66,9 +72,15 @@ func _build() -> void:
 	_listen_button.pressed.connect(func() -> void: Tts.speak(_target_sentence()))
 	header.add_child(_listen_button)
 
+	# Two expanders around the sentence, rather than a fixed spacer, so it lands centred
+	# between the header and the entry/mic block below regardless of how tall this panel
+	# is given - the same class is a short dock under the platform and the tall centred
+	# panel of the present-tense pass.
+	column.add_child(UiKit.expander())
 	_sentence_label = UiKit.rich("", UiKit.H2)
-	_sentence_label.custom_minimum_size = Vector2(0, 104)
+	_sentence_label.custom_minimum_size = Vector2(0, 60)
 	column.add_child(_sentence_label)
+	column.add_child(UiKit.expander())
 
 	_entry = UiKit.line_edit("Type the sentence, then press Enter")
 	_entry.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -77,13 +89,9 @@ func _build() -> void:
 
 	_feedback = UiKit.label("", UiKit.BODY, UiKit.MUTED)
 	_feedback.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_feedback.custom_minimum_size = Vector2(0, 44)
+	_feedback.custom_minimum_size = Vector2(0, 36)
 	column.add_child(_feedback)
 
-	# The mic sits alone at the foot of the panel, centred: it is the one thing the student
-	# is meant to reach for, and it carries the instruction now that the feedback line no
-	# longer repeats it.
-	column.add_child(UiKit.expander())
 	_mic_button = UiKit.button(MIC_IDLE, UiKit.H3, true)
 	_mic_button.icon = MIC_ICON
 	_mic_button.custom_minimum_size = Vector2(0, 60)
@@ -91,6 +99,24 @@ func _build() -> void:
 	_mic_button.add_theme_constant_override("h_separation", 10)
 	_mic_button.pressed.connect(_on_mic_pressed)
 	column.add_child(_mic_button)
+
+	# Text, not a button: cancelling is a minor, low-stakes escape hatch, not an action
+	# that deserves the mic button's visual weight. Still a real Button underneath (flat,
+	# no stylebox override) so it keeps a normal click target and hover feedback without
+	# looking like one.
+	_cancel_label = Button.new()
+	_cancel_label.text = "Cancel"
+	_cancel_label.flat = true
+	_cancel_label.focus_mode = Control.FOCUS_NONE
+	_cancel_label.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_cancel_label.add_theme_font_size_override("font_size", UiKit.SMALL)
+	_cancel_label.add_theme_color_override("font_color", UiKit.MUTED)
+	_cancel_label.add_theme_color_override("font_hover_color", UiKit.TEXT)
+	_cancel_label.add_theme_color_override("font_pressed_color", UiKit.TEXT)
+	_cancel_label.pressed.connect(func() -> void:
+		Audio.play("click")
+		change_requested.emit())
+	column.add_child(_cancel_label)
 
 	# An open microphone with no way out is the failure mode of tap-to-talk: a child who
 	# taps and then says nothing would otherwise sit in front of a listening button for
@@ -119,15 +145,18 @@ func _sync_input_mode() -> void:
 
 # --- Public API --------------------------------------------------------------
 
+## Hides the panel entirely: nothing to say means nothing to show.
 func show_idle(message := "") -> void:
 	_armed = false
 	_before = ""
 	_after = ""
+	visible = false
 	_sentence_label.text = "[center][color=#93a6bf]Choose a word card.[/color][/center]"
 	_feedback.text = message
 	_feedback.add_theme_color_override("font_color", UiKit.MUTED)
 	_override_button.visible = false
 	_listen_button.visible = false
+	_cancel_label.visible = false
 	_set_input_enabled(false)
 
 
@@ -136,6 +165,7 @@ func show_target(before: String, after: String, clause := GrammarValidator.CLAUS
 	_after = after
 	_clause = clause
 	_armed = true
+	visible = true
 	_sentence_label.text = _prompt_text()
 	if Speech.uses_microphone():
 		_feedback.text = "" ## The mic button carries the instruction now.
@@ -144,6 +174,9 @@ func show_target(before: String, after: String, clause := GrammarValidator.CLAUS
 	_feedback.add_theme_color_override("font_color", UiKit.MUTED)
 	_override_button.visible = false
 	_listen_button.visible = Tts.available() and Settings.prompt_mode != Settings.PROMPT_HIDDEN
+	# The present-tense pass has nothing to cancel back to: the pairing was fixed during
+	# the past pass that came before it, not a fresh choice made here.
+	_cancel_label.visible = clause != GrammarValidator.CLAUSE_PRESENT
 	_set_input_enabled(true)
 	if not Speech.uses_microphone():
 		_entry.grab_focus()
@@ -154,6 +187,7 @@ func show_success() -> void:
 	_feedback.text = "Yes!  %s" % _target_sentence()
 	_feedback.add_theme_color_override("font_color", UiKit.OK)
 	_override_button.visible = false
+	_cancel_label.visible = false
 	_set_input_enabled(false)
 
 

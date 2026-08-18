@@ -7,8 +7,9 @@ extends Node3D
 ## Two local UI sub-states, not global FSM phases (the FSM only sees one
 ## Phase.ANIMAL_SELECTION for all of it):
 ##   PICKING   - grid of animal buttons, live rotating preview, a confirm button.
-##   RECORDING - Word Lab + Say It stacked on the right, floating HUD, animal centred in
-##               the free space on the left.
+##   RECORDING - Word Lab fills the right panel; Say It docks below the platform and only
+##               appears once a card is picked; floating HUD; animal centred in the free
+##               space on the left.
 
 const PREVIEW_SPIN := 0.45
 const RECORDING_FACING := -PI * 0.5 ## Godot forward (-Z) turned toward screen-right.
@@ -33,13 +34,20 @@ const PANEL_LEFT := -680
 const PANEL_RIGHT := -32
 const HUD_TOP := 24 ## Top edge of the floating buttons, above the panel on both sub-states.
 const PROGRESS_FONT := UiKit.SMALL * 3 ## Readable from the back of a classroom.
-const HUD_BUTTON := 52
+const HUD_BUTTON := 52 ## Back button size.
+const GEAR_BUTTON_SIZE := HUD_BUTTON * 2 ## Doubled - settings is the one control every
+## teacher needs to find without hunting, so it gets the HUD's largest touch target.
 const GEAR_ICON := preload("res://ui/gear.svg")
-const PANEL_TOP := HUD_TOP + HUD_BUTTON + 12 ## Clears the gear rather than sitting under it.
-const PANEL_BOTTOM := -24 ## Tighter than the top margin: the height lost to the gear row
+const HUD_GAP := 24 ## Visible gap between the HUD row and the panel below it.
+const PANEL_TOP := HUD_TOP + GEAR_BUTTON_SIZE + HUD_GAP ## Clears the gear, now the taller
+                                                        ## of the two HUD buttons.
+const PANEL_BOTTOM := -24 ## Tighter than the top margin: the height lost to the HUD row
                           ## above comes back here, so the Word Lab still shows every card.
 const PANEL_WIDTH := -PANEL_LEFT + PANEL_RIGHT ## 648 - the rect's actual width.
 const PRESENT_SIZE := Vector2(720, 460) ## The centred present-tense panel.
+const SAY_IT_WIDTH := 720 ## The docked Say It panel below the platform.
+const SAY_IT_HEIGHT := 320
+const SAY_IT_BOTTOM_MARGIN := 24
 
 ## The animal sits centred in the gap beside the panel, which is always half the panel's
 ## span left of screen centre, whatever the window is doing. Applied as a lens shift - see
@@ -241,14 +249,14 @@ func _add_gear_button() -> void:
 	# which has no U+2699, and the web build has no system font to fall back on the way
 	# the desktop editor silently did - so the glyph arrived as a tofu box of hex digits.
 	# Same trap the pair separator hit; see the note in word_lab.gd.
-	var gear := UiKit.icon_button("", HUD_BUTTON)
+	var gear := UiKit.icon_button("", GEAR_BUTTON_SIZE)
 	gear.icon = GEAR_ICON
 	gear.expand_icon = true
 	gear.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
 	gear.offset_right = PANEL_RIGHT
-	gear.offset_left = PANEL_RIGHT - HUD_BUTTON
+	gear.offset_left = PANEL_RIGHT - GEAR_BUTTON_SIZE
 	gear.offset_top = HUD_TOP
-	gear.offset_bottom = HUD_TOP + HUD_BUTTON
+	gear.offset_bottom = HUD_TOP + GEAR_BUTTON_SIZE
 	gear.pressed.connect(func() -> void: Game.open_settings())
 	_root.add_child(gear)
 
@@ -417,40 +425,27 @@ func _enter_recording() -> void:
 
 
 func _build_recording_ui() -> void:
-	var right := UiKit.vbox(12)
-	right.set_anchors_and_offsets_preset(Control.PRESET_RIGHT_WIDE)
-	right.offset_left = PANEL_LEFT
-	right.offset_right = PANEL_RIGHT
-	right.offset_top = PANEL_TOP
-	right.offset_bottom = PANEL_BOTTOM
-	right.custom_minimum_size = Vector2(PANEL_WIDTH, 0)
-	_root.add_child(right)
-
-	# Word Lab has more content than a narrow column can always guarantee height for;
-	# it scrolls if needed so Say It below it never gets squeezed off-screen.
+	# Word Lab now owns the entire right panel - the same rect the picking screen's grid
+	# uses - rather than sharing it with Say It. It has more content than a fixed rect can
+	# always guarantee height for, so it still scrolls if it ever needs to.
 	var word_scroll := ScrollContainer.new()
-	word_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	word_scroll.set_anchors_and_offsets_preset(Control.PRESET_RIGHT_WIDE)
+	word_scroll.offset_left = PANEL_LEFT
+	word_scroll.offset_right = PANEL_RIGHT
+	word_scroll.offset_top = PANEL_TOP
+	word_scroll.offset_bottom = PANEL_BOTTOM
 	word_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	right.add_child(word_scroll)
+	_root.add_child(word_scroll)
 
 	_word_lab = WordLab.new()
 	_word_lab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	# Fills the height it is given rather than shrinking to its cards, which since the
-	# headings came out would have left a band of empty screen above Say It.
 	_word_lab.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_word_lab.pair_selected.connect(_on_pair_selected)
-	_word_lab.change_requested.connect(_cancel_pending)
 	word_scroll.add_child(_word_lab)
 	var animal := Content.animal(Game.current.animal_id) if Game.current != null else null
 	_word_lab.set_disabled_categories(animal.disabled_categories if animal != null else PackedStringArray())
 
-	_speech = SpeechPanel.new()
-	# Floored well below what the panel actually needs, so the Word Lab above takes the
-	# leftover height instead. The floor still exists to stop Say It resizing between
-	# sentence stages; it just no longer reserves space the cards could be using.
-	_speech.custom_minimum_size = Vector2(0, 280)
-	_speech.accepted_by_teacher.connect(func() -> void: _commit(true))
-	right.add_child(_speech)
+	_build_say_it_dock()
 
 	# Floating HUD
 	var back_btn := UiKit.icon_button("<", HUD_BUTTON)
@@ -477,6 +472,29 @@ func _build_recording_ui() -> void:
 	_progress.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_progress.offset_top = 32
 	_root.add_child(_progress)
+
+
+## Docked under the platform rather than beside it: centred in the same free-space region
+## the camera already centres the animal in (see CAMERA_SHIFT's math), computed the same
+## dynamic way _lens_shift() reads the actual viewport rather than assuming a fixed window
+## size. The panel itself starts hidden - see SpeechPanel.show_idle() - and only appears
+## once a card is picked.
+func _build_say_it_dock() -> void:
+	_speech = SpeechPanel.new()
+	var view_width := get_viewport().get_visible_rect().size.x
+	var free_width: float = view_width + PANEL_LEFT ## PANEL_LEFT is negative.
+	var left := maxf(0.0, (free_width - SAY_IT_WIDTH) * 0.5)
+	_speech.anchor_left = 0.0
+	_speech.anchor_right = 0.0
+	_speech.anchor_top = 1.0
+	_speech.anchor_bottom = 1.0
+	_speech.offset_left = left
+	_speech.offset_right = left + SAY_IT_WIDTH
+	_speech.offset_top = -(SAY_IT_HEIGHT + SAY_IT_BOTTOM_MARGIN)
+	_speech.offset_bottom = -SAY_IT_BOTTOM_MARGIN
+	_speech.accepted_by_teacher.connect(func() -> void: _commit(true))
+	_speech.change_requested.connect(_cancel_pending)
+	_root.add_child(_speech)
 
 
 func _sync_ui() -> void:
