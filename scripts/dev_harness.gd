@@ -835,8 +835,17 @@ static func _voice_checks(failures: Array[String]) -> void:
 	silence.resize(22050 * 2) ## One second, 16-bit mono.
 	probe.data = silence
 	Voice._clips[0] = probe
-	_check(failures, Voice.has_clip(0) and Voice.play(0) > 0.5,
-		"voice: a stored clip did not play back")
+	if Voice.available():
+		# Recording is switched on: a stored clip has to actually play, or the sequence
+		# would wait out its length in silence instead of speaking the sentence.
+		_check(failures, Voice.has_clip(0) and Voice.play(0) > 0.5,
+			"voice: a stored clip did not play back")
+	else:
+		# Recording is switched off, which is the shipped state. What matters then is that
+		# the recorder says so rather than pretending, so every beat falls through to the
+		# lab speaking. Silent audio that reports success is what put a mute build online.
+		_check(failures, is_zero_approx(Voice.play(0)),
+			"voice: capture is off but playback still claimed a length")
 	Voice.stop()
 	Voice.clear()
 	_check(failures, not Voice.has_clip(0),

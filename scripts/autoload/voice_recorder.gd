@@ -32,6 +32,16 @@ var _stop_guard: SceneTreeTimer = null
 
 
 func _ready() -> void:
+	# Nothing is set up at all unless audio input is switched on for the whole engine, and
+	# it is currently switched OFF. On the web export, enabling it makes Godot ask for the
+	# microphone while it is still bringing the audio driver up; when that request is
+	# pending or refused the output context never starts, and the entire game goes silent -
+	# no effects, no speech, nothing - while the recogniser carries on working, because
+	# Web Speech does not use Godot's audio at all. That shipped once. Until the capture
+	# can be opened after a user gesture instead of during driver init, this stays off and
+	# every sentence is spoken by the lab.
+	if not bool(ProjectSettings.get_setting("audio/driver/enable_input", false)):
+		return
 	_ready_to_record = _build_buses()
 	if not _ready_to_record:
 		push_warning("Voice: no audio input bus; the lab will speak the sentences instead.")
