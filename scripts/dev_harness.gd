@@ -13,6 +13,7 @@ extends RefCounted
 ##   godot --path . -- --shot=color-before sequential colour picker, Before step
 ##   godot --path . -- --shot=color-after  sequential colour picker, After step
 ##   godot --path . -- --shot=color-say    colour sentence ready to record
+##   godot --path . -- --shot=young-finish finished SHORT + YOUNG creature with pacifier
 ##   godot --path . -- --look=young        one creature wearing one trait word, then quit
 ##   godot --path . -- --look=young:horse  the same, on a named animal
 ##   godot --path . -- --look=young+big    several traits stacked on one creature
@@ -333,6 +334,12 @@ static func _goto(phase: String) -> void:
 			Game.set_phase(Game.Phase.CREATURE_LAB)
 			Game.set_phase(Game.Phase.TRANSFORMATION)
 			Game.set_phase(Game.Phase.NAMING)
+		"young-finish":
+			_seed_young_short_creature(ids)
+			Game.set_phase(Game.Phase.ANIMAL_SELECTION)
+			Game.set_phase(Game.Phase.CREATURE_LAB)
+			Game.set_phase(Game.Phase.TRANSFORMATION)
+			Game.set_phase(Game.Phase.NAMING)
 		"zoo":
 			for i in 5:
 				Game.spawn_debug_creature()
@@ -345,6 +352,14 @@ static func _seed_full_creature(ids: PackedStringArray) -> void:
 	Game.begin_creature("dog" if ids.has("dog") else ids[0])
 	Game.record_sentence("LENGTH", "long", "short")
 	Game.record_sentence("HARDNESS", "hard", "soft")
+	Game.record_sentence(Content.COLOR_CATEGORY, "red", "blue")
+	Game.current.generated_name = NameGenerator.candidates(Game.current)[0]
+
+
+static func _seed_young_short_creature(ids: PackedStringArray) -> void:
+	Game.begin_creature("dog" if ids.has("dog") else ids[0])
+	Game.record_sentence("LENGTH", "long", "short")
+	Game.record_sentence("AGE", "old", "young")
 	Game.record_sentence(Content.COLOR_CATEGORY, "red", "blue")
 	Game.current.generated_name = NameGenerator.candidates(Game.current)[0]
 
@@ -829,6 +844,32 @@ static func _selftest(main: Node) -> void:
 			"%s: fingerprint not stable through save/load" % def.id)
 		if creature != null:
 			creature.free()
+
+		# Exercise the actual finished-creature factory with the combination that exposed the
+		# bug. The pacifier's complete transform—not just its position—must remain fixed in
+		# head space after SHORT has moved the skeleton.
+		var young_state := CreatureState.create(def.id)
+		young_state.add_entry("LENGTH", "long", "short")
+		young_state.add_entry("AGE", "old", "young")
+		young_state.add_entry(Content.COLOR_CATEGORY, "red", "blue")
+		var young_creature := CreatureFactory.build_fantasy(young_state)
+		_check(failures, young_creature != null,
+			"%s: SHORT + YOUNG finished creature failed to build" % def.id)
+		if young_creature != null:
+			var final_pacifier := young_creature.accessory_root.get_node_or_null("Pacifier")
+			_check(failures, final_pacifier != null,
+				"%s: SHORT + YOUNG finished creature lost its pacifier" % def.id)
+			if final_pacifier != null:
+				var final_bone := def.socket_bone("head_top")
+				var base_prop: Transform3D = final_pacifier.get_meta(
+					"follow_base_prop", final_pacifier.transform)
+				var base_bone: Transform3D = final_pacifier.get_meta(
+					"follow_base_bone", young_creature._bone_transform_in_body(final_bone))
+				var expected_prop := young_creature._bone_transform_in_body(final_bone) \
+					* base_bone.affine_inverse() * base_prop
+				_check(failures, final_pacifier.transform.is_equal_approx(expected_prop),
+					"%s: finished pacifier is not locked to the transformed head" % def.id)
+			young_creature.free()
 
 	for pair in Content.pairs:
 		for word in pair.words():
