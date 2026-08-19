@@ -28,6 +28,10 @@ extends Node
 ## child's voice is a different kind of thing to keep.
 
 const BRIDGE := "window.__creatureVoice"
+## In SAY_SPLIT the student says each sentence in two takes - "It was small." now, "Now it
+## is big." in a later pass over all three - so the halves are recorded minutes apart and
+## have to be filed separately. Present clauses live above this offset, past ones below.
+const PRESENT_SLOT := 100
 
 var _supported := false
 var _armed := false
@@ -104,7 +108,23 @@ func _install() -> void:
 	      } catch (e) { return 0; }
 	      return lens[slot] || 0;
 	    },
-	    halt: function () { if (playing) { try { playing.pause(); } catch (e) {} playing = null; } },
+	    playPair: function (a, b) {
+	      var first = lens[a] || 0, second = lens[b] || 0;
+	      if (!first && !second) return 0;
+	      var self = this;
+	      if (!first) { self.play(b); return second; }
+	      self.play(a);
+	      if (second) {
+	        // Chained on the element rather than on a timer: a timer drifts against
+	        // whatever the browser actually decoded, and the halves would overlap.
+	        if (playing) {
+	          playing.onended = function () { self.play(b); };
+	        }
+	        return first + second + 0.25;
+	      }
+	      return first;
+	    },
+	    halt: function () { if (playing) { try { playing.pause(); playing.onended = null; } catch (e) {} playing = null; } },
 	    clear: function () {
 	      this.halt();
 	      for (var k in urls) { URL.revokeObjectURL(urls[k]); }
@@ -138,6 +158,11 @@ func keep_for(slot: int) -> void:
 	JavaScriptBridge.eval("%s.keep(%d)" % [BRIDGE, slot], true)
 
 
+## The present half of a split sentence, filed against the entry it completes.
+func keep_present_for(index: int) -> void:
+	keep_for(PRESENT_SLOT + index)
+
+
 func has_clip(slot: int) -> bool:
 	return clip_length(slot) > 0.0
 
@@ -156,6 +181,16 @@ func play(slot: int) -> float:
 	if not _supported or slot < 0:
 		return 0.0
 	return float(JavaScriptBridge.eval("%s.play(%d)" % [BRIDGE, slot], true))
+
+
+## Both halves of one sentence, in the order they were said, as a single beat: the past
+## clip, then the present clip when the split mode recorded one. Returns the whole run so
+## the surge can land after the student has finished the thought, not halfway through it.
+func play_sentence(index: int) -> float:
+	if not _supported or index < 0:
+		return 0.0
+	return float(JavaScriptBridge.eval("%s.playPair(%d, %d)" % [
+		BRIDGE, index, PRESENT_SLOT + index], true))
 
 
 func stop() -> void:

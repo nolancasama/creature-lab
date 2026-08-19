@@ -897,6 +897,13 @@ static func _voice_checks(failures: Array[String]) -> void:
 		"voice: playing a missing clip did not report itself as missing")
 	_check(failures, Voice.play(-1) <= 0.0 and Voice.clip_length(99) <= 0.0,
 		"voice: an out-of-range slot was not handled")
+	# SAY_SPLIT records "It was small." and "Now it is big." as two takes minutes apart, so
+	# the present halves are filed above PRESENT_SLOT and played after their own past half.
+	Voice.keep_present_for(0)
+	_check(failures, not Voice.has_clip(Voice.PRESENT_SLOT),
+		"voice: a present half was invented with nothing recorded")
+	_check(failures, is_zero_approx(Voice.play_sentence(0)),
+		"voice: a sentence with neither half recorded still claimed a length")
 
 	# Storing a slot with nothing captured must not invent one, or the transformation
 	# would wait on a clip that plays nothing.

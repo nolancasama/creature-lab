@@ -461,6 +461,10 @@ func _present_advance() -> void:
 		return
 	_busy = true
 	_pending = {}
+	# The present half is a take of its own, minutes after its past half, and has to be
+	# filed here - _commit() only ever sees the past pass, so without this the whole
+	# "Now it is..." side of a split round was recorded and then dropped.
+	Voice.keep_present_for(_present_index)
 	_speech.show_success()
 	Audio.play("success")
 	await get_tree().create_timer(SUCCESS_PAUSE).timeout
