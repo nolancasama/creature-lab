@@ -296,6 +296,15 @@ func _add_gear_button() -> void:
 	var gear := UiKit.icon_button("", GEAR_BUTTON_SIZE)
 	gear.icon = GEAR_ICON
 	gear.expand_icon = true
+	# The gear alone, with no plate behind it. icon_button's panel-coloured box is right for
+	# the back arrow, which sits on flat 2D chrome, but this one sits over the lit 3D stage
+	# and read as a floating tile there. Feedback moves onto the icon itself so it still
+	# answers a hover and a press without a box to draw them on.
+	for state in ["normal", "hover", "pressed", "focus", "disabled"]:
+		gear.add_theme_stylebox_override(state, StyleBoxEmpty.new())
+	gear.add_theme_color_override("icon_normal_color", UiKit.TEXT)
+	gear.add_theme_color_override("icon_hover_color", UiKit.ACCENT)
+	gear.add_theme_color_override("icon_pressed_color", UiKit.ACCENT)
 	gear.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
 	gear.offset_right = PANEL_RIGHT
 	gear.offset_left = PANEL_RIGHT - GEAR_BUTTON_SIZE
