@@ -234,7 +234,9 @@ static func _splittest(main: Node) -> void:
 ## Renders one creature wearing one trait, so a look can actually be seen rather than
 ## inferred from the code that builds it. `spec` is a trait word, optionally "word:animal"
 ## - "young", "young:horse", "cold:penguin". The word is committed as the creature's BEFORE
-## trait, which is exactly the state the platform shows during recording.
+## trait, which is exactly the state the platform shows during recording. A final
+## ":front" rotates it as though the player dragged it head-on, useful for checking
+## face accessories whose spacing is hard to judge in the normal profile view.
 static func _look(main: Node, spec: String) -> void:
 	var tree := main.get_tree()
 	var parts := spec.split(":")
@@ -260,8 +262,14 @@ static func _look(main: Node, spec: String) -> void:
 		Game.record_sentence(found.category, str(word), found.opposite_of(str(word)))
 	Game.set_phase(Game.Phase.ANIMAL_SELECTION)
 	await tree.create_timer(SHOT_DELAY).timeout
+	var view := str(parts[2]) if parts.size() > 2 else "profile"
+	if view == "front" and Router.current_scene != null:
+		var preview_root: Node3D = Router.current_scene.get("_preview_root")
+		if preview_root != null:
+			preview_root.rotation.y = PI
 	await RenderingServer.frame_post_draw
-	var path := "user://look_%s_%s.png" % [str(parts[0]).replace("+", "_"), animal_id]
+	var suffix := "_%s" % view if view != "profile" else ""
+	var path := "user://look_%s_%s%s.png" % [str(parts[0]).replace("+", "_"), animal_id, suffix]
 	main.get_viewport().get_texture().get_image().save_png(path)
 	print("[look] %s on %s -> %s" % [str(parts[0]), animal_id, ProjectSettings.globalize_path(path)])
 	tree.quit(0)
@@ -427,6 +435,21 @@ static func _selftest(main: Node) -> void:
 		_check(failures, rig.deformer.requires_grounding() == def.ground_neutral,
 			"%s: neutral grounding policy was not respected" % def.id)
 
+		# COLD breath must begin just beyond this species' measured snout and follow that
+		# snout's own pitch, rather than using one fixed direction for every animal.
+		var cold_probe := ColdEffect.create(rig)
+		var cold_anchors := rig.face_anchors()
+		var expected_breath_direction: Vector3 = Vector3(0.0,
+			(cold_anchors["snout_tip"] as Vector3).y - (cold_anchors["head_pivot"] as Vector3).y,
+			(cold_anchors["snout_tip"] as Vector3).z - (cold_anchors["head_pivot"] as Vector3).z).normalized()
+		_check(failures, cold_probe.breath_direction().dot(expected_breath_direction) > 0.999,
+			"%s: COLD breath does not follow the snout angle" % def.id)
+		var expected_breath_origin: Vector3 = (cold_anchors["snout_tip"] as Vector3) \
+			+ expected_breath_direction * def.stand_height * 0.012
+		_check(failures, cold_probe.breath_origin().distance_to(expected_breath_origin) < 0.001,
+			"%s: COLD breath is detached from the snout" % def.id)
+		cold_probe.free()
+
 		# LONG must actually move the torso, TALL must actually lift the body, and both
 		# must return to exactly rest - otherwise a cancelled card leaves a dent.
 		# Local pose, not global: a skeleton outside the scene tree never recomputes its
@@ -546,9 +569,28 @@ static func _selftest(main: Node) -> void:
 			"%s: feel did not return to rest" % def.id)
 
 		# OLD's supplied concave beard silhouette must exist on every species and remain
-		# readable from both the default profile and a user-dragged front view.
+		# readable from both the default profile and a user-dragged front view. Its glasses
+		# must sit just beyond the measured eye/bridge surface: never inside the head, and
+		# never a muzzle-length out in space on horses or birds.
 		rig.reset_modifiers()
 		OldKit.apply(rig)
+		var spectacles := rig.accessory_root.get_node_or_null("OldSpectacles")
+		_check(failures, spectacles != null, "%s: OLD spectacles were not built" % def.id)
+		if spectacles != null:
+			var surface_front := float(spectacles.get_meta("surface_front"))
+			var clearance := float(spectacles.get_meta("clearance"))
+			var lens_size := float(spectacles.get_meta("lens_size"))
+			var lens_spacing := float(spectacles.get_meta("lens_spacing"))
+			var anchors := rig.face_anchors()
+			_check(failures, spectacles.position.z <= surface_front - clearance + 0.0001,
+				"%s: OLD spectacles intersect the face" % def.id)
+			_check(failures, surface_front - spectacles.position.z < float(anchors["depth"]) * 0.09,
+				"%s: OLD spectacles float too far ahead of the face" % def.id)
+			_check(failures, lens_size <= float(anchors["span"]) * 0.421
+				and lens_size <= float(anchors["half_w"]) * 0.921,
+				"%s: OLD lenses exceed the usable head" % def.id)
+			_check(failures, lens_spacing + lens_size * 0.5 <= float(anchors["half_w"]) * 1.09,
+				"%s: OLD frames extend too far beyond the head" % def.id)
 		var beard := rig.accessory_root.get_node_or_null("OldBeard")
 		_check(failures, beard != null, "%s: OLD beard was not built" % def.id)
 		if beard != null:
@@ -570,8 +612,17 @@ static func _selftest(main: Node) -> void:
 			var anchors := rig.face_anchors()
 			var contact: Vector3 = anchors["face_tip"] \
 				if def.young_value("pacifier", "tip", 0.0) > 0.5 else anchors["mouth_surface"]
+			var pacifier_down := def.young_value("pacifier", "down", 0.0)
+			if not is_zero_approx(pacifier_down) \
+					and def.young_value("pacifier", "tip", 0.0) <= 0.5:
+				contact.y -= pacifier_down * float(anchors["span"])
+				contact.z = rig.head_front_in_patch(0.0, contact.y,
+					float(anchors["half_w"]) * 0.72,
+					float(anchors["span"]) * 0.075, contact.z)
 			var expected_contact: Vector3 = anchors["head_pivot"] \
 				+ (contact - anchors["head_pivot"]) * young_scale
+			expected_contact.z += def.young_value("pacifier", "forward", 0.0) \
+				* float(anchors["depth"]) * young_scale * -1.0
 			_check(failures, pacifier.position.distance_to(expected_contact) < 0.001,
 				"%s: YOUNG pacifier detached from its scaled mouth" % def.id)
 			var guard := pacifier.get_node_or_null("Guard")

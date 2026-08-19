@@ -774,6 +774,43 @@ func _head_front_at(target_y: float, span: float, half_w: float, fallback: float
 	return best_z if found else fallback
 
 
+## Foremost piece of head mesh inside a small elliptical footprint. Spectacles cannot use
+## the nose-tip plane: on a horse or bird that plane is far ahead of the eyes, while on a
+## broad feline it can pass through the brow. Sampling the actual footprint of each lens
+## and the bridge gives a contact plane which is outside the skin without leaving the
+## glasses suspended in front of a long muzzle.
+func head_front_in_patch(target_x: float, target_y: float, radius_x: float,
+		radius_y: float, fallback: float) -> float:
+	head_bounds() ## Populates the cached head-family points.
+	var rx := maxf(radius_x, 0.002)
+	var ry := maxf(radius_y, 0.002)
+	var best_z := INF
+	var found := false
+	for point in _head_points:
+		var dx := (point.x - target_x) / rx
+		var dy := (point.y - target_y) / ry
+		if dx * dx + dy * dy > 1.0:
+			continue
+		best_z = minf(best_z, point.z)
+		found = true
+	if found:
+		return best_z
+
+	# A few very low-poly heads have no vertex inside a lens-sized ellipse. Use the
+	# nearest head vertex instead of reverting to the unrelated end of the nose or beak.
+	var nearest_score := INF
+	for point in _head_points:
+		var dx := (point.x - target_x) / rx
+		var dy := (point.y - target_y) / ry
+		var score := dx * dx + dy * dy
+		if score < nearest_score - 0.0001 \
+				or (is_equal_approx(score, nearest_score) and point.z < best_z):
+			nearest_score = score
+			best_z = point.z
+			found = true
+	return best_z if found else fallback
+
+
 ## Foremost central vertex of the head family. Birds can mount a rigid prop directly on
 ## the end of a beak instead of borrowing the generic lower-mouth band used by mammals.
 func _head_tip(half_w: float, fallback: Vector3) -> Vector3:
@@ -782,6 +819,22 @@ func _head_tip(half_w: float, fallback: Vector3) -> Vector3:
 	var centre_limit := maxf(half_w * 0.72, 0.002)
 	for point in _head_points:
 		if absf(point.x) > centre_limit:
+			continue
+		if not found or point.z < tip.z:
+			tip = Vector3(0.0, point.y, point.z)
+			found = true
+	return tip
+
+
+## Foremost central vertex near mouth height. Unlike `_head_tip`, the vertical band keeps
+## antlers and tall ears from winning, while still reaching the end of a beak or long nose.
+func _snout_tip(mouth_y: float, span: float, half_w: float, fallback: Vector3) -> Vector3:
+	var tip := fallback
+	var found := false
+	var centre_limit := maxf(half_w * 0.72, 0.002)
+	var vertical_limit := maxf(span * 0.36, 0.003)
+	for point in _head_points:
+		if absf(point.x) > centre_limit or absf(point.y - mouth_y) > vertical_limit:
 			continue
 		if not found or point.z < tip.z:
 			tip = Vector3(0.0, point.y, point.z)
@@ -833,6 +886,7 @@ func face_anchors() -> Dictionary:
 		# no-penetration contact plane.
 		"mouth_surface": mouth_surface,
 		"face_tip": _head_tip(half_w, mouth_surface),
+		"snout_tip": _snout_tip(mouth_surface_y, span, half_w, mouth_surface),
 		"chin": Vector3(0.0, base + span * 0.08, front + depth * 0.26),
 		"eye": Vector3(half_w * 0.62, base + span * 0.66, front + depth * 0.34),
 		"brow": Vector3(half_w * 0.60, base + span * 0.86, front + depth * 0.30),

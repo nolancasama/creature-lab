@@ -22,6 +22,7 @@ var _clock := 0.0
 var _breath_timer := 0.0
 var _face: Node3D = null
 var _muzzle := Vector3.ZERO
+var _breath_direction := Vector3.FORWARD
 var _patch: MeshInstance3D = null
 var _rng := RandomNumberGenerator.new()
 
@@ -31,6 +32,7 @@ static func create(rig: CreatureRig) -> ColdEffect:
 	effect.name = "ColdEffect"
 	effect._rig = rig
 	effect._height = rig.definition.stand_height
+	effect._configure_breath()
 	return effect
 
 
@@ -39,15 +41,8 @@ func _ready() -> void:
 	var h := _height
 	var scale_for_species := h / 1.55
 
-	# The muzzle, not the "face" socket. Every model in the pack faces -Z, but that
-	# socket is authored at skull + a POSITIVE Z offset, which puts it behind the skull.
-	# The magnitude is still the per-species distance from skull bone to face, so mirror
-	# it onto the side the animal actually faces and add a little clearance, which lands
-	# on the nose far more accurately than any fraction of stand height could.
-	# Parented to body so the breath moves with the shiver.
+	# Parented to body so the measured snout point and its breath move with the shiver.
 	_face = _rig.body
-	var off := _rig.definition.socket_offset("face")
-	_muzzle = _bone_point("face") + Vector3(off.x, off.y - h * 0.03, -absf(off.z) - h * 0.06)
 
 	# Snow falls through a box wider and taller than the animal, so flakes are already
 	# in mid-air at every height rather than all appearing from one point.
@@ -93,6 +88,29 @@ func _bone_point(socket: String) -> Vector3:
 	if node == null:
 		return Vector3(0, _height * 0.8, 0)
 	return node.position - _rig.definition.socket_offset(socket)
+
+
+## The mesh itself supplies both facts a breath needs: where the snout ends and which way
+## it points. This avoids treating an upright penguin beak like a low horse muzzle.
+func _configure_breath() -> void:
+	if _rig == null:
+		return
+	var anchors := _rig.face_anchors()
+	var pivot: Vector3 = anchors["head_pivot"]
+	var tip: Vector3 = anchors["snout_tip"]
+	_breath_direction = Vector3(0.0, tip.y - pivot.y, tip.z - pivot.z).normalized()
+	if _breath_direction.length_squared() < 0.5 or _breath_direction.z > -0.05:
+		_breath_direction = Vector3.FORWARD
+	# Start just beyond the skin so the first soft billboard does not bloom inside the face.
+	_muzzle = tip + _breath_direction * (_height * 0.012)
+
+
+func breath_origin() -> Vector3:
+	return _muzzle
+
+
+func breath_direction() -> Vector3:
+	return _breath_direction
 
 
 ## The arrival: a gust blows through, the animal flinches and starts shivering, then
@@ -153,7 +171,8 @@ func _breathe() -> void:
 	_breath_timer = BREATH_INTERVAL + _rng.randf_range(-0.5, 0.9)
 	if _face == null or not is_instance_valid(_face):
 		return
-	Fx.burst(_face, _muzzle, "breath", Color(1, 1, 1, 0.5), _height * 0.05, _height / 1.55)
+	Fx.burst(_face, _muzzle, "breath", Color(1, 1, 1, 0.5), _height * 0.05,
+		_height / 1.55, _breath_direction)
 
 
 func _exit_tree() -> void:

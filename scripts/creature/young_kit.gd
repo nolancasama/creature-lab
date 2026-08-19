@@ -69,14 +69,21 @@ static func _add_pacifier(rig: CreatureRig, def: AnimalDefinition, a: Dictionary
 		else a["mouth_surface"]
 	var head_pivot: Vector3 = a["head_pivot"]
 	var size := def.young_value("pacifier", "size", 0.52) * float(a["depth"]) * hs
+	var down := def.young_value("pacifier", "down", 0.0)
+	# A vertical correction must sample the face again at its new height. Merely moving the
+	# old contact point downward keeps the depth of the upper muzzle and can either suspend
+	# the prop in front of a sloping snout or bury it in the lower jaw. Beak-tip mounts stay
+	# on their measured tip; none currently combines `tip` with a vertical correction.
+	if not is_zero_approx(down) and def.young_value("pacifier", "tip", 0.0) <= 0.5:
+		mouth.y -= down * float(a["span"])
+		mouth.z = rig.head_front_in_patch(0.0, mouth.y,
+			float(a["half_w"]) * 0.72, float(a["span"]) * 0.075, mouth.z)
 	# A scaled head moves its surface away from the head-bone pivot. Applying precisely the
 	# same point transform keeps the prop attached instead of leaving it at the adult face.
 	var at := head_pivot + (mouth - head_pivot) * hs
-	# Optional authored corrections remain surface-relative: positive `down` lowers the
-	# contact and positive `forward` moves it out, never silently adding a default air gap.
-	at += Vector3(0.0,
-		-def.young_value("pacifier", "down", 0.0) * float(a["span"]) * hs,
-		def.young_value("pacifier", "forward", 0.0) * float(a["depth"]) * hs * FORWARD)
+	# Positive `forward` remains an explicit authored correction; there is no implicit gap.
+	at.z += def.young_value("pacifier", "forward", 0.0) \
+		* float(a["depth"]) * hs * FORWARD
 
 	# Point the pacifier along the head-pivot-to-mouth ray. This follows a low horse muzzle,
 	# a level cat muzzle and an upright bird beak without a species-specific hard-coded tilt.

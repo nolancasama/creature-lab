@@ -1082,6 +1082,18 @@
           "ear.R",
           "spine.002"
         ]
+      },
+      "young": {
+        "pacifier": {
+          "size": 0.28,
+          "down": 0.17
+        }
+      },
+      "old": {
+        "specs": {
+          "size": 0.27,
+          "spacing": 0.55
+        }
       }
     },
     {

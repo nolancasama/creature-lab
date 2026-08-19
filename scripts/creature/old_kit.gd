@@ -84,29 +84,68 @@ static func _paint_grey(rig: CreatureRig, def: AnimalDefinition, a: Dictionary) 
 ## anything else would be a disc, and a filled disc over the eye reads as a blindfold.
 static func _add_spectacles(rig: CreatureRig, def: AnimalDefinition, a: Dictionary) -> void:
 	var depth := float(a["depth"])
+	var span := float(a["span"])
+	var half_w := float(a["half_w"])
 	var eye: Vector3 = a["eye"]
-	var size := def.old_value("specs", "size", 0.46) * depth
-	var wire := def.old_value("specs", "wire", 0.08) * depth
-	var spacing := eye.x * def.old_value("specs", "spacing", 1.0)
-	var at := Vector3(0.0, eye.y, eye.z) + Vector3(0.0,
-		def.old_value("specs", "up", 0.0) * float(a["span"]),
-		def.old_value("specs", "forward", 0.0) * depth * FORWARD)
+	# Keep each round lens on the face rather than letting a generic diameter extend far
+	# beyond a narrow bird head or vertically through a shallow feline brow.
+	var authored_size := def.old_value("specs", "size", 0.46) * depth
+	var size := minf(authored_size, minf(span * 0.42, half_w * 0.92))
+	var wire := minf(def.old_value("specs", "wire", 0.08) * depth, size * 0.16)
+	var desired_spacing := eye.x * def.old_value("specs", "spacing", 1.0)
+	var min_spacing := size * 0.54
+	var max_spacing := maxf(min_spacing, half_w - size * 0.42)
+	var spacing := clampf(desired_spacing, min_spacing, max_spacing)
+	var eye_y := eye.y + def.old_value("specs", "up", 0.0) * span
+
+	# Fit one common, forward-facing lens plane just beyond every piece of skin beneath
+	# the two frames and the bridge. The tiny clearance accounts for the torus thickness;
+	# it is deliberately proportional to the wire, not the muzzle length, so it cannot
+	# look as though it is floating in space.
+	var patch_radius := size * 0.52
+	var left_front := rig.head_front_in_patch(-spacing, eye_y,
+		patch_radius, patch_radius, eye.z)
+	var right_front := rig.head_front_in_patch(spacing, eye_y,
+		patch_radius, patch_radius, eye.z)
+	var bridge_front := rig.head_front_in_patch(0.0, eye_y,
+		maxf(spacing - size * 0.35, wire), maxf(wire, size * 0.10), eye.z)
+	var surface_front := minf(left_front, minf(right_front, bridge_front))
+	var clearance := wire * 0.55 + depth * 0.01
+	var at := Vector3(0.0, eye_y,
+		surface_front - clearance
+		+ def.old_value("specs", "forward", 0.0) * depth * FORWARD)
+
+	var spectacles := Node3D.new()
+	spectacles.name = "OldSpectacles"
+	# Diagnostics used by the all-species self-test. Keeping them on the built accessory
+	# also makes future per-animal visual tuning inspectable without duplicating this math.
+	spectacles.set_meta("surface_front", surface_front)
+	spectacles.set_meta("clearance", clearance)
+	spectacles.set_meta("lens_size", size)
+	spectacles.set_meta("lens_spacing", spacing)
 
 	for side in [-1.0, 1.0]:
 		var ring := _torus(size, wire, FRAME, 0.10)
 		# Real glasses share one forward-facing lens plane. These models face -Z, and a
 		# TorusMesh is built around Y, so a quarter-turn about X points its axis along Z.
 		ring.rotation_degrees = Vector3(90.0, 0.0, 0.0)
-		rig.add_accessory(ring, at + Vector3(spacing * side, 0.0, 0.0))
+		ring.name = "LeftFrame" if side < 0.0 else "RightFrame"
+		ring.position = Vector3(spacing * side, 0.0, 0.0)
+		spectacles.add_child(ring)
 
 		var glass := _sphere(size * 0.90, LENS, 0.05)
 		glass.scale = Vector3(1.0, 1.0, 0.08) ## Flattened on Z to match the lens plane.
 		var mat: StandardMaterial3D = glass.material_override
 		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 		mat.albedo_color = Color(LENS.r, LENS.g, LENS.b, 0.20)
-		rig.add_accessory(glass, at + Vector3(spacing * side, 0.0, 0.0))
+		glass.name = "LeftLens" if side < 0.0 else "RightLens"
+		glass.position = Vector3(spacing * side, 0.0, 0.0)
+		spectacles.add_child(glass)
 
-	rig.add_accessory(_box(Vector3(maxf(spacing * 2.0 - size * 0.8, wire), wire, wire), FRAME, 0.10), at)
+	var bridge := _box(Vector3(maxf(spacing * 2.0 - size * 0.8, wire), wire, wire), FRAME, 0.10)
+	bridge.name = "Bridge"
+	spectacles.add_child(bridge)
+	rig.add_accessory(spectacles, at)
 
 
 ## Fill the supplied concave outline, then cross two copies at right angles. A single

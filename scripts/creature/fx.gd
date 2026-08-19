@@ -415,11 +415,17 @@ static func spread_along(particles: GPUParticles3D, extents: Vector3) -> void:
 	process.emission_box_extents = extents
 
 
-## One-shot burst that removes itself once the last particle has died.
-static func burst(parent: Node3D, at: Vector3, kind: String, tint: Color, radius := 0.6, size_scale := 1.0) -> void:
+## One-shot burst that removes itself once the last particle has died. `direction` is in
+## the parent's local space; leaving it zero preserves the particle kind's own default.
+static func burst(parent: Node3D, at: Vector3, kind: String, tint: Color, radius := 0.6,
+		size_scale := 1.0, direction := Vector3.ZERO) -> void:
 	if not is_instance_valid(parent):
 		return
 	var particles := make(kind, tint, radius, size_scale)
+	if not direction.is_zero_approx():
+		var process := particles.process_material as ParticleProcessMaterial
+		if process != null:
+			process.direction = direction.normalized()
 	particles.one_shot = true
 	particles.explosiveness = 0.9
 	particles.position = at
