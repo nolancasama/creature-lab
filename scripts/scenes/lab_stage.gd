@@ -1,19 +1,26 @@
 class_name LabStage
 extends Node3D
-## The 3D half of the laboratory: floor, platform, chamber, lights, camera.
+## The 3D half of the laboratory: floor, platform, transform array, lights, camera.
 ##
 ## Kept apart from LabController so the Word Lab genuinely cannot touch the animal - the
 ## data path is Word Lab -> LabController -> CreatureState -> this.
 
 const PLATFORM_POS := Vector3(-2.4, 0.0, 1.6)
-const CHAMBER_POS := Vector3(3.2, 0.0, -2.4)
 const CAMERA_POS := Vector3(1.6, 3.0, 10.4)
 const CAMERA_AIM := Vector3(1.6, 0.3, 0.0)
+## Where the creature actually stands. Every cinematic framing is written relative to this
+## rather than to the world, so moving the platform cannot silently break the shots.
+const STAND := PLATFORM_POS + Vector3(0.0, 0.28, 0.0)
 
-var chamber: TransformationChamber = null
+var array: TransformArray = null
 var mount: Node3D = null
+var camera: Camera3D = null
 
 var _rig: CreatureRig = null
+var _cam_from := Vector3.ZERO
+var _aim_from := Vector3.ZERO
+var _cam_to := Vector3.ZERO
+var _aim_to := Vector3.ZERO
 
 
 func _ready() -> void:
@@ -29,16 +36,20 @@ func _ready() -> void:
 	platform.position = PLATFORM_POS
 	add_child(platform)
 
-	chamber = TransformationChamber.new()
-	chamber.position = CHAMBER_POS
-	add_child(chamber)
+	# Parked out of sight above the platform until the final sequence calls it down.
+	array = TransformArray.create()
+	array.position = Vector3(PLATFORM_POS.x, 0.0, PLATFORM_POS.z)
+	add_child(array)
 
 	mount = Node3D.new()
 	mount.name = "CreatureMount"
-	mount.position = PLATFORM_POS + Vector3(0, 0.28, 0)
+	mount.position = STAND
 	add_child(mount)
 
-	add_child(StageKit.camera(CAMERA_POS, CAMERA_AIM, 50.0))
+	camera = StageKit.camera(CAMERA_POS, CAMERA_AIM, 50.0)
+	add_child(camera)
+	_cam_to = CAMERA_POS
+	_aim_to = CAMERA_AIM
 
 
 func rig() -> CreatureRig:
@@ -68,29 +79,54 @@ func punch() -> void:
 	Fx.burst(mount, Vector3(0, 0.3, 0), "sparkle", UiKit.ACCENT, 1.4)
 
 
-func walk_into_chamber(duration := 1.9) -> void:
-	if _rig == null:
-		return
-	_rig.moving = true
+## Moves the camera and what it is pointing at together. Both ends are interpolated by
+## one factor rather than tweened separately, so the aim can never lag the position and
+## swing the subject out of frame mid-move.
+func frame(to: Vector3, aim: Vector3, duration: float,
+		trans := Tween.TRANS_SINE) -> Tween:
+	_cam_from = camera.position
+	_aim_from = _aim_to
+	_cam_to = to
+	_aim_to = aim
 	var tween := create_tween()
-	tween.set_parallel(true)
-	tween.tween_property(mount, "position", CHAMBER_POS + Vector3(0, 0.42, 0), duration)
-	tween.tween_property(_rig, "rotation:y", -PI * 0.5, 0.5)
-	await tween.finished
-	_rig.moving = false
+	tween.tween_method(_apply_frame, 0.0, 1.0, duration) 		.set_trans(trans).set_ease(Tween.EASE_IN_OUT)
+	return tween
 
 
-func place_at_chamber() -> void:
-	mount.position = CHAMBER_POS + Vector3(0, 0.42, 0)
+## A hard cut. Used once, on the energy peak, where an instant change of angle reads as
+## impact - everywhere else the camera moves, because cutting around a small subject is
+## how a sequence stops being followable.
+func cut_to(to: Vector3, aim: Vector3) -> void:
+	_cam_from = to
+	_aim_from = aim
+	_cam_to = to
+	_aim_to = aim
+	_apply_frame(1.0)
 
 
-func walk_out(duration := 1.6) -> void:
-	if _rig == null:
+func reset_camera() -> void:
+	cut_to(CAMERA_POS, CAMERA_AIM)
+
+
+func _apply_frame(t: float) -> void:
+	if camera == null:
 		return
-	_rig.moving = true
-	var tween := create_tween()
-	tween.set_parallel(true)
-	tween.tween_property(mount, "position", PLATFORM_POS + Vector3(0, 0.28, 0), duration)
-	tween.tween_property(_rig, "rotation:y", -0.85, duration)
-	await tween.finished
-	_rig.moving = false
+	var eye: Vector3 = _cam_from.lerp(_cam_to, t)
+	var look: Vector3 = _aim_from.lerp(_aim_to, t)
+	if eye.distance_to(look) < 0.05:
+		return
+	camera.look_at_from_position(eye, look, Vector3.UP)
+
+
+## Vents around the rim, so the steam belongs to the platform the student has been
+## watching rather than appearing from nowhere underneath the animal.
+func vent_steam(amount: float) -> void:
+	# Two vents at full tilt, not five. The brief is that the animal stays findable inside
+	# the cloud - the first build stacked enough emitters to white out the whole frame, and
+	# a transformation you cannot see happening is just a loading screen.
+	var count := 1 if amount < 0.6 else 2
+	for i in count:
+		var angle := randf() * TAU
+		var at := Vector3(cos(angle), 0.06, sin(angle)) * randf_range(0.8, 1.5)
+		Fx.burst(mount, at, "steam", Color("#dbe7f2"), 0.3 + amount * 0.28,
+			0.7 + amount * 0.5, Vector3.UP)

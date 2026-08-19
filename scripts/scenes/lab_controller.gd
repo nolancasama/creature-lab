@@ -21,7 +21,7 @@ func _ready() -> void:
 	if Game.current != null:
 		stage.set_rig(CreatureFactory.build_lab_animal(Game.current))
 
-	stage.chamber.flash_requested.connect(_flash_screen)
+	stage.array.flash_requested.connect(_flash_screen)
 	_director = TransformationDirector.new(stage, _banner)
 	Audio.play_ambience(true)
 	Game.phase_changed.connect(_on_phase_changed)

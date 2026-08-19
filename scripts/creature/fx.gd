@@ -293,6 +293,21 @@ static func make(kind: String, tint := Color.WHITE, radius := 0.8, size_scale :=
 			process.initial_velocity_max = 0.14
 			process.scale_min = 0.6
 			process.scale_max = 1.4
+		"steam":
+			# Theatrical stage steam, not COLD's thin breath: it has to climb high enough to
+			# reach the animal's shoulder and stay soft enough to see a silhouette through.
+			# Opaque rather than additive, or it lights up instead of hiding.
+			particles = _base(30, 2.6, 0.5, false)
+			particles.draw_pass_1.material.albedo_texture = dot_texture()
+			process.direction = Vector3(0, 1, 0)
+			process.spread = 22.0
+			process.gravity = Vector3(0, 0.55, 0)
+			process.initial_velocity_min = 0.9
+			process.initial_velocity_max = 2.0
+			process.scale_min = 0.7
+			process.scale_max = 2.1
+			process.scale_curve = puff_scale_curve()
+			process.color_ramp = _fade_ramp(Color(tint.r, tint.g, tint.b, 0.55))
 		"glow":
 			particles = _base(20, 1.8, 0.2)
 			process.direction = Vector3(0, 1, 0)

@@ -91,8 +91,10 @@ static func _autoplay(main: Node) -> void:
 		await tree.create_timer(2.6).timeout
 		print("[autoplay] slot %d recorded" % Game.current.slots_filled())
 
-	# The chamber sequence plus the fade into the naming screen.
-	await tree.create_timer(12.0).timeout
+	# The transformation sequence plus the fade into the naming screen. It is longer than
+	# the old walk-into-the-chamber version: three spoken sentences, each with its own
+	# surge, before the peak and the reveal.
+	await tree.create_timer(20.0).timeout
 
 	var ok := Game.phase == Game.Phase.NAMING
 	print("[autoplay] ended in phase %s" % Game.Phase.keys()[Game.phase])
@@ -224,7 +226,9 @@ static func _splittest(main: Node) -> void:
 		Speech.submit_typed(GrammarValidator.expected_present(str(pick[2])))
 		await tree.create_timer(2.4).timeout
 
-	await tree.create_timer(12.0).timeout
+	# Same longer sequence the autoplay wait accounts for: three spoken sentences with
+	# their surges, then the peak and the reveal.
+	await tree.create_timer(20.0).timeout
 	var ok := Game.phase == Game.Phase.NAMING
 	print("[splittest] ended in phase %s" % Game.Phase.keys()[Game.phase])
 	print("[splittest] PASS" if ok else "[splittest] FAIL: expected NAMING")
