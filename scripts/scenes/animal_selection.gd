@@ -550,6 +550,12 @@ func _build_say_it_dock() -> void:
 	_speech.offset_right = left + SAY_IT_WIDTH
 	_speech.offset_top = -(SAY_IT_HEIGHT + SAY_IT_BOTTOM_MARGIN)
 	_speech.offset_bottom = -SAY_IT_BOTTOM_MARGIN
+	# SAY_IT_HEIGHT is a floor, not a promise: the panel's own content can need more than
+	# it, and a bottom-anchored control that outgrows its box spills over the edge it is
+	# anchored to. Growing upward instead keeps the bottom pinned above the screen edge,
+	# so the last thing in the column - Cancel - stays reachable however tall the content
+	# turns out to be. It spilled off-screen exactly this way once already.
+	_speech.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	_speech.accepted_by_teacher.connect(func() -> void: _commit(true))
 	_speech.change_requested.connect(_cancel_pending)
 	_root.add_child(_speech)

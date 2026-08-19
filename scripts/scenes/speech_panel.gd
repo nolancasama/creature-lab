@@ -78,7 +78,10 @@ func _build() -> void:
 	# present-tense pass's taller modal has plenty of its own regardless.
 	column.add_child(UiKit.expander())
 	_sentence_label = UiKit.rich("", UiKit.H2)
-	_sentence_label.custom_minimum_size = Vector2(0, 60)
+	# One line's worth, not two. It is fit_content, so a sentence that wraps still gets the
+	# room it needs; reserving the taller box unconditionally just left a band of empty
+	# panel under every short sentence and pushed the buttons down into the screen edge.
+	_sentence_label.custom_minimum_size = Vector2(0, 38)
 	column.add_child(_sentence_label)
 	column.add_child(UiKit.expander())
 
