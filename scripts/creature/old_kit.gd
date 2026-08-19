@@ -94,16 +94,13 @@ static func _add_spectacles(rig: CreatureRig, def: AnimalDefinition, a: Dictiona
 
 	for side in [-1.0, 1.0]:
 		var ring := _torus(size, wire, FRAME, 0.10)
-		# Facing OUTWARD along X, not forward along Z. Every one of these species has its
-		# eyes on the sides of its head, and the creature is seen in profile for the whole
-		# of the recording screen - a forward-facing ring is edge-on from there, which is
-		# how the first version turned a pair of round spectacles into two dark bars.
-		# TorusMesh's axis is Y, so a turn about Z points it along X.
-		ring.rotation_degrees = Vector3(0.0, 0.0, 90.0)
+		# Real glasses share one forward-facing lens plane. These models face -Z, and a
+		# TorusMesh is built around Y, so a quarter-turn about X points its axis along Z.
+		ring.rotation_degrees = Vector3(90.0, 0.0, 0.0)
 		rig.add_accessory(ring, at + Vector3(spacing * side, 0.0, 0.0))
 
 		var glass := _sphere(size * 0.90, LENS, 0.05)
-		glass.scale = Vector3(0.08, 1.0, 1.0) ## Flattened on X to match the lens plane.
+		glass.scale = Vector3(1.0, 1.0, 0.08) ## Flattened on Z to match the lens plane.
 		var mat: StandardMaterial3D = glass.material_override
 		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 		mat.albedo_color = Color(LENS.r, LENS.g, LENS.b, 0.20)

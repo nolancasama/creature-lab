@@ -70,8 +70,8 @@ extends Resource
 ## odd angle, not to be filled in seven times. Keys, all optional:
 ##   head_scale   float  - how much larger the head bone gets.
 ##   cheek        {size, spacing, forward, down}
-##   pacifier     {size, forward, down, tilt}  - surface-relative corrections; positive
-##                                                down lowers it, tilt is in degrees
+##   pacifier     {size, forward, down, tilt, tip} - surface-relative corrections; positive
+##                                                   down lowers it; tip mounts at a beak tip
 ##
 ##   tint         "#rrggbb" - the young coat colour; defaults to a lightened skin colour.
 ##

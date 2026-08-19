@@ -10,6 +10,7 @@ extends Resource
 @export var modifier: String = "" ## Which visual effect in TraitVisuals this pair drives.
 @export var value_a: float = 1.0
 @export var value_b: float = 1.0
+@export var selectable: bool = true ## False keeps legacy/saved traits valid but hides the choice.
 
 
 static func from_dict(d: Dictionary) -> TraitDefinition:
@@ -21,6 +22,7 @@ static func from_dict(d: Dictionary) -> TraitDefinition:
 	t.modifier = str(d.get("modifier", "")).to_upper()
 	t.value_a = float(d.get("value_a", 1.0))
 	t.value_b = float(d.get("value_b", 1.0))
+	t.selectable = bool(d.get("selectable", true))
 	return t
 
 

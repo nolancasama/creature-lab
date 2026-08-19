@@ -109,11 +109,13 @@ func fantasy_parts_for(words: PackedStringArray) -> Array[FantasyPartDefinition]
 	return out
 
 
-## Pairs a teacher has left switched on, in content order.
+## Selectable pairs a teacher has left switched on, in content order. Non-selectable
+## legacy pairs remain in `pairs` and category lookup so old saved creatures still load,
+## but they can never leak back into the student choice grid.
 func enabled_pairs() -> Array[TraitDefinition]:
 	var out: Array[TraitDefinition] = []
 	for p in pairs:
-		if Settings.enabled_pairs.is_empty() or Settings.enabled_pairs.has(p.id):
+		if p.selectable and (Settings.enabled_pairs.is_empty() or Settings.enabled_pairs.has(p.id)):
 			out.append(p)
 	return out
 

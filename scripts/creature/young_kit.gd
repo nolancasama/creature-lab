@@ -61,9 +61,12 @@ static func _paint_cheeks(rig: CreatureRig, def: AnimalDefinition, a: Dictionary
 ## Guard disc plus teat at the mouth, on one pivot so they follow the muzzle together.
 ## The pivot is the actual mouth surface after YOUNG's head-bone scale. Local +Z points
 ## away from the head; consequently every piece is built at positive Z and cannot cross
-## the surface plane. The teat touches that plane tangentially and the guard sits behind it.
+## the surface plane. The guard touches the animal, while the cream ball faces outward.
 static func _add_pacifier(rig: CreatureRig, def: AnimalDefinition, a: Dictionary, hs: float) -> void:
-	var mouth: Vector3 = a["mouth_surface"]
+	# A beaked species can request the measured foremost vertex instead of the generic
+	# lower-mouth band. Penguin uses this so the pacifier mounts on the very end of its beak.
+	var mouth: Vector3 = a["face_tip"] if def.young_value("pacifier", "tip", 0.0) > 0.5 \
+		else a["mouth_surface"]
 	var head_pivot: Vector3 = a["head_pivot"]
 	var size := def.young_value("pacifier", "size", 0.52) * float(a["depth"]) * hs
 	# A scaled head moves its surface away from the head-bone pivot. Applying precisely the
@@ -90,24 +93,16 @@ static func _add_pacifier(rig: CreatureRig, def: AnimalDefinition, a: Dictionary
 	var guard := _cylinder(size, size * 0.20, PACIFIER_GUARD, 0.22)
 	guard.name = "Guard"
 	guard.rotation_degrees = Vector3(90.0, 0.0, 0.0) ## Cylinders build along Y; face it out.
-	guard.position.z = size * 0.44
+	# The inner face is exactly Z=0, flush against the animal without entering its mesh.
+	guard.position.z = size * 0.10
 	pivot.add_child(guard)
 
 	var teat := _sphere(size * 0.42, PACIFIER_TEAT, 0.12)
 	teat.name = "Teat"
 	teat.scale = Vector3(1.0, 1.0, 0.80)
-	# Half of the teat's scaled Z diameter: its rear pole is exactly at the mouth plane.
-	teat.position.z = size * 0.42 * 0.80 * 0.5
+	# Put the ball beyond the guard: guard outer face plus the ball's scaled half-depth.
+	teat.position.z = size * 0.20 + size * 0.42 * 0.80 * 0.5
 	pivot.add_child(teat)
-
-	# A sphere meets a plane at only one mathematical point, which still reads as a tiny
-	# air gap after rasterisation. This narrow flat-ended seal runs from the surface plane
-	# into the teat: visibly attached, while its rear face remains exactly at Z = 0.
-	var seal := _cylinder(size * 0.18, size * 0.18, PACIFIER_TEAT, 0.12)
-	seal.name = "MouthSeal"
-	seal.rotation_degrees = Vector3(90.0, 0.0, 0.0)
-	seal.position.z = size * 0.09
-	pivot.add_child(seal)
 
 	rig.add_accessory(pivot, at)
 

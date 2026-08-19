@@ -361,6 +361,11 @@ static func _selftest(main: Node) -> void:
 
 	_check(failures, Content.animals.size() >= 7, "expected 7 animals, got %d" % Content.animals.size())
 	_check(failures, Content.pairs.size() >= 8, "expected 8 opposite pairs, got %d" % Content.pairs.size())
+	_check(failures, Content.pair_for_category("STRENGTH") != null,
+		"hidden STRONG/WEAK compatibility pair was deleted")
+	_check(failures, not Content.enabled_pairs().any(
+		func(pair: TraitDefinition) -> bool: return pair.category == "STRENGTH"),
+		"STRONG/WEAK still appears in selectable adjective pairs")
 	_check(failures, Content.colors.size() >= 10, "expected 10 colours, got %d" % Content.colors.size())
 	_check(failures, Content.fantasy_parts.size() >= 10, "expected fantasy parts, got %d" % Content.fantasy_parts.size())
 
@@ -560,19 +565,18 @@ static func _selftest(main: Node) -> void:
 		_check(failures, pacifier != null, "%s: YOUNG pacifier was not built" % def.id)
 		if pacifier != null:
 			var anchors := rig.face_anchors()
+			var contact: Vector3 = anchors["face_tip"] \
+				if def.young_value("pacifier", "tip", 0.0) > 0.5 else anchors["mouth_surface"]
 			var expected_contact: Vector3 = anchors["head_pivot"] \
-				+ (anchors["mouth_surface"] - anchors["head_pivot"]) * young_scale
+				+ (contact - anchors["head_pivot"]) * young_scale
 			_check(failures, pacifier.position.distance_to(expected_contact) < 0.001,
 				"%s: YOUNG pacifier detached from its scaled mouth" % def.id)
 			var guard := pacifier.get_node_or_null("Guard")
 			var teat := pacifier.get_node_or_null("Teat")
-			var seal := pacifier.get_node_or_null("MouthSeal")
 			_check(failures, guard is MeshInstance3D and guard.position.z > 0.0,
 				"%s: YOUNG pacifier guard crosses the mouth plane" % def.id)
-			_check(failures, teat is MeshInstance3D and teat.position.z > 0.0,
-				"%s: YOUNG pacifier teat crosses the mouth plane" % def.id)
-			_check(failures, seal is MeshInstance3D and seal.position.z > 0.0,
-				"%s: YOUNG pacifier has no flush mouth seal" % def.id)
+			_check(failures, teat is MeshInstance3D and teat.position.z > guard.position.z,
+				"%s: YOUNG pacifier ball does not face away from the animal" % def.id)
 		rig.reset_modifiers()
 
 		rig.deformer.reset()

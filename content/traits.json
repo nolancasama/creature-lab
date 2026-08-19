@@ -6,7 +6,7 @@
     {"id": "length",      "category": "LENGTH",      "word_a": "long",   "word_b": "short", "modifier": "BODY_LENGTH",   "value_a": 1.95, "value_b": 0.60},
     {"id": "age",         "category": "AGE",         "word_a": "young",  "word_b": "old",   "modifier": "AGE",           "value_a": 0.00, "value_b": 1.00},
     {"id": "hardness",    "category": "HARDNESS",    "word_a": "hard",   "word_b": "soft",  "modifier": "MATERIAL",      "value_a": 1.00, "value_b": -1.00},
-    {"id": "strength",    "category": "STRENGTH",    "word_a": "strong", "word_b": "weak",  "modifier": "BULK",          "value_a": 1.35, "value_b": 0.60},
+    {"id": "strength",    "category": "STRENGTH",    "word_a": "strong", "word_b": "weak",  "modifier": "BULK",          "value_a": 1.35, "value_b": 0.60, "selectable": false},
     {"id": "speed",       "category": "SPEED",       "word_a": "fast",   "word_b": "slow",  "modifier": "TEMPO",         "value_a": 2.00, "value_b": 0.45},
     {"id": "temperature", "category": "TEMPERATURE", "word_a": "hot",    "word_b": "cold",  "modifier": "THERMAL",       "value_a": 1.00, "value_b": -1.00}
   ]

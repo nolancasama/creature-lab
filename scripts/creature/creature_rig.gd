@@ -774,6 +774,21 @@ func _head_front_at(target_y: float, span: float, half_w: float, fallback: float
 	return best_z if found else fallback
 
 
+## Foremost central vertex of the head family. Birds can mount a rigid prop directly on
+## the end of a beak instead of borrowing the generic lower-mouth band used by mammals.
+func _head_tip(half_w: float, fallback: Vector3) -> Vector3:
+	var tip := fallback
+	var found := false
+	var centre_limit := maxf(half_w * 0.72, 0.002)
+	for point in _head_points:
+		if absf(point.x) > centre_limit:
+			continue
+		if not found or point.z < tip.z:
+			tip = Vector3(0.0, point.y, point.z)
+			found = true
+	return tip
+
+
 ## Named points on the face, derived from head_bounds(), in body space. Both AGE kits hang
 ## their props off these instead of off multiples of a scalar, which is what finally put a
 ## pacifier on a beak and a chicken's and on a horse's muzzle from the same numbers.
@@ -803,6 +818,7 @@ func face_anchors() -> Dictionary:
 	# it were stuck to the animal's nose.
 	var mouth_surface_y := base + span * 0.18
 	var mouth_front := _head_front_at(mouth_surface_y, span, half_w, front)
+	var mouth_surface := Vector3(0.0, mouth_surface_y, mouth_front)
 	return {
 		"front": front,
 		"base": base,
@@ -815,7 +831,8 @@ func face_anchors() -> Dictionary:
 		# Unlike the centre of a skin marking, a rigid prop cannot sit inside the mesh.
 		# This point is on the front plane of the measured muzzle and is used as YOUNG's
 		# no-penetration contact plane.
-		"mouth_surface": Vector3(0.0, mouth_surface_y, mouth_front),
+		"mouth_surface": mouth_surface,
+		"face_tip": _head_tip(half_w, mouth_surface),
 		"chin": Vector3(0.0, base + span * 0.08, front + depth * 0.26),
 		"eye": Vector3(half_w * 0.62, base + span * 0.66, front + depth * 0.34),
 		"brow": Vector3(half_w * 0.60, base + span * 0.86, front + depth * 0.30),
