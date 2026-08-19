@@ -1,211 +1,170 @@
 extends Node
 ## Keeps the student's own voice so the transformation can play it back.
 ##
-## The recogniser only ever hands back text, so the words the student said are gone the
-## moment they are understood. This captures the audio alongside it: a second, silent
-## consumer of the microphone that starts when the recogniser starts listening and stops
-## when it stops, so it records exactly the take that was accepted and nothing else.
+## The recogniser only ever hands back text, so the take a student just gave is gone the
+## moment it is understood. This captures the audio alongside it and hands it back at the
+## end of the round.
 ##
-## It is deliberately incapable of breaking a lesson. Every entry point checks that input
-## actually came up, `clip()` returns null when there is nothing, and the caller is
-## expected to fall back - a student who typed their answers, or refused the microphone,
-## or is on a browser that will not give Godot an input stream, still gets the whole
-## sequence with the lab speaking the sentence instead. Nothing here is ever required.
+## It records in the BROWSER, through MediaRecorder, and never through Godot's own audio
+## input. That is the whole design, and it is not a stylistic choice: switching the
+## engine's audio input on makes Godot ask for the microphone while it is still bringing
+## its audio driver up, and when that request is pending or refused the output context
+## never starts. The result is a game with no sound at all - no effects, no speech, no
+## playback - while the recogniser carries on working perfectly, because Web Speech does
+## not use Godot's audio either. That shipped once. Nothing here touches AudioServer, so
+## it cannot happen again: if the capture fails, the only thing that fails is the capture.
 ##
-## Clips live only for the round. They are never written to disk and never enter
+## The pattern is lifted from the esl-family project's recorder.js, which has been doing
+## this next to a live SpeechRecognition session for a while: one stream opened on the
+## first tap and kept open, one MediaRecorder segment per answer, playback from an object
+## URL. Sharing the microphone with the recogniser is fine - they are separate consumers.
+##
+## It is deliberately incapable of breaking a lesson. Everything is guarded, `clip_length`
+## returns 0.0 when there is nothing, and the caller falls back to the lab speaking the
+## sentence - which is what a typed classroom gets anyway, and has to look deliberate.
+##
+## Clips live only for the round, in the browser, and are never written to disk or put in
 ## CreatureState: a save file is a record of what a child said, and a recording of a
-## child's voice is a different kind of thing to be keeping.
+## child's voice is a different kind of thing to keep.
 
-const CAPTURE_BUS := "VoiceCapture"
-const PLAYBACK_BUS := "VoiceLab"
-const MAX_SECONDS := 9.0 ## A sentence is three seconds; this is only a runaway guard.
-const TRIM_FLOOR := 0.02 ## Below this counts as silence when trimming the lead-in.
+const BRIDGE := "window.__creatureVoice"
 
-var _record: AudioEffectRecord = null
-var _mic: AudioStreamPlayer = null
-var _player: AudioStreamPlayer = null
-var _clips := {} ## slot index -> AudioStreamWAV
-var _last: AudioStreamWAV = null
+var _supported := false
 var _armed := false
-var _ready_to_record := false
-var _stop_guard: SceneTreeTimer = null
 
 
 func _ready() -> void:
-	# Nothing is set up at all unless audio input is switched on for the whole engine, and
-	# it is currently switched OFF. On the web export, enabling it makes Godot ask for the
-	# microphone while it is still bringing the audio driver up; when that request is
-	# pending or refused the output context never starts, and the entire game goes silent -
-	# no effects, no speech, nothing - while the recogniser carries on working, because
-	# Web Speech does not use Godot's audio at all. That shipped once. Until the capture
-	# can be opened after a user gesture instead of during driver init, this stays off and
-	# every sentence is spoken by the lab.
-	if not bool(ProjectSettings.get_setting("audio/driver/enable_input", false)):
-		return
-	_ready_to_record = _build_buses()
-	if not _ready_to_record:
-		push_warning("Voice: no audio input bus; the lab will speak the sentences instead.")
-		return
-	_mic = AudioStreamPlayer.new()
-	_mic.stream = AudioStreamMicrophone.new()
-	_mic.bus = CAPTURE_BUS
-	# Not started here on purpose: opening the stream is what makes the browser ask for
-	# the microphone, and that question belongs to the moment the student taps to speak.
-	add_child(_mic)
-
-	_player = AudioStreamPlayer.new()
-	_player.bus = PLAYBACK_BUS
-	add_child(_player)
-
-	Speech.listening_changed.connect(_on_listening_changed)
+	if not OS.has_feature("web") or not JavaScriptBridge.eval("1", true):
+		return ## Desktop and the editor: the lab speaks the sentences.
+	_install()
+	_supported = bool(JavaScriptBridge.eval("%s.supported()" % BRIDGE, true))
+	if _supported:
+		Speech.listening_changed.connect(_on_listening_changed)
 
 
-## Two buses: one silent one to record from, one with reverb to play back through. The
-## capture bus is muted because routing a live microphone to the speakers in a classroom
-## of laptops is how you get feedback howl.
-func _build_buses() -> bool:
-	if AudioServer.get_bus_index(CAPTURE_BUS) == -1:
-		AudioServer.add_bus()
-		var capture := AudioServer.bus_count - 1
-		AudioServer.set_bus_name(capture, CAPTURE_BUS)
-		AudioServer.set_bus_mute(capture, true)
-		_record = AudioEffectRecord.new()
-		AudioServer.add_bus_effect(capture, _record)
-	else:
-		var existing := AudioServer.get_bus_index(CAPTURE_BUS)
-		_record = AudioServer.get_bus_effect(existing, 0) as AudioEffectRecord
-
-	if AudioServer.get_bus_index(PLAYBACK_BUS) == -1:
-		AudioServer.add_bus()
-		var lab := AudioServer.bus_count - 1
-		AudioServer.set_bus_name(lab, PLAYBACK_BUS)
-		# The lab-speaker treatment. Wet enough to sound like the room, dry enough that a
-		# ten-year-old still hears themselves - the whole point is recognising your own
-		# voice, and a heavy effect chain takes that away.
-		var reverb := AudioEffectReverb.new()
-		reverb.room_size = 0.72
-		reverb.wet = 0.34
-		reverb.dry = 0.8
-		reverb.spread = 0.6
-		AudioServer.add_bus_effect(lab, reverb)
-	return _record != null
+## Defined once on the page. Kept as one object on window so repeated evals are cheap and
+## so nothing here depends on Godot holding JavaScript references alive.
+func _install() -> void:
+	JavaScriptBridge.eval("""
+	if (!window.__creatureVoice) window.__creatureVoice = (function () {
+	  var stream = null, rec = null, chunks = [], mime = '', t0 = 0;
+	  var pending = null, pendingSlot = -1, lastLen = 0;
+	  var clips = {}, urls = {}, lens = {}, playing = null;
+	  var PREFERRED = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'];
+	  function pickMime() {
+	    if (window.MediaRecorder && MediaRecorder.isTypeSupported) {
+	      for (var i = 0; i < PREFERRED.length; i++) {
+	        if (MediaRecorder.isTypeSupported(PREFERRED[i])) return PREFERRED[i];
+	      }
+	    }
+	    return '';
+	  }
+	  function assign(slot, blob, len) {
+	    if (urls[slot]) URL.revokeObjectURL(urls[slot]);
+	    clips[slot] = blob; urls[slot] = URL.createObjectURL(blob); lens[slot] = len;
+	  }
+	  function begin() {
+	    chunks = []; mime = pickMime();
+	    try { rec = new MediaRecorder(stream, mime ? { mimeType: mime } : {}); } catch (e) { return; }
+	    rec.ondataavailable = function (e) { if (e.data && e.data.size > 0) chunks.push(e.data); };
+	    rec.onstop = function () {
+	      pending = new Blob(chunks, { type: mime || 'audio/webm' });
+	      lastLen = (Date.now() - t0) / 1000;
+	      // The slot is only known once the sentence is accepted, which can land either
+	      // side of this event, so whichever arrives second does the filing.
+	      if (pendingSlot >= 0) { assign(pendingSlot, pending, lastLen); pending = null; pendingSlot = -1; }
+	    };
+	    t0 = Date.now();
+	    try { rec.start(); } catch (e) {}
+	  }
+	  return {
+	    supported: function () {
+	      return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
+	    },
+	    start: function () {
+	      pending = null; pendingSlot = -1;
+	      if (stream) { begin(); return; }
+	      // Opened on the tap that starts listening, which is a real user gesture - the
+	      // only moment a browser will grant this without a fight.
+	      navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+	        .then(function (s) { stream = s; begin(); }).catch(function () {});
+	    },
+	    stop: function () { if (rec && rec.state !== 'inactive') { try { rec.stop(); } catch (e) {} } },
+	    keep: function (slot) {
+	      if (pending) { assign(slot, pending, lastLen); pending = null; pendingSlot = -1; }
+	      else { pendingSlot = slot; }
+	    },
+	    len: function (slot) { return lens[slot] || 0; },
+	    play: function (slot) {
+	      if (!urls[slot]) return 0;
+	      try {
+	        if (playing) { playing.pause(); }
+	        playing = new Audio(urls[slot]);
+	        playing.play().catch(function () {});
+	      } catch (e) { return 0; }
+	      return lens[slot] || 0;
+	    },
+	    halt: function () { if (playing) { try { playing.pause(); } catch (e) {} playing = null; } },
+	    clear: function () {
+	      this.halt();
+	      for (var k in urls) { URL.revokeObjectURL(urls[k]); }
+	      clips = {}; urls = {}; lens = {}; pending = null; pendingSlot = -1;
+	    }
+	  };
+	})();
+	""", true)
 
 
 func available() -> bool:
-	return _ready_to_record and _record != null
+	return _supported
 
 
 # --- Capture -----------------------------------------------------------------
 
 func _on_listening_changed(is_listening: bool) -> void:
 	if is_listening:
-		_start()
-	else:
-		_stop()
+		_armed = true
+		JavaScriptBridge.eval("%s.start()" % BRIDGE, true)
+	elif _armed:
+		_armed = false
+		JavaScriptBridge.eval("%s.stop()" % BRIDGE, true)
 
 
-func _start() -> void:
-	if not available() or _armed:
-		return
-	_armed = true
-	_last = null
-	if _mic != null and not _mic.playing:
-		_mic.playing = true
-	_record.set_recording_active(true)
-	# The recogniser normally closes the session itself, but a browser that never fires
-	# its end event would otherwise leave this recording for the rest of the lesson.
-	_stop_guard = get_tree().create_timer(MAX_SECONDS)
-	_stop_guard.timeout.connect(func() -> void:
-		if _armed:
-			_stop())
-
-
-func _stop() -> void:
-	if not available() or not _armed:
-		return
-	_armed = false
-	_stop_guard = null
-	if _record.is_recording_active():
-		_last = _trim(_record.get_recording())
-		_record.set_recording_active(false)
-	if _mic != null:
-		_mic.playing = false ## Let go of the microphone between turns.
-
-
-## Drops the silence before the student actually started talking. Without this the clip
-## begins with however long they spent deciding, and the surge it is meant to trigger
-## lands on nothing.
-func _trim(clip: AudioStreamWAV) -> AudioStreamWAV:
-	if clip == null:
-		return null
-	var data := clip.data
-	if data.is_empty():
-		return null
-	var stereo := clip.stereo
-	var bytes_per_frame := 4 if stereo else 2 ## 16-bit samples.
-	if clip.format != AudioStreamWAV.FORMAT_16_BITS:
-		return clip ## Only the 16-bit case is worth hand-trimming; anything else plays as is.
-	var frames := data.size() / bytes_per_frame
-	var first := 0
-	for i in frames:
-		var sample := data.decode_s16(i * bytes_per_frame) / 32768.0
-		if absf(sample) > TRIM_FLOOR:
-			first = maxi(i - int(clip.mix_rate * 0.08), 0) ## Keep a breath of lead-in.
-			break
-	if first <= 0:
-		return clip
-	var trimmed := AudioStreamWAV.new()
-	trimmed.format = clip.format
-	trimmed.mix_rate = clip.mix_rate
-	trimmed.stereo = stereo
-	trimmed.data = data.slice(first * bytes_per_frame)
-	return trimmed
-
-
-# --- Storage -----------------------------------------------------------------
-
-## Called when a sentence is accepted, so the clip that is kept is the take that passed
+## Called when a sentence is accepted, so the take that is kept is the one that passed
 ## rather than whatever was said last.
 func keep_for(slot: int) -> void:
-	if _last == null or slot < 0:
+	if not _supported or slot < 0:
 		return
-	_clips[slot] = _last
-	_last = null
-
-
-func clip(slot: int) -> AudioStreamWAV:
-	return _clips.get(slot, null)
+	JavaScriptBridge.eval("%s.keep(%d)" % [BRIDGE, slot], true)
 
 
 func has_clip(slot: int) -> bool:
-	return _clips.has(slot)
+	return clip_length(slot) > 0.0
 
 
-## True while the sentence is playing, so the sequence can wait for the student's own
-## voice to finish rather than talking over it.
-func playing() -> bool:
-	return _player != null and _player.playing
-
-
-## Returns the clip's length in seconds, or 0.0 when there is nothing to play - which is
-## the caller's cue to speak the sentence instead.
-func play(slot: int) -> float:
-	var wav: AudioStreamWAV = clip(slot)
-	if wav == null or _player == null:
+## Length in seconds, or 0.0 when there is no recording for this slot - which is the
+## caller's cue to have the lab speak the sentence instead.
+func clip_length(slot: int) -> float:
+	if not _supported or slot < 0:
 		return 0.0
-	_player.stream = wav
-	_player.play()
-	return wav.get_length()
+	return float(JavaScriptBridge.eval("%s.len(%d)" % [BRIDGE, slot], true))
+
+
+## Starts the clip and reports how long it runs, so the sequence can time its surge to
+## land on the student's last word rather than over it.
+func play(slot: int) -> float:
+	if not _supported or slot < 0:
+		return 0.0
+	return float(JavaScriptBridge.eval("%s.play(%d)" % [BRIDGE, slot], true))
 
 
 func stop() -> void:
-	if _player != null:
-		_player.stop()
+	if _supported:
+		JavaScriptBridge.eval("%s.halt()" % BRIDGE, true)
 
 
-## A new creature starts with no voice. Called when a round begins or is abandoned, so
-## one child's recording can never turn up in the next child's transformation.
+## A new creature starts with no voice, so one child's recording can never surface in the
+## next child's transformation.
 func clear() -> void:
-	_clips.clear()
-	_last = null
-	stop()
+	if _supported:
+		JavaScriptBridge.eval("%s.clear()" % BRIDGE, true)

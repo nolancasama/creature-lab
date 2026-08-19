@@ -884,47 +884,34 @@ static func _leg_growth_checks(failures: Array[String]) -> void:
 		rig.free()
 
 
+## The student's recorded voice is optional by design: it records in the browser, so on
+## desktop, in the editor, and on any browser without MediaRecorder there is simply no
+## clip. What must hold is that a missing clip reports itself as missing - a recorder that
+## quietly claims a length would make the sequence wait out that length in silence instead
+## of having the lab speak - and that one child's recording cannot outlive their round.
 static func _voice_checks(failures: Array[String]) -> void:
 	Voice.clear()
-	_check(failures, Voice.clip(0) == null and not Voice.has_clip(0),
+	_check(failures, is_zero_approx(Voice.clip_length(0)) and not Voice.has_clip(0),
 		"voice: a cleared recorder still reports a clip")
 	_check(failures, is_zero_approx(Voice.play(0)),
 		"voice: playing a missing clip did not report itself as missing")
-	_check(failures, Voice.play(-1) <= 0.0 and Voice.play(99) <= 0.0,
+	_check(failures, Voice.play(-1) <= 0.0 and Voice.clip_length(99) <= 0.0,
 		"voice: an out-of-range slot was not handled")
 
-	# keep_for with nothing captured must not invent an entry, or the transformation would
-	# wait on a clip that plays nothing instead of speaking the sentence.
+	# Storing a slot with nothing captured must not invent one, or the transformation
+	# would wait on a clip that plays nothing.
 	Voice.keep_for(0)
 	_check(failures, not Voice.has_clip(0),
-		"voice: keeping a slot with no recording created an empty clip")
+		"voice: keeping a slot with no recording created a clip")
 
-	# A stored clip reports a real length, and clear() takes it away again.
-	var probe := AudioStreamWAV.new()
-	probe.format = AudioStreamWAV.FORMAT_16_BITS
-	probe.mix_rate = 22050
-	probe.stereo = false
-	# Built and then assigned: `probe.data` hands back a copy, so resizing it in place
-	# silently leaves the stream empty and every length reads as zero.
-	var silence := PackedByteArray()
-	silence.resize(22050 * 2) ## One second, 16-bit mono.
-	probe.data = silence
-	Voice._clips[0] = probe
-	if Voice.available():
-		# Recording is switched on: a stored clip has to actually play, or the sequence
-		# would wait out its length in silence instead of speaking the sentence.
-		_check(failures, Voice.has_clip(0) and Voice.play(0) > 0.5,
-			"voice: a stored clip did not play back")
-	else:
-		# Recording is switched off, which is the shipped state. What matters then is that
-		# the recorder says so rather than pretending, so every beat falls through to the
-		# lab speaking. Silent audio that reports success is what put a mute build online.
-		_check(failures, is_zero_approx(Voice.play(0)),
-			"voice: capture is off but playback still claimed a length")
-	Voice.stop()
+	# Nothing in here may touch AudioServer. Adding an input bus is what silenced the whole
+	# web build once, and the fix was to move capture into the browser entirely.
+	_check(failures, AudioServer.get_bus_index("VoiceCapture") == -1
+		and AudioServer.get_bus_index("VoiceLab") == -1,
+		"voice: the recorder is adding audio buses again")
+	_check(failures, not bool(ProjectSettings.get_setting("audio/driver/enable_input", false)),
+		"voice: engine audio input is switched on again")
 	Voice.clear()
-	_check(failures, not Voice.has_clip(0),
-		"voice: clear() left a previous round's recording behind")
 
 
 ## The carousel replaced a grid that could not promise its own size. These assert the two
