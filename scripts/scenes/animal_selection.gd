@@ -7,9 +7,8 @@ extends Node3D
 ## Two local UI sub-states, not global FSM phases (the FSM only sees one
 ## Phase.ANIMAL_SELECTION for all of it):
 ##   PICKING   - grid of animal buttons, live rotating preview, a confirm button.
-##   RECORDING - Word Lab fills the right panel; Say It docks below the platform and only
-##               appears once a card is picked; floating HUD; animal centred in the free
-##               space on the left.
+##   RECORDING - animal and platform are centred; the descriptor carousel and Say It swap
+##               inside one fixed console beneath them.
 
 const PREVIEW_SPIN := 0.45
 const RECORDING_FACING := -PI * 0.5 ## Godot forward (-Z) turned toward screen-right.
@@ -26,6 +25,9 @@ const PLATFORM_POS := Vector3(-0.5, 0.0, 0.6)
 const CAMERA_FOV := 22.0
 const CAMERA_POS := Vector3(1.791, 4.271, 14.888)
 const CAMERA_AIM := Vector3(-0.5, 0.95, 0.0)
+## Looks lower than the picking camera, moving the animal/platform upward on screen and
+## leaving a stable console region below without shrinking the animal.
+const RECORDING_CAMERA_AIM := Vector3(-0.5, 0.22, 0.0)
 
 ## Picking and recording are overlays on one screen, so they share one panel rect: the
 ## Word Lab / Say It stack lands exactly where the animal grid was, and nothing resizes
@@ -48,12 +50,9 @@ const PANEL_WIDTH := -PANEL_LEFT + PANEL_RIGHT ## 648 - the rect's actual width.
 ## centring expanders (see its _build()) already have real slack to work with here without
 ## any extra tuning.
 const PRESENT_SIZE := Vector2(720, 360)
-const SAY_IT_WIDTH := 540 ## 720 less a quarter - the docked panel below the platform.
-## Below SpeechPanel's own content minimum (~298), so the panel is fully packed: its two
-## centring expanders have nothing to distribute, and the vbox is what decides the spacing.
-## Deliberately tight - this came down from 350 in two steps.
-const SAY_IT_HEIGHT := 224
-const SAY_IT_BOTTOM_MARGIN := 24
+const CONSOLE_SIZE := Vector2(760, 320) ## Same footprint for words, colours and speech.
+const CONSOLE_BOTTOM_MARGIN := 10
+const SAY_IT_WIDTH := 620
 
 ## Content-hugging rather than the tall shared rect: three animal-button rows plus Start,
 ## no more. Hand-summed from the picking panel's own children (10 top pad + 3 rows of 62 +
@@ -78,6 +77,8 @@ var _mode: Mode = Mode.PICKING
 # Stage
 var _preview_root: Node3D = null
 var _rig: CreatureRig = null
+var _platform: Node3D = null
+var _camera: Camera3D = null
 
 # Picking UI
 var _picking_panel: Control = null
@@ -91,6 +92,8 @@ var _progress: Label = null
 var _progress_count: Label = null
 var _word_lab: DescriptorCarousel = null
 var _speech: SpeechPanel = null
+var _console: Control = null
+var _colour_preview := "" ## Temporary live Before colour; never written to CreatureState.
 
 var _pending := {}
 var _attempts := 0
@@ -154,9 +157,9 @@ func _build_stage() -> void:
 	add_child(StageKit.fill_light(Color("#cfe6ff"), Vector3(-3.0, 3.2, 3.2), 1.1, 14.0))
 	add_child(StageKit.ground(9.0, Color("#141d2c")))
 
-	var platform := StageKit.platform(1.8, Color("#22304a"), UiKit.ACCENT)
-	platform.position = PLATFORM_POS
-	add_child(platform)
+	_platform = StageKit.platform(1.8, Color("#22304a"), UiKit.ACCENT)
+	_platform.position = PLATFORM_POS
+	add_child(_platform)
 
 	_preview_root = Node3D.new()
 	_preview_root.name = "PreviewRoot"
@@ -167,9 +170,21 @@ func _build_stage() -> void:
 	## snapping back to this angle every time.
 	add_child(_preview_root)
 
-	var cam := StageKit.camera(CAMERA_POS, CAMERA_AIM, CAMERA_FOV)
-	add_child(cam)
-	_lens_shift(cam, CAMERA_SHIFT)
+	_camera = StageKit.camera(CAMERA_POS, CAMERA_AIM, CAMERA_FOV)
+	add_child(_camera)
+	_lens_shift(_camera, CAMERA_SHIFT)
+
+
+## Picking reserves the right side for animal buttons. Recording removes that split and
+## uses the optical centre for the animal/platform group. The world objects never move,
+## so switching words, colours and speech cannot introduce geometry jumps.
+func _set_recording_composition(recording: bool) -> void:
+	if _camera == null:
+		return
+	_camera.set_perspective(CAMERA_FOV, _camera.near, _camera.far)
+	_camera.look_at(RECORDING_CAMERA_AIM if recording else CAMERA_AIM)
+	if not recording:
+		_lens_shift(_camera, CAMERA_SHIFT)
 
 
 ## Shifts the rendered image sideways by a number of screen pixels, by offsetting the
@@ -276,6 +291,7 @@ func _clear_overlays() -> void:
 	_picking_panel = null
 	_word_lab = null
 	_speech = null
+	_console = null
 	_progress = null
 	_progress_count = null
 	_buttons.clear() ## Freed with the panel; _preview() would otherwise iterate corpses.
@@ -346,7 +362,9 @@ func _confirm() -> void:
 func _enter_picking() -> void:
 	Speech.stop()
 	_mode = Mode.PICKING
+	_set_recording_composition(false)
 	_dragging_view = false
+	_colour_preview = ""
 	_pending = {}
 	_attempts = 0
 	_busy = false
@@ -462,7 +480,9 @@ func _present_advance() -> void:
 ## changes, only what is shown on top of it.
 func _enter_recording() -> void:
 	_mode = Mode.RECORDING
+	_set_recording_composition(true)
 	_dragging_view = false
+	_colour_preview = ""
 	if _preview_root != null:
 		_preview_root.rotation.y = RECORDING_FACING
 	_clear_overlays()
@@ -479,18 +499,26 @@ func _enter_recording() -> void:
 
 
 func _build_recording_ui() -> void:
-	# The carousel owns the entire right panel, mounted straight onto the rect with no
-	# ScrollContainer around it. That is the point: it shows one card at a time, so it can
-	# promise a fixed size, and a scroll container would have let it drift back to being a
-	# list. Both states - the cards and the colour wheels - swap inside this same rect.
+	# One fixed bottom console. Descriptor, sequential colour choice and Say It all occupy
+	# this exact rectangle, so no selection can push the platform or animal sideways.
+	_console = Control.new()
+	_console.name = "SelectionConsole"
+	_console.anchor_left = 0.5
+	_console.anchor_right = 0.5
+	_console.anchor_top = 1.0
+	_console.anchor_bottom = 1.0
+	_console.offset_left = -CONSOLE_SIZE.x * 0.5
+	_console.offset_right = CONSOLE_SIZE.x * 0.5
+	_console.offset_top = -(CONSOLE_SIZE.y + CONSOLE_BOTTOM_MARGIN)
+	_console.offset_bottom = -CONSOLE_BOTTOM_MARGIN
+	_root.add_child(_console)
+
 	_word_lab = DescriptorCarousel.new()
-	_word_lab.set_anchors_and_offsets_preset(Control.PRESET_RIGHT_WIDE)
-	_word_lab.offset_left = PANEL_LEFT
-	_word_lab.offset_right = PANEL_RIGHT
-	_word_lab.offset_top = PANEL_TOP
-	_word_lab.offset_bottom = PANEL_BOTTOM
+	_word_lab.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_word_lab.pair_selected.connect(_on_pair_selected)
-	_root.add_child(_word_lab)
+	_word_lab.before_colour_previewed.connect(_on_before_colour_previewed)
+	_word_lab.colour_selection_cancelled.connect(_on_colour_selection_cancelled)
+	_console.add_child(_word_lab)
 	var animal := Content.animal(Game.current.animal_id) if Game.current != null else null
 	_word_lab.set_disabled_categories(animal.disabled_categories if animal != null else PackedStringArray())
 
@@ -517,18 +545,16 @@ func _build_recording_ui() -> void:
 	_build_progress_display()
 
 
-## "Before" and its "(n of 3)" count as two stacked lines rather than one, both centred
-## through _center_left() - the same dynamic, viewport-aware centring the platform and the
-## Say It dock use - so all three agree on where "above the platform" actually is.
+## "Before" and its count share the actual screen centre with the optical centre of the
+## animal and platform, rather than the old free-space centre left of a descriptor panel.
 func _build_progress_display() -> void:
 	var box := UiKit.vbox(2)
-	box.anchor_left = 0.0
-	box.anchor_right = 0.0
+	box.anchor_left = 0.5
+	box.anchor_right = 0.5
 	box.anchor_top = 0.0
 	box.anchor_bottom = 0.0
-	var left := _center_left(PROGRESS_WIDTH)
-	box.offset_left = left
-	box.offset_right = left + PROGRESS_WIDTH
+	box.offset_left = -PROGRESS_WIDTH * 0.5
+	box.offset_right = PROGRESS_WIDTH * 0.5
 	box.offset_top = 24
 	box.offset_bottom = 24 + PROGRESS_HEIGHT
 	_root.add_child(box)
@@ -544,29 +570,22 @@ func _build_progress_display() -> void:
 	box.add_child(_progress_count)
 
 
-## Docked under the platform rather than beside it, centred through _center_left() - the
-## same free-space region the camera already centres the animal in. The panel itself starts
-## hidden - see SpeechPanel.show_idle() - and only appears once a card is picked.
+## Say It replaces the carousel inside SelectionConsole instead of introducing another
+## panel elsewhere on screen. Its width is narrower, but its centre and vertical region
+## are identical to the carousel's.
 func _build_say_it_dock() -> void:
 	_speech = SpeechPanel.new()
-	var left := _center_left(SAY_IT_WIDTH)
-	_speech.anchor_left = 0.0
-	_speech.anchor_right = 0.0
-	_speech.anchor_top = 1.0
+	_speech.anchor_left = 0.5
+	_speech.anchor_right = 0.5
+	_speech.anchor_top = 0.0
 	_speech.anchor_bottom = 1.0
-	_speech.offset_left = left
-	_speech.offset_right = left + SAY_IT_WIDTH
-	_speech.offset_top = -(SAY_IT_HEIGHT + SAY_IT_BOTTOM_MARGIN)
-	_speech.offset_bottom = -SAY_IT_BOTTOM_MARGIN
-	# SAY_IT_HEIGHT is a floor, not a promise: the panel's own content can need more than
-	# it, and a bottom-anchored control that outgrows its box spills over the edge it is
-	# anchored to. Growing upward instead keeps the bottom pinned above the screen edge,
-	# so the last thing in the column - Cancel - stays reachable however tall the content
-	# turns out to be. It spilled off-screen exactly this way once already.
-	_speech.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	_speech.offset_left = -SAY_IT_WIDTH * 0.5
+	_speech.offset_right = SAY_IT_WIDTH * 0.5
+	_speech.offset_top = 0.0
+	_speech.offset_bottom = 0.0
 	_speech.accepted_by_teacher.connect(func() -> void: _commit(true))
 	_speech.change_requested.connect(_cancel_pending)
-	_root.add_child(_speech)
+	_console.add_child(_speech)
 
 
 func _sync_ui() -> void:
@@ -581,6 +600,7 @@ func _sync_ui() -> void:
 	_word_lab.set_used(Game.current.used_categories())
 	_word_lab.set_restriction(assigned)
 	_word_lab.set_locked(not _pending.is_empty() or _busy)
+	_word_lab.visible = _pending.is_empty() and not _busy
 
 
 ## Guided mode hands the student one pair per sentence instead of the whole board. The
@@ -618,6 +638,8 @@ func _apply_traits(animate: bool) -> void:
 	if _rig == null:
 		return
 	var traits := Game.current.before_traits()
+	if not _colour_preview.is_empty():
+		traits[Content.COLOR_CATEGORY] = _colour_preview
 	if not _pending.is_empty():
 		traits[str(_pending["category"])] = str(_pending["before"])
 	TraitVisuals.apply_all(_rig, traits, animate)
@@ -650,6 +672,7 @@ func _punch() -> void:
 func _on_pair_selected(category: String, before: String, after: String) -> void:
 	if _busy or not _pending.is_empty() or Game.current == null or Game.current.is_complete():
 		return
+	_colour_preview = ""
 	_pending = {"category": category, "before": before, "after": after}
 	_attempts = 0
 	_apply_traits(true)
@@ -658,16 +681,36 @@ func _on_pair_selected(category: String, before: String, after: String) -> void:
 	if not _is_deform_category(category):
 		_punch()
 	_word_lab.set_locked(true)
+	_word_lab.visible = false
 	_speech.show_target(before, after, _clause())
+
+
+## Before-colour browsing is visual only. It deliberately bypasses `_pending`, because a
+## pending pair means the student has already chosen an After value and should be in Say
+## It. The preview vanishes without touching CreatureState when the colour menu is cancelled.
+func _on_before_colour_previewed(word: String) -> void:
+	if _busy or not _pending.is_empty() or Game.current == null:
+		return
+	_colour_preview = word
+	_apply_traits(true)
+
+
+func _on_colour_selection_cancelled() -> void:
+	if _busy or not _pending.is_empty():
+		return
+	_colour_preview = ""
+	_apply_traits(true)
 
 
 func _cancel_pending() -> void:
 	if _busy or _pending.is_empty():
 		return
 	_pending = {}
+	_colour_preview = ""
 	_attempts = 0
 	_apply_traits(true)
 	_word_lab.set_locked(false)
+	_word_lab.visible = true
 	_speech.show_idle()
 
 
@@ -748,6 +791,7 @@ func _finish_sentence() -> void:
 			Game.set_phase(Game.Phase.CREATURE_LAB)
 	else:
 		_word_lab.set_locked(false)
+		_word_lab.visible = true
 		_speech.show_idle("Choose your next card.")
 		_sync_ui()
 

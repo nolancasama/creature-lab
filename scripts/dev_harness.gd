@@ -10,6 +10,9 @@ extends RefCounted
 ##   godot --path . -- --splittest         the SAY_SPLIT present-tense pass, end to end
 ##   godot --path . -- --shot=present      the centred present-tense panel
 ##   godot --path . -- --shot=carousel     recording screen after one carousel step
+##   godot --path . -- --shot=color-before sequential colour picker, Before step
+##   godot --path . -- --shot=color-after  sequential colour picker, After step
+##   godot --path . -- --shot=color-say    colour sentence ready to record
 ##   godot --path . -- --look=young        one creature wearing one trait word, then quit
 ##   godot --path . -- --look=young:horse  the same, on a named animal
 ##   godot --path . -- --look=young+big    several traits stacked on one creature
@@ -352,7 +355,7 @@ static func _screenshot(main: Node, phase: String) -> void:
 	# seen from --shot=lab, which only ever shows the idle screen.
 	if phase == "present":
 		Settings.say_mode = Settings.SAY_SPLIT
-	_goto("lab" if phase in ["say", "present", "carousel"] else phase)
+	_goto("lab" if phase in ["say", "present", "carousel", "color-before", "color-after", "color-say"] else phase)
 	await main.get_tree().create_timer(SHOT_DELAY).timeout
 	if phase == "say":
 		var word_lab := _find_word_lab(Router.current_scene)
@@ -367,6 +370,22 @@ static func _screenshot(main: Node, phase: String) -> void:
 		if carousel != null:
 			carousel._step(1)
 		await main.get_tree().create_timer(DescriptorCarousel.SLIDE_TIME + 0.1).timeout
+	elif phase in ["color-before", "color-after", "color-say"]:
+		var colour_carousel := _find_word_lab(Router.current_scene)
+		if colour_carousel != null:
+			for i in colour_carousel._slots.size():
+				if colour_carousel._slot_category(colour_carousel._slots[i]) == Content.COLOR_CATEGORY:
+					colour_carousel._index = i
+					colour_carousel._refresh()
+					colour_carousel._activate(0)
+					break
+			colour_carousel._step_colour(1)
+			if phase in ["color-after", "color-say"]:
+				colour_carousel._confirm_colour()
+				colour_carousel._step_colour(1)
+			if phase == "color-say":
+				colour_carousel._confirm_colour()
+		await main.get_tree().create_timer(0.6).timeout
 	await RenderingServer.frame_post_draw
 	var image := main.get_viewport().get_texture().get_image()
 	var path := "user://shot_%s.png" % phase
@@ -863,16 +882,55 @@ static func _carousel_checks(failures: Array[String], main: Node) -> void:
 		car._slide.kill()
 	car._main_card.position.x = 0.0
 
-	# Every wheel position, in both directions, must leave the two colours different.
+	# Colours are sequential: BEFORE browsing emits live previews, confirming it enters
+	# AFTER without changing that value, and AFTER always skips the confirmed colour.
 	var colours := Content.enabled_colors()
+	var previews: Array[String] = []
+	var selections: Array[PackedStringArray] = []
+	var cancellations := [0]
+	car.before_colour_previewed.connect(func(word: String) -> void: previews.append(word))
+	car.pair_selected.connect(func(category: String, before: String, after: String) -> void:
+		if category == Content.COLOR_CATEGORY:
+			selections.append(PackedStringArray([before, after])))
+	car.colour_selection_cancelled.connect(func() -> void: cancellations[0] += 1)
+	car._colour_step = DescriptorCarousel.ColourStep.BEFORE
+	car._was_index = 0
+	car._now_index = 1
+	car._show_view(DescriptorCarousel.View.COLOUR)
+	car._sync_colour()
+	car._step_colour(1)
+	_check(failures, not previews.is_empty()
+		and previews[-1] == (colours[car._was_index] as ColorDefinition).word,
+		"carousel: BEFORE colour did not emit a live preview")
+	var confirmed_before := car._was_index
+	car._confirm_colour()
+	_check(failures, car._colour_step == DescriptorCarousel.ColourStep.AFTER
+		and car._was_index == confirmed_before,
+		"carousel: confirming BEFORE did not enter AFTER with the colour fixed")
+	var previews_after_confirm := previews.size()
 	for i in colours.size() * 2:
-		car._step_colour(false, 1)
+		car._step_colour(1)
 		_check(failures, car._was_index != car._now_index,
-			"carousel: colour wheels landed on the same colour stepping forward")
+			"carousel: AFTER landed on the confirmed BEFORE colour")
 	for i in colours.size() * 2:
-		car._step_colour(true, -1)
+		car._step_colour(-1)
 		_check(failures, car._was_index != car._now_index,
-			"carousel: colour wheels landed on the same colour stepping back")
+			"carousel: reverse AFTER landed on the confirmed BEFORE colour")
+	_check(failures, previews.size() == previews_after_confirm,
+		"carousel: AFTER browsing recoloured the live animal preview")
+	car._cancel_colour()
+	_check(failures, car._colour_step == DescriptorCarousel.ColourStep.BEFORE
+		and car._was_index == confirmed_before,
+		"carousel: cancelling AFTER did not return to the confirmed BEFORE choice")
+	car._confirm_colour()
+	car._confirm_colour()
+	_check(failures, selections.size() == 1 and selections[0][0] != selections[0][1],
+		"carousel: final colour confirmation did not emit a different pair")
+	car._colour_step = DescriptorCarousel.ColourStep.BEFORE
+	car._show_view(DescriptorCarousel.View.COLOUR)
+	car._cancel_colour()
+	_check(failures, cancellations[0] == 1 and car._view == DescriptorCarousel.View.CATEGORY,
+		"carousel: cancelling BEFORE did not restore the main word carousel")
 
 	var first := Content.enabled_pairs()[0]
 	car.set_used(PackedStringArray([first.category]))
@@ -882,12 +940,12 @@ static func _carousel_checks(failures: Array[String], main: Node) -> void:
 	_check(failures, car._blocked(first.category), "carousel: locking left cards selectable")
 	car.set_locked(false)
 
-	# Fixed panel: no view may need more room than the rect it is mounted in.
+	# Fixed bottom console: neither sequential view may outgrow its stable screen region.
 	for view in [DescriptorCarousel.View.CATEGORY, DescriptorCarousel.View.COLOUR]:
 		car._show_view(view)
 		var needed := car.get_combined_minimum_size()
-		_check(failures, needed.x <= 648.0 and needed.y <= 620.0,
-			"carousel: view %d needs %s, more than the panel's 648x620" % [view, needed])
+		_check(failures, needed.x <= 760.0 and needed.y <= 320.0,
+			"carousel: view %d needs %s, more than the 760x320 console" % [view, needed])
 	car.free()
 
 

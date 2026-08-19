@@ -12,7 +12,7 @@ extends PanelContainer
 ##   CATEGORY - the horizontal card carousel, previous and next peeking in at the sides.
 ##              Each adjective is its own card, so tapping one both picks the pair and
 ##              says which way it runs: the tapped word is what the animal WAS.
-##   COLOUR   - two carousels, because colours have no opposite and need both ends picked
+##   COLOUR   - one carousel used in sequence: first "It was", then "Now it is".
 ## The panel is anchored by its parent, so switching views cannot move or resize it. That
 ## is deliberate: the old grid changed height between states and the whole right side of
 ## the screen jumped.
@@ -23,8 +23,11 @@ extends PanelContainer
 ## safe; between two words the game says "to".
 
 signal pair_selected(category: String, before: String, after: String)
+signal before_colour_previewed(word: String)
+signal colour_selection_cancelled()
 
 enum View { CATEGORY, COLOUR }
+enum ColourStep { BEFORE, AFTER }
 
 ## Sized to fit the panel it is mounted in, not chosen for looks: the row is
 ## arrow + side + main + side + arrow plus four gaps, and the right panel gives it 596px
@@ -32,12 +35,14 @@ enum View { CATEGORY, COLOUR }
 ## panel, which is exactly how the first build shipped its right arrow off the edge.
 ## One card per adjective, side by side, so the pair still reads as a pair. Two of these
 ## plus the gap has to come in under what CARD_SIZE used to occupy or the row stops fitting.
-const WORD_CARD_SIZE := Vector2(115, 124)
+const WORD_CARD_SIZE := Vector2(140, 112)
 const WORD_GAP := 8
-const SIDE_CARD_SIZE := Vector2(104, 88)
+const SIDE_CARD_SIZE := Vector2(112, 78)
 const ARROW_SIZE := 44
 const CAROUSEL_GAP := 8
-const SWATCH_SIZE := Vector2(210, 96)
+const SWATCH_SIZE := Vector2(220, 94)
+const COLOUR_SIDE_SIZE := Vector2(96, 68)
+const ACTION_SIZE := Vector2(148, 46)
 const SLIDE_TIME := 0.16 ## Long enough to see which way the deck moved, short enough to spam.
 
 var _view := View.CATEGORY
@@ -50,6 +55,7 @@ var _restriction := ""
 
 var _was_index := 0
 var _now_index := 0
+var _colour_step := ColourStep.BEFORE
 
 var _views := {} ## View -> Control
 var _prev_card: PanelContainer = null
@@ -60,17 +66,20 @@ var _next_card: PanelContainer = null
 var _left_arrow: Button = null
 var _right_arrow: Button = null
 var _status: Label = null
-var _was_swatch: Button = null
-var _now_swatch: Button = null
-var _colour_sentence: Label = null
-var _colour_use: Button = null
+var _colour_heading: Label = null
+var _colour_prev: Button = null
+var _colour_swatch: Button = null
+var _colour_next: Button = null
+var _colour_confirm: Button = null
+var _colour_cancel: Button = null
 var _reference: Window = null
 var _slide: Tween = null
 
 
 func _ready() -> void:
-	add_theme_stylebox_override("panel",
-		UiKit.stylebox(Color(0.06, 0.1, 0.16, 0.92), 16, 2, UiKit.PANEL_HI, 26))
+	# The cards are a control console beneath the platform, not a second screen-sized panel.
+	# Their own faces provide contrast while the laboratory remains visible around them.
+	add_theme_stylebox_override("panel", StyleBoxEmpty.new())
 	_build_slots()
 
 	var stack := Control.new()
@@ -84,7 +93,7 @@ func _ready() -> void:
 	for view in [View.CATEGORY, View.COLOUR]:
 		var page := VBoxContainer.new()
 		page.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-		page.add_theme_constant_override("separation", 14)
+		page.add_theme_constant_override("separation", 10)
 		page.alignment = BoxContainer.ALIGNMENT_CENTER
 		stack.add_child(page)
 		_views[view] = page
@@ -249,89 +258,107 @@ func _activate(half: int) -> void:
 		return
 	Audio.play("select")
 	_was_index = 0
-	_now_index = 1
+	_now_index = _next_colour_index(_was_index, 1, true)
+	_colour_step = ColourStep.BEFORE
 	_sync_colour()
 	_show_view(View.COLOUR)
+	_emit_before_preview()
 
 
 # --- Colours -----------------------------------------------------------------
 
 func _build_colour_view(page: VBoxContainer) -> void:
-	page.add_child(_colour_row("It was", true))
-	page.add_child(_colour_row("Now it is", false))
-
-	_colour_sentence = UiKit.label("", UiKit.BODY, UiKit.TEXT)
-	_colour_sentence.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	page.add_child(_colour_sentence)
-
-	_colour_use = UiKit.button("Use these colours", UiKit.BODY)
-	_colour_use.custom_minimum_size = Vector2(260, 52)
-	_colour_use.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	_colour_use.focus_mode = Control.FOCUS_NONE
-	UiKit.style_button(_colour_use, UiKit.ACCENT, true)
-	_colour_use.pressed.connect(_choose_colours)
-	page.add_child(_colour_use)
-
-	page.add_child(_back_button())
-
-
-func _colour_row(caption: String, is_was: bool) -> Control:
-	var box := UiKit.vbox(4)
-	var label := UiKit.label(caption, UiKit.SMALL, UiKit.MUTED)
-	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	box.add_child(label)
+	_colour_heading = UiKit.label("", UiKit.H3, UiKit.GOLD)
+	_colour_heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	page.add_child(_colour_heading)
 
 	var row := UiKit.hbox(10)
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	box.add_child(row)
+	page.add_child(row)
 
 	var left := UiKit.button("<", UiKit.H3)
 	left.custom_minimum_size = Vector2(44, 44)
 	left.focus_mode = Control.FOCUS_NONE
 	left.size_flags_vertical = Control.SIZE_SHRINK_CENTER ## Square, not a full-height pill.
 	UiKit.style_button(left, UiKit.PANEL_HI)
-	left.pressed.connect(func() -> void: _step_colour(is_was, -1))
+	left.pressed.connect(func() -> void: _step_colour(-1))
 	row.add_child(left)
 
-	var swatch := Button.new()
-	swatch.custom_minimum_size = SWATCH_SIZE
-	swatch.focus_mode = Control.FOCUS_NONE
-	swatch.disabled = true ## A label that happens to be paintable, not a control.
-	swatch.add_theme_font_size_override("font_size", UiKit.H3)
-	row.add_child(swatch)
-	if is_was:
-		_was_swatch = swatch
-	else:
-		_now_swatch = swatch
+	_colour_prev = _colour_card(COLOUR_SIDE_SIZE, 0.48)
+	row.add_child(_colour_prev)
+
+	_colour_swatch = _colour_card(SWATCH_SIZE, 1.0)
+	_colour_swatch.add_theme_font_size_override("font_size", UiKit.H2)
+	row.add_child(_colour_swatch)
+
+	_colour_next = _colour_card(COLOUR_SIDE_SIZE, 0.48)
+	row.add_child(_colour_next)
 
 	var right := UiKit.button(">", UiKit.H3)
 	right.custom_minimum_size = Vector2(44, 44)
 	right.focus_mode = Control.FOCUS_NONE
 	right.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	UiKit.style_button(right, UiKit.PANEL_HI)
-	right.pressed.connect(func() -> void: _step_colour(is_was, 1))
+	right.pressed.connect(func() -> void: _step_colour(1))
 	row.add_child(right)
-	return box
+
+	var actions := UiKit.hbox(12)
+	actions.alignment = BoxContainer.ALIGNMENT_CENTER
+	page.add_child(actions)
+	_colour_confirm = UiKit.button("Confirm", UiKit.BODY, true)
+	_colour_confirm.custom_minimum_size = ACTION_SIZE
+	_colour_confirm.focus_mode = Control.FOCUS_NONE
+	UiKit.style_button(_colour_confirm, UiKit.CTA, true)
+	_colour_confirm.pressed.connect(_confirm_colour)
+	actions.add_child(_colour_confirm)
+
+	_colour_cancel = UiKit.button("Cancel", UiKit.BODY)
+	_colour_cancel.custom_minimum_size = ACTION_SIZE
+	_colour_cancel.focus_mode = Control.FOCUS_NONE
+	UiKit.style_button(_colour_cancel, UiKit.PANEL_HI)
+	_colour_cancel.pressed.connect(_cancel_colour)
+	actions.add_child(_colour_cancel)
+
+
+func _colour_card(size: Vector2, alpha: float) -> Button:
+	var card := Button.new()
+	card.custom_minimum_size = size
+	card.focus_mode = Control.FOCUS_NONE
+	card.disabled = true ## A painted label, not another decision point.
+	card.modulate.a = alpha
+	card.add_theme_font_size_override("font_size", UiKit.H3)
+	return card
 
 
 ## Stepping the "now" wheel onto the "was" colour keeps going rather than stopping there,
 ## so "It was red. Now it is red." is not something the student can even land on, let
 ## alone submit. Stepping "was" onto "now" pushes the other wheel along for the same
 ## reason - whichever one the student is turning stays under their control.
-func _step_colour(is_was: bool, direction: int) -> void:
+func _step_colour(direction: int) -> void:
 	var colours := Content.enabled_colors()
 	if colours.size() < 2 or _locked:
 		return
 	Audio.play("click")
-	if is_was:
-		_was_index = wrapi(_was_index + direction, 0, colours.size())
-		if _was_index == _now_index:
-			_now_index = wrapi(_now_index + direction, 0, colours.size())
+	if _colour_step == ColourStep.BEFORE:
+		_was_index = _next_colour_index(_was_index, direction, false)
+		_emit_before_preview()
 	else:
-		_now_index = wrapi(_now_index + direction, 0, colours.size())
-		if _now_index == _was_index:
-			_now_index = wrapi(_now_index + direction, 0, colours.size())
+		# AFTER automatically skips the confirmed BEFORE colour. The student can see it
+		# remains on the animal, but can never land on a sentence that changes nothing.
+		_now_index = _next_colour_index(_now_index, direction, true)
 	_sync_colour()
+
+
+func _next_colour_index(from: int, direction: int, skip_before: bool) -> int:
+	var colours := Content.enabled_colors()
+	if colours.is_empty():
+		return 0
+	var candidate := from
+	for _attempt in colours.size():
+		candidate = wrapi(candidate + direction, 0, colours.size())
+		if not skip_before or candidate != _was_index:
+			return candidate
+	return from
 
 
 func _sync_colour() -> void:
@@ -340,13 +367,17 @@ func _sync_colour() -> void:
 		return
 	_was_index = clampi(_was_index, 0, colours.size() - 1)
 	_now_index = clampi(_now_index, 0, colours.size() - 1)
-	if _was_index == _now_index:
-		_now_index = wrapi(_now_index + 1, 0, colours.size())
-	var was: ColorDefinition = colours[_was_index]
-	var now: ColorDefinition = colours[_now_index]
-	_paint(_was_swatch, was)
-	_paint(_now_swatch, now)
-	_colour_sentence.text = "It was %s. Now it is %s." % [was.word, now.word]
+	if _colour_step == ColourStep.AFTER and _was_index == _now_index:
+		_now_index = _next_colour_index(_now_index, 1, true)
+	var active_index := _was_index if _colour_step == ColourStep.BEFORE else _now_index
+	var skip_before := _colour_step == ColourStep.AFTER
+	var previous := _next_colour_index(active_index, -1, skip_before)
+	var following := _next_colour_index(active_index, 1, skip_before)
+	_paint(_colour_prev, colours[previous])
+	_paint(_colour_swatch, colours[active_index])
+	_paint(_colour_next, colours[following])
+	_colour_heading.text = "It was" if _colour_step == ColourStep.BEFORE else "Now it is"
+	_colour_cancel.text = "Cancel"
 
 
 ## The swatch wears the colour it names, so the word and the thing agree even for a
@@ -365,16 +396,41 @@ func _paint(swatch: Button, colour: ColorDefinition) -> void:
 		swatch.add_theme_color_override(state, ink)
 
 
-func _choose_colours() -> void:
+func _emit_before_preview() -> void:
+	var colours := Content.enabled_colors()
+	if not colours.is_empty():
+		before_colour_previewed.emit((colours[_was_index] as ColorDefinition).word)
+
+
+func _confirm_colour() -> void:
 	var colours := Content.enabled_colors()
 	if colours.size() < 2 or _locked or _blocked(Content.COLOR_CATEGORY):
+		return
+	Audio.play("select")
+	if _colour_step == ColourStep.BEFORE:
+		_colour_step = ColourStep.AFTER
+		if _now_index == _was_index:
+			_now_index = _next_colour_index(_was_index, 1, true)
+		_sync_colour()
 		return
 	var was: ColorDefinition = colours[_was_index]
 	var now: ColorDefinition = colours[_now_index]
 	if was.word == now.word:
-		return ## Unreachable by the wheels, but never emit a sentence that says nothing.
-	Audio.play("select")
+		return
 	pair_selected.emit(Content.COLOR_CATEGORY, was.word, now.word)
+	_show_view(View.CATEGORY)
+
+
+func _cancel_colour() -> void:
+	Audio.play("click")
+	if _colour_step == ColourStep.AFTER:
+		# Back means reconsider the whole colour transformation, beginning from the
+		# confirmed BEFORE choice that is still painted on the animal.
+		_colour_step = ColourStep.BEFORE
+		_sync_colour()
+		_emit_before_preview()
+		return
+	colour_selection_cancelled.emit()
 	_show_view(View.CATEGORY)
 
 
