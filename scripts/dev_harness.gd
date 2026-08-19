@@ -408,6 +408,9 @@ static func _selftest(main: Node) -> void:
 		"STRONG/WEAK still appears in selectable adjective pairs")
 	_check(failures, Content.colors.size() >= 10, "expected 10 colours, got %d" % Content.colors.size())
 	_check(failures, Content.fantasy_parts.size() >= 10, "expected fantasy parts, got %d" % Content.fantasy_parts.size())
+	Audio.play_ambience(true)
+	_check(failures, Audio._ambience == null or not Audio._ambience.playing,
+		"ambient laboratory hum still plays when requested")
 
 	# Every animal must load its model, and every bone the data references must really
 	# exist in that model - a typo in animals.json is otherwise invisible until a trait
@@ -627,6 +630,23 @@ static func _selftest(main: Node) -> void:
 				"%s: OLD beard has no front silhouette" % def.id)
 			_check(failures, beard.get_node_or_null("SideSilhouette") is MeshInstance3D,
 				"%s: OLD beard has no profile silhouette" % def.id)
+		if spectacles != null and beard != null:
+			var old_head_bone := def.socket_bone("head_top")
+			var glasses_relative: Vector3 = spectacles.position \
+				- rig._bone_origin_in_body(old_head_bone, false)
+			var beard_relative: Vector3 = beard.position \
+				- rig._bone_origin_in_body(old_head_bone, false)
+			var old_length_pair := Content.pair_for_category("LENGTH")
+			if old_length_pair != null:
+				rig.deformer.set_state(old_length_pair.value_for("short"), 1.0)
+				rig.sync_bone_accessories()
+				var short_head := rig._bone_origin_in_body(old_head_bone, false)
+				_check(failures,
+					(spectacles.position - short_head).distance_to(glasses_relative) < 0.001,
+					"%s: OLD glasses did not follow the head through SHORT" % def.id)
+				_check(failures,
+					(beard.position - short_head).distance_to(beard_relative) < 0.001,
+					"%s: OLD beard did not follow the head through SHORT" % def.id)
 		rig.reset_modifiers()
 
 		# YOUNG's rigid pacifier starts at the scaled mouth surface. Its two meshes are
@@ -660,6 +680,19 @@ static func _selftest(main: Node) -> void:
 				"%s: YOUNG pacifier guard crosses the mouth plane" % def.id)
 			_check(failures, teat is MeshInstance3D and teat.position.z > guard.position.z,
 				"%s: YOUNG pacifier ball does not face away from the animal" % def.id)
+			# BODY_LENGTH translates the head through the spine. The pacifier must retain the
+			# same head-relative offset after SHORT instead of staying at its neutral position.
+			var head_bone := def.socket_bone("head_top")
+			var relative_to_head: Vector3 = pacifier.position \
+				- rig._bone_origin_in_body(head_bone, false)
+			var length_pair := Content.pair_for_category("LENGTH")
+			if length_pair != null:
+				rig.deformer.set_state(length_pair.value_for("short"), 1.0)
+				rig.sync_bone_accessories()
+				var short_relative: Vector3 = pacifier.position \
+					- rig._bone_origin_in_body(head_bone, false)
+				_check(failures, short_relative.distance_to(relative_to_head) < 0.001,
+					"%s: YOUNG pacifier did not follow the head through SHORT" % def.id)
 		rig.reset_modifiers()
 
 		rig.deformer.reset()
@@ -769,7 +802,8 @@ static func _selftest(main: Node) -> void:
 	main.remove_child(animated_strong)
 	animated_strong.free()
 
-	# Traits and fantasy assembly, exercised across every pair and both directions.
+	# Final-trait assembly, exercised across every animal. Fantasy attachments must stay
+	# absent even when the selected After words still have legacy attachment definitions.
 	for def in Content.animals:
 		var state := CreatureState.create(def.id)
 		state.add_entry("SIZE", "small", "big")
@@ -777,6 +811,11 @@ static func _selftest(main: Node) -> void:
 		state.add_entry(Content.COLOR_CATEGORY, "red", "blue")
 		var creature := CreatureFactory.build_fantasy(state)
 		_check(failures, creature != null, "%s: fantasy build failed" % def.id)
+		if creature != null:
+			_check(failures, creature.find_child("great_horns", true, false) == null,
+				"%s: BIG still appended post-transformation horns" % def.id)
+			_check(failures, creature.find_child("frost_crest", true, false) == null,
+				"%s: COLD still appended a post-transformation crest" % def.id)
 		var names := NameGenerator.candidates(state)
 		_check(failures, names.size() > 0 and not names[0].is_empty(), "%s: no name generated" % def.id)
 		_check(failures, state.fingerprint() == CreatureState.from_dict(state.to_dict()).fingerprint(),

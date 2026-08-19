@@ -145,7 +145,7 @@ static func _add_spectacles(rig: CreatureRig, def: AnimalDefinition, a: Dictiona
 	var bridge := _box(Vector3(maxf(spacing * 2.0 - size * 0.8, wire), wire, wire), FRAME, 0.10)
 	bridge.name = "Bridge"
 	spectacles.add_child(bridge)
-	rig.add_accessory(spectacles, at)
+	rig.add_bone_accessory(spectacles, at, def.socket_bone("head_top"))
 
 
 ## Fill the supplied concave outline, then cross two copies at right angles. A single
@@ -183,7 +183,7 @@ static func _add_beard(rig: CreatureRig, def: AnimalDefinition, a: Dictionary) -
 	side.scale.x = 0.68
 	side.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	beard.add_child(side)
-	rig.add_accessory(beard, at)
+	rig.add_bone_accessory(beard, at, def.socket_bone("head_top"))
 
 
 static func _beard_mesh(length: float) -> ArrayMesh:

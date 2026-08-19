@@ -3,9 +3,9 @@ extends RefCounted
 ## Builds the two things the game ever shows: the laboratory animal (the combined
 ## "It was..." state) and the fantasy creature (the combined "Now it is..." state).
 ##
-## Fantasy Creature = Base Animal + Final Traits + Fantasy Parts + Generated Name, and
-## the whole thing is seeded from CreatureState.fingerprint(), so the same three
-## sentences always grow the same creature - on any machine, in any session.
+## Fantasy Creature = Base Animal + Final Traits + Generated Name. Post-transformation
+## fantasy attachments are intentionally disabled, so the result remains the transformed
+## animal instead of gaining horns, wings, crystals, or other appended geometry.
 
 
 static func build_plain(animal_id: String) -> CreatureRig:
@@ -36,11 +36,12 @@ static func build_fantasy(state: CreatureState) -> CreatureRig:
 	if rig == null:
 		return null
 	TraitVisuals.apply_all(rig, state.after_traits())
-	grow_fantasy_parts(rig, state)
 	_make_creature_glow(rig)
 	return rig
 
 
+## Legacy builder retained for data/tool compatibility. Finished creatures no longer call
+## this function, because post-transformation attachments are disabled.
 ## Bolt on the modular parts triggered by the "Now it is ___" words. Deterministic:
 ## content order decides which parts, the fingerprint decides only the small angular
 ## jitter that stops symmetrical spikes looking machine-stamped.

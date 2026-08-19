@@ -111,7 +111,9 @@ static func _add_pacifier(rig: CreatureRig, def: AnimalDefinition, a: Dictionary
 	teat.position.z = size * 0.20 + size * 0.42 * 0.80 * 0.5
 	pivot.add_child(teat)
 
-	rig.add_accessory(pivot, at)
+	# Follow the actual head bone so later LONG/SHORT deformation cannot leave this rigid
+	# prop behind at the neutral mouth position.
+	rig.add_bone_accessory(pivot, at, def.socket_bone("head_top"))
 
 
 # --- Primitives --------------------------------------------------------------

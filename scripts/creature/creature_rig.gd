@@ -615,6 +615,56 @@ func add_accessory(node: Node3D, at := Vector3.ZERO) -> void:
 	accessory_root.add_child(node)
 
 
+## Face props must follow skeleton deformation as well as the Body node. LONG/SHORT moves
+## the skull through translated spine bones; a pacifier stored only under `accessory_root`
+## otherwise remains at the neutral mouth coordinate and floats beside the transformed face.
+## The prop's authored position already includes YOUNG's head scaling, so only the live
+## bone-origin delta is applied here (applying the full scaled basis would scale it twice).
+func add_bone_accessory(node: Node3D, at: Vector3, bone: String) -> void:
+	if skeleton == null or bone.is_empty() or skeleton.find_bone(bone) == -1:
+		add_accessory(node, at)
+		return
+	node.set_meta("follow_bone", bone)
+	node.set_meta("follow_base_at", at)
+	node.set_meta("follow_base_origin", _bone_origin_in_body(bone, true))
+	accessory_root.add_child(node)
+	node.position = at
+
+
+## Refresh all bone-following props immediately after a snapped deformation and once per
+## frame while an animated deformation is running.
+func sync_bone_accessories() -> void:
+	if accessory_root == null or skeleton == null:
+		return
+	var has_followers := false
+	for child in accessory_root.get_children():
+		if child is Node3D and child.has_meta("follow_bone"):
+			has_followers = true
+			break
+	if not has_followers:
+		return
+	if skeleton.has_method("force_update_all_bone_transforms"):
+		skeleton.force_update_all_bone_transforms()
+	for child in accessory_root.get_children():
+		if not child is Node3D or not child.has_meta("follow_bone"):
+			continue
+		var prop := child as Node3D
+		var bone := str(prop.get_meta("follow_bone"))
+		var base_at: Vector3 = prop.get_meta("follow_base_at", prop.position)
+		var base_origin: Vector3 = prop.get_meta("follow_base_origin", _bone_origin_in_body(bone, true))
+		prop.position = base_at + _bone_origin_in_body(bone, false) - base_origin
+
+
+func _bone_origin_in_body(bone: String, rest: bool) -> Vector3:
+	if skeleton == null:
+		return Vector3.ZERO
+	var index := skeleton.find_bone(bone)
+	if index == -1:
+		return Vector3.ZERO
+	var pose := skeleton.get_bone_global_rest(index) if rest else skeleton.get_bone_global_pose(index)
+	return _transform_to_ancestor(skeleton, body) * pose.origin
+
+
 func clear_accessories() -> void:
 	if accessory_root == null:
 		return
@@ -987,6 +1037,7 @@ func _process(delta: float) -> void:
 	body.scale = _trait_scale * squash
 	_swing_legs((sin(_clock * 5.0) * 0.5 if moving else 0.0) * motion)
 	_sway_appendages(motion)
+	sync_bone_accessories()
 	_apply_grounding(delta)
 
 

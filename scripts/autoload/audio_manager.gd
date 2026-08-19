@@ -35,13 +35,11 @@ func play(sound: String, pitch := 1.0) -> void:
 	player.play()
 
 
-func play_ambience(on: bool) -> void:
-	if not on or Settings.music_volume <= 0.001:
+## The old laboratory drone read as a persistent hum, so ambience is deliberately silent.
+## Keep the API in place for existing scene calls; sound effects and speech are unaffected.
+func play_ambience(_on: bool) -> void:
+	if _ambience != null:
 		_ambience.stop()
-		return
-	_ambience.stream = _library.get("ambience", null)
-	_ambience.volume_db = linear_to_db(clampf(Settings.music_volume * 0.5, 0.001, 1.0))
-	_ambience.play()
 
 
 func _build_library() -> void:
@@ -53,7 +51,6 @@ func _build_library() -> void:
 	_library["transform"] = _noise_sweep(1.4)
 	_library["reveal"] = _arpeggio([392.0, 523.25, 659.25, 1046.5], 0.16)
 	_library["pop"] = _blip(880.0, 440.0, 0.09, 0.5)
-	_library["ambience"] = _drone([110.0, 164.81, 220.0], 4.0)
 	# Cartoon transformation sounds: a rising glide for taffy stretch, a falling one
 	# for the accordion squish, a quick zip for a retracting leg, a soft thud for
 	# landing on stubby ones.

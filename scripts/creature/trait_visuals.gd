@@ -101,6 +101,9 @@ static func apply_all(rig: CreatureRig, traits: Dictionary, animate := false) ->
 			rig.feel.animate_to(feel_target)
 		else:
 			rig.feel.set_state(feel_target)
+	# AGE props may have been built before BODY_LENGTH was snapped to its final pose.
+	# Animated changes continue refreshing them from CreatureRig._process().
+	rig.sync_bone_accessories()
 
 
 static func _apply_color(rig: CreatureRig, word: String) -> void:

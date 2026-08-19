@@ -50,7 +50,7 @@ const PANEL_WIDTH := -PANEL_LEFT + PANEL_RIGHT ## 648 - the rect's actual width.
 ## centring expanders (see its _build()) already have real slack to work with here without
 ## any extra tuning.
 const PRESENT_SIZE := Vector2(720, 360)
-const CONSOLE_SIZE := Vector2(760, 320) ## Same footprint for words, colours and speech.
+const CONSOLE_SIZE := Vector2(760, 300) ## Same footprint for words, colours and speech.
 const CONSOLE_BOTTOM_MARGIN := 10
 const SAY_IT_WIDTH := 620
 
