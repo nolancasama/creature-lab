@@ -42,6 +42,11 @@ const GEAR_BUTTON_SIZE := HUD_BUTTON * 2 ## Doubled - settings is the one contro
 ## teacher needs to find without hunting, so it gets the HUD's largest touch target.
 const GEAR_ICON := preload("res://ui/gear.svg")
 const HUD_GAP := 24 ## Visible gap between the HUD row and the panel below it.
+## Top edge for a HUD_BUTTON-sized control so its centre line matches the gear's. The gear
+## is twice the height, so sharing a top edge with it left the back button riding high - a
+## derived value rather than a typed one, or the two drift apart the next time either size
+## is touched.
+const HUD_BUTTON_TOP := HUD_TOP + (GEAR_BUTTON_SIZE - HUD_BUTTON) / 2
 const PANEL_TOP := HUD_TOP + GEAR_BUTTON_SIZE + HUD_GAP ## Clears the gear, now the taller
                                                         ## of the two HUD buttons.
 const PANEL_BOTTOM := -24 ## Tighter than the top margin: the height lost to the HUD row
@@ -561,8 +566,8 @@ func _build_recording_ui() -> void:
 	back_btn.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
 	back_btn.offset_left = 24
 	back_btn.offset_right = 24 + HUD_BUTTON
-	back_btn.offset_top = 24
-	back_btn.offset_bottom = 24 + HUD_BUTTON
+	back_btn.offset_top = HUD_BUTTON_TOP
+	back_btn.offset_bottom = HUD_BUTTON_TOP + HUD_BUTTON
 	back_btn.pressed.connect(func() -> void:
 		Audio.play("click")
 		Game.abandon_creature()
