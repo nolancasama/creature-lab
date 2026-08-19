@@ -833,6 +833,7 @@ static func _selftest(main: Node) -> void:
 	_speed_checks(failures)
 	_carousel_checks(failures, main)
 	_voice_checks(failures)
+	_leg_growth_checks(failures)
 	_grammar_checks(failures)
 
 	if failures.is_empty():
@@ -848,6 +849,41 @@ static func _selftest(main: Node) -> void:
 ## microphone and a browser that will not open an input stream all have to reach the same
 ## transformation. What must hold is that a missing clip is reported as missing rather
 ## than played as silence, and that one child's recording cannot outlive their round.
+## TALL grows every leg by the same vertical distance. It cannot grow them by the same
+## FACTOR: these chains are slanted differently front to rear, so an equal factor moves a
+## steep chain further down than a shallow one and the pairs visibly stop matching.
+##
+## apply() multiplies each bone's rest offset by the leg's factor, so a chain's vertical
+## drop scales by exactly that factor - which makes the growth each leg actually receives
+## natural_drop * (factor - 1), checkable without posing anything.
+static func _leg_growth_checks(failures: Array[String]) -> void:
+	for def in Content.animals:
+		var rig := CreatureFactory.build_plain(def.id)
+		var sk := rig.skeleton
+		rig.deformer.set_state(1.0, 1.6)
+		var lowest := INF
+		var highest := -INF
+		for i in def.legs.size():
+			var bones: PackedStringArray = def.legs[i].get("bones", PackedStringArray())
+			if bones.is_empty():
+				continue
+			var top := sk.find_bone(bones[0])
+			var foot := sk.find_bone(bones[bones.size() - 1])
+			if top == -1 or foot == -1:
+				continue
+			var natural := absf(sk.get_bone_global_rest(top).origin.y
+				- sk.get_bone_global_rest(foot).origin.y)
+			var factor: float = rig.deformer.leg_lengths[i]
+			var growth := natural * (factor - 1.0)
+			lowest = minf(lowest, growth)
+			highest = maxf(highest, growth)
+		if lowest < INF and lowest > 0.0001:
+			var mismatch := (highest / lowest - 1.0) * 100.0
+			_check(failures, mismatch < 4.0,
+				"%s: TALL grew its legs by different amounts (%.1f%% apart)" % [def.id, mismatch])
+		rig.free()
+
+
 static func _voice_checks(failures: Array[String]) -> void:
 	Voice.clear()
 	_check(failures, Voice.clip(0) == null and not Voice.has_clip(0),

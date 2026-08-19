@@ -69,17 +69,32 @@ func _cache_rest_metrics() -> void:
 		leg_lengths.append(1.0)
 		_ground_extensions.append(0.0)
 		var reach := 0.0
-		var vertical_reach := 0.0
-		for bone in leg["bones"] as PackedStringArray:
+		var bones: PackedStringArray = leg["bones"]
+		for bone in bones:
 			var idx := _skeleton.find_bone(bone)
 			if idx != -1:
-				var rest_offset := _skeleton.get_bone_rest(idx).origin
-				reach += rest_offset.length()
-				vertical_reach += absf(rest_offset.y)
+				reach += _skeleton.get_bone_rest(idx).origin.length()
+		# Measured between the chain's ends in MODEL space, not by summing each bone's own
+		# local Y. A rest offset is expressed in its parent's frame, so on a rotated chain
+		# local Y is not "downward" at all - and on a horse and a deer it came out
+		# backwards, reporting the front legs as the shorter pair when their real vertical
+		# drop is half again the rear's. The normalisation below then grew the front pair
+		# hardest, which is the mismatch this measurement exists to prevent.
+		var vertical_reach := 0.0
+		if not bones.is_empty():
+			var top := _skeleton.find_bone(bones[0])
+			var foot := _skeleton.find_bone(bones[bones.size() - 1])
+			if top != -1 and foot != -1:
+				vertical_reach = absf(_skeleton.get_bone_global_rest(top).origin.y
+					- _skeleton.get_bone_global_rest(foot).origin.y)
+		# The floor is only a divide-by-zero guard now. At 0.35 of the 3D reach it was
+		# overriding perfectly good measurements on the very animals with the most slanted
+		# chains, putting back the front/rear disparity the measurement above removes.
+		var guarded: float = maxf(vertical_reach, reach * 0.05)
 		_leg_reach.append(reach)
-		_leg_vertical_reach.append(maxf(vertical_reach, reach * 0.35))
+		_leg_vertical_reach.append(guarded)
 		_mean_reach += reach
-		_mean_vertical_reach += maxf(vertical_reach, reach * 0.35)
+		_mean_vertical_reach += guarded
 	_mean_reach /= float(maxi(_leg_reach.size(), 1))
 	_mean_vertical_reach /= float(maxi(_leg_vertical_reach.size(), 1))
 	if not _def.body_bones.is_empty():
