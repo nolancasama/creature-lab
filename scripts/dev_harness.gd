@@ -679,6 +679,7 @@ static func _selftest(main: Node) -> void:
 			_check(failures, rig != null, "%s/%s failed to apply" % [pair.category, word])
 			rig.free()
 
+	_speed_checks(failures)
 	_grammar_checks(failures)
 
 	if failures.is_empty():
@@ -688,6 +689,46 @@ static func _selftest(main: Node) -> void:
 		for f in failures:
 			printerr("  - %s" % f)
 	main.get_tree().quit(0 if failures.is_empty() else 1)
+
+
+## FAST and SLOW are behaviour, so what is worth asserting is that the behaviour is armed
+## and that it stays in its own lane: SPEED must never touch what the animal IS, or the
+## intentionally funny combinations (old + fast, strong + slow) stop working.
+static func _speed_checks(failures: Array[String]) -> void:
+	for def in Content.animals:
+		var rig := CreatureFactory.build_plain(def.id)
+		var neutral_scale := rig.body.scale
+
+		TraitVisuals.apply_all(rig, {"SPEED": "fast"})
+		_check(failures, rig.pace.pace == PaceDeformer.Pace.FAST,
+			"%s: fast did not put the animal in the fast state" % def.id)
+		_check(failures, rig.pace.playback < 1.6,
+			"%s: fast fell back to a doubled playback speed" % def.id)
+		_check(failures, rig.body.scale.is_equal_approx(neutral_scale),
+			"%s: fast resized the animal" % def.id)
+
+		TraitVisuals.apply_all(rig, {"SPEED": "slow"})
+		_check(failures, rig.pace.pace == PaceDeformer.Pace.SLOW,
+			"%s: slow did not put the animal in the slow state" % def.id)
+		_check(failures, rig.pace.playback >= 0.30 and rig.pace.playback <= 0.60,
+			"%s: slow playback outside the readable band (%.2f)" % [def.id, rig.pace.playback])
+		_check(failures, rig.body.scale.is_equal_approx(neutral_scale),
+			"%s: slow resized the animal" % def.id)
+
+		# Switching away must put the animal back where it stood, not leave it parked
+		# wherever its last dash ended.
+		TraitVisuals.apply_all(rig, {})
+		_check(failures, rig.pace.pace == PaceDeformer.Pace.NEUTRAL
+			and rig.pace.offset.is_zero_approx() and is_zero_approx(rig.pace.yaw),
+			"%s: clearing SPEED left the animal displaced" % def.id)
+
+		# Stacking: the other adjective still lands, and SPEED still arms itself.
+		TraitVisuals.apply_all(rig, {"SPEED": "fast", "SIZE": "big"})
+		_check(failures, rig.pace.pace == PaceDeformer.Pace.FAST,
+			"%s: big + fast lost the fast behaviour" % def.id)
+		_check(failures, rig.body.scale.length() > neutral_scale.length(),
+			"%s: big + fast lost the size change" % def.id)
+		rig.free()
 
 
 static func _grammar_checks(failures: Array[String]) -> void:

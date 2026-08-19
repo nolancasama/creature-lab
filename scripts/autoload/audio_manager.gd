@@ -68,6 +68,9 @@ func _build_library() -> void:
 	_library["clang"] = _clang()
 	_library["boing"] = _boing()
 	_library["puff"] = _blip(340.0, 620.0, 0.34, 0.18)
+	# FAST's arc run. Short and airy on purpose: the dashes already fire "zip" often, and
+	# anything heavier turns an energetic animal into an annoying one.
+	_library["whoosh"] = _noise_sweep(0.28)
 	_library["baby"] = _coo()
 	_library["elder"] = _chuckle()
 

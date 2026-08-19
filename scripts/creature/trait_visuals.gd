@@ -120,9 +120,14 @@ static func _apply_pair(rig: CreatureRig, category: String, word: String, animat
 		"SCALE_UNIFORM":
 			rig.scale_body(Vector3.ONE * value)
 		"TEMPO":
-			rig.tempo = value
-			if value > 1.0:
-				rig.add_fx(Fx.make("motion", Color("#bfe9ff"), 0.5), Vector3(0, mid, -0.5))
+			# SPEED is behaviour, not a playback multiplier - PaceDeformer owns the whole
+			# thing, including how much of the value survives as animation speed. The old
+			# permanent motion streak is gone with it: speed lines now appear only while
+			# the animal is actually moving, which is the only time they mean anything.
+			if animate:
+				rig.pace.animate_to(value)
+			else:
+				rig.pace.set_state(value)
 		"THERMAL":
 			_apply_thermal(rig, value, mid, animate)
 		"AGE":

@@ -302,6 +302,25 @@ static func make(kind: String, tint := Color.WHITE, radius := 0.8, size_scale :=
 			process.initial_velocity_max = 0.4
 			process.scale_min = 0.5
 			process.scale_max = 1.1
+		"speed":
+			# Stylised motion lines for FAST's dashes. Every other effect here is a round
+			# mote; these are stretched along their own direction of travel instead, which
+			# is what makes them read as lines rather than a puff of bubbles. Short-lived
+			# on purpose - speed lines on a standing animal are decoration, and a decoration
+			# that is always on stops meaning "fast".
+			particles = _base(14, 0.34, 0.06)
+			var streak := particles.draw_pass_1 as QuadMesh
+			streak.size = Vector2(0.05, 0.32)
+			var streak_mat := streak.material as StandardMaterial3D
+			streak_mat.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+			process.particle_flag_align_y = true
+			process.direction = Vector3(0, 0, -1)
+			process.spread = 8.0
+			process.gravity = Vector3.ZERO
+			process.initial_velocity_min = 2.6
+			process.initial_velocity_max = 4.4
+			process.scale_min = 0.5
+			process.scale_max = 1.1
 		"motion":
 			particles = _base(22, 0.7, 0.13)
 			process.direction = Vector3(0, 0, -1)

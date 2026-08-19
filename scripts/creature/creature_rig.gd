@@ -78,6 +78,7 @@ var part_materials := {} ## role -> StandardMaterial3D, for fantasy add-ons
 var deformer: CreatureDeformer = null ## Body length and per-leg lengths.
 var muscle: MuscleDeformer = null ## STRONG/WEAK one-for-one forelimb morphs.
 var feel: FeelDeformer = null ## HARD/SOFT shine, puff, squash and jiggle.
+var pace: PaceDeformer = null ## FAST/SLOW dashes, twitches and drawn-out actions.
 
 var tempo := 1.0 ## Idle animation speed; the SPEED modifier drives this.
 
@@ -160,6 +161,7 @@ func _build(def: AnimalDefinition) -> void:
 	deformer = CreatureDeformer.new(self)
 	muscle = MuscleDeformer.new(self)
 	feel = FeelDeformer.new(self)
+	pace = PaceDeformer.new(self)
 
 
 ## Pull one animal out of the shared GLB and discard the other six. The PackedScene
@@ -446,6 +448,8 @@ func reset_modifiers() -> void:
 		muscle.reset()
 	if feel != null:
 		feel.reset()
+	if pace != null:
+		pace.reset()
 	_reset_material()
 	clear_fx()
 	clear_accessories()
@@ -631,6 +635,30 @@ func add_fx(node: Node3D, at := Vector3.ZERO) -> void:
 		(node as GPUParticles3D).emitting = true
 
 
+## A translucent copy of the animal left behind at `at`, fading out within a fraction of
+## a second. Drawn from the same mesh but with no skeleton attached, so it costs one
+## unskinned draw and holds the bind pose - at this lifetime nobody reads the pose, only
+## the silhouette. Parented to fx_root rather than body so the dash that spawned it does
+## not drag it along; a ghost that follows the animal is not an afterimage.
+func spawn_afterimage(at: Vector3, life: float) -> void:
+	if mesh_instance == null or mesh_instance.mesh == null or not is_inside_tree():
+		return
+	var ghost := MeshInstance3D.new()
+	ghost.mesh = mesh_instance.mesh
+	ghost.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var ghost_mat := StandardMaterial3D.new()
+	ghost_mat.albedo_color = Color(0.78, 0.90, 1.0, 0.26)
+	ghost_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	ghost_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	ghost_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	ghost.material_override = ghost_mat
+	fx_root.add_child(ghost)
+	ghost.transform = Transform3D(Basis.IDENTITY, at) 		* (global_transform.affine_inverse() * mesh_instance.global_transform)
+	var fade := create_tween()
+	fade.tween_property(ghost_mat, "albedo_color:a", 0.0, life)
+	fade.tween_callback(ghost.queue_free)
+
+
 func clear_fx() -> void:
 	for child in fx_root.get_children():
 		child.queue_free()
@@ -786,7 +814,7 @@ func make_ghost(color: Color, alpha := 0.3) -> void:
 # --- Idle life ---------------------------------------------------------------
 
 func _process(delta: float) -> void:
-	_clock += delta * tempo
+	_clock += delta * tempo * (pace.playback if pace != null else 1.0)
 	# Idle motion is added on top of the deformation, never in place of it, so a
 	# transformed creature keeps its new proportions while it breathes and walks.
 	# Both deformers contribute to the body transform, so their effects compose rather
@@ -821,6 +849,13 @@ func _process(delta: float) -> void:
 	# during its first half-second. Only explicitly hovering species retain vertical bob.
 	# COLD's shiver is horizontal only, deliberately: a vertical component would fight
 	# the grounding pass below and lift the feet off the platform.
+	# SPEED moves the whole animal around the platform, so its offset joins the others
+	# here rather than replacing them: a fast animal still breathes, jiggles and shivers
+	# while it dashes.
+	if pace != null:
+		pace.tick(delta)
+		offset += pace.offset
+		twist += pace.yaw
 	body.position = offset + shiver_offset + Vector3(0.0, lift
 		+ sin(_clock * 1.1) * 0.05 * definition.hover, 0.0)
 	body.rotation.x = lean
@@ -874,7 +909,8 @@ func _apply_grounding(delta: float, instant := false) -> void:
 		return
 	var settled := not moving and not deformer.is_animating() \
 		and (muscle == null or not muscle.is_animating()) \
-		and (feel == null or not feel.is_animating())
+		and (feel == null or not feel.is_animating()) \
+		and (pace == null or not pace.is_animating())
 	if not settled:
 		deformer.clear_ground_extensions(false, delta)
 		_support_lowest_contact()
