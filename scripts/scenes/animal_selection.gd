@@ -722,8 +722,12 @@ func _commit(assisted: bool) -> void:
 	var before := str(_pending["before"])
 	var after := str(_pending["after"])
 	_pending = {}
+	_colour_preview = ""
 
 	Game.record_sentence(category, before, after, assisted)
+	# Keep the take that was actually accepted, indexed by the slot it filled, so the
+	# transformation can play the three sentences back in the order they were said.
+	Voice.keep_for(Game.current.slots_filled() - 1)
 	Audio.play("success")
 	Fx.burst(_preview_root, Vector3(0, 0.4, 0), "sparkle", UiKit.OK, 1.6)
 	_speech.show_success()

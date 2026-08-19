@@ -64,6 +64,8 @@ func close_settings() -> void:
 
 func begin_creature(animal_id: String) -> void:
 	current = CreatureState.create(animal_id)
+	# One child's recorded voice must never surface in the next child's transformation.
+	Voice.clear()
 	creature_updated.emit(current)
 
 
@@ -88,6 +90,7 @@ func finish_creature(final_name: String) -> void:
 
 func abandon_creature() -> void:
 	current = null
+	Voice.clear()
 
 
 func reset_zoo() -> void:

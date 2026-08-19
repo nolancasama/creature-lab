@@ -13,18 +13,19 @@ extends RefCounted
 ## and the transformation happens where it has been standing the whole time, which is the
 ## single thing that makes the sequence easy to follow.
 ##
-## The three sentences drive it. Each one is spoken back by the lab, and each one lands a
-## surge - so the student's own English is visibly the thing operating the machine. It is
-## spoken rather than replayed: this game never records audio (the Web Speech backend
-## returns transcripts, and half the class types its answers instead), so a "replay your
-## own voice" beat would be silent for every student who typed. Speaking it works the
-## same way for all of them.
+## The three sentences drive it, in the student's own voice where there is one: Voice
+## captures each accepted take, and the machine surges on the sentence the student
+## actually said. Where there is not one - they typed their answers, or the microphone was
+## refused, or the browser would not give Godot an input stream - the lab speaks the
+## sentence instead and the beat is otherwise identical. The fallback is not a degraded
+## path; for a typed classroom it is the only path, and it has to look deliberate.
 
 ## Roughly how long a spoken sentence needs before its surge lands. The whole sequence is
 ## three of these plus the peak and the reveal, and it is the payoff for a whole round -
 ## but it is also dead time for anyone watching it a second time, so each beat is trimmed
 ## to about as long as the sentence actually takes to say and no longer.
 const BEAT_SPEAK := 1.9
+const MAX_BEAT := 6.0 ## A runaway recording must not hold the whole sequence open.
 const REVEAL_HOLD := 1.1
 const GROW_TIME := 0.7
 
@@ -98,7 +99,11 @@ func run(state: CreatureState) -> void:
 func _beat(index: int, total: int, sentence: String) -> void:
 	var rising := float(index + 1) / float(total)
 	_banner.text = sentence
-	Tts.speak(sentence, 0.95)
+	# The student's own voice if it was captured, the lab's if it was not. Either way the
+	# words are on the banner, because a classroom with the sound off still gets the beat.
+	var spoken := Voice.play(index)
+	if spoken <= 0.0:
+		Tts.speak(sentence, 0.95)
 	_stage.array.set_charge(rising * 0.75)
 
 	# Camera: push in, drop to a low angle, then swing round. One continuous move per
@@ -110,7 +115,9 @@ func _beat(index: int, total: int, sentence: String) -> void:
 		_: eye = _stage.STAND + Vector3(-3.6, 1.5, 4.0)
 	_stage.frame(eye, _machine_aim(), BEAT_SPEAK + 0.5)
 
-	await _wait(BEAT_SPEAK)
+	# Wait for the recording to actually finish rather than a fixed guess: a child who
+	# says it slowly should still get their surge on the last word, not over it.
+	await _wait(clampf(spoken, BEAT_SPEAK, MAX_BEAT) if spoken > 0.0 else BEAT_SPEAK)
 	if not _alive():
 		return
 

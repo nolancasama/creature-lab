@@ -774,6 +774,7 @@ static func _selftest(main: Node) -> void:
 
 	_speed_checks(failures)
 	_carousel_checks(failures, main)
+	_voice_checks(failures)
 	_grammar_checks(failures)
 
 	if failures.is_empty():
@@ -783,6 +784,44 @@ static func _selftest(main: Node) -> void:
 		for f in failures:
 			printerr("  - %s" % f)
 	main.get_tree().quit(0 if failures.is_empty() else 1)
+
+
+## The student's recorded voice is optional by design - typed answers, a refused
+## microphone and a browser that will not open an input stream all have to reach the same
+## transformation. What must hold is that a missing clip is reported as missing rather
+## than played as silence, and that one child's recording cannot outlive their round.
+static func _voice_checks(failures: Array[String]) -> void:
+	Voice.clear()
+	_check(failures, Voice.clip(0) == null and not Voice.has_clip(0),
+		"voice: a cleared recorder still reports a clip")
+	_check(failures, is_zero_approx(Voice.play(0)),
+		"voice: playing a missing clip did not report itself as missing")
+	_check(failures, Voice.play(-1) <= 0.0 and Voice.play(99) <= 0.0,
+		"voice: an out-of-range slot was not handled")
+
+	# keep_for with nothing captured must not invent an entry, or the transformation would
+	# wait on a clip that plays nothing instead of speaking the sentence.
+	Voice.keep_for(0)
+	_check(failures, not Voice.has_clip(0),
+		"voice: keeping a slot with no recording created an empty clip")
+
+	# A stored clip reports a real length, and clear() takes it away again.
+	var probe := AudioStreamWAV.new()
+	probe.format = AudioStreamWAV.FORMAT_16_BITS
+	probe.mix_rate = 22050
+	probe.stereo = false
+	# Built and then assigned: `probe.data` hands back a copy, so resizing it in place
+	# silently leaves the stream empty and every length reads as zero.
+	var silence := PackedByteArray()
+	silence.resize(22050 * 2) ## One second, 16-bit mono.
+	probe.data = silence
+	Voice._clips[0] = probe
+	_check(failures, Voice.has_clip(0) and Voice.play(0) > 0.5,
+		"voice: a stored clip did not play back")
+	Voice.stop()
+	Voice.clear()
+	_check(failures, not Voice.has_clip(0),
+		"voice: clear() left a previous round's recording behind")
 
 
 ## The carousel replaced a grid that could not promise its own size. These assert the two

@@ -11,6 +11,10 @@ run/main_scene="res://scenes/Main.tscn"
 config/features=PackedStringArray("4.6", "Forward Plus")
 config/icon="res://icon.svg"
 
+[audio]
+
+driver/enable_input=true
+
 [autoload]
 
 Content="*res://scripts/autoload/content_library.gd"
@@ -21,6 +25,7 @@ Router="*res://scripts/autoload/scene_router.gd"
 Audio="*res://scripts/autoload/audio_manager.gd"
 Tts="*res://scripts/autoload/tts_service.gd"
 Speech="*res://scripts/autoload/speech_service.gd"
+Voice="*res://scripts/autoload/voice_recorder.gd"
 
 [display]
 
