@@ -550,6 +550,31 @@ static func _selftest(main: Node) -> void:
 				"%s: OLD beard has no profile silhouette" % def.id)
 		rig.reset_modifiers()
 
+		# YOUNG's rigid pacifier starts at the scaled mouth surface. Its two meshes are
+		# entirely on local +Z, so the teat touches the animal without floating and neither
+		# the teat nor guard can penetrate the head.
+		var young_scale := def.young_head_scale()
+		rig.scale_bone(def.socket_bone("head_top"), Vector3.ONE * young_scale)
+		YoungKit.apply(rig, young_scale)
+		var pacifier := rig.accessory_root.get_node_or_null("Pacifier")
+		_check(failures, pacifier != null, "%s: YOUNG pacifier was not built" % def.id)
+		if pacifier != null:
+			var anchors := rig.face_anchors()
+			var expected_contact: Vector3 = anchors["head_pivot"] \
+				+ (anchors["mouth_surface"] - anchors["head_pivot"]) * young_scale
+			_check(failures, pacifier.position.distance_to(expected_contact) < 0.001,
+				"%s: YOUNG pacifier detached from its scaled mouth" % def.id)
+			var guard := pacifier.get_node_or_null("Guard")
+			var teat := pacifier.get_node_or_null("Teat")
+			var seal := pacifier.get_node_or_null("MouthSeal")
+			_check(failures, guard is MeshInstance3D and guard.position.z > 0.0,
+				"%s: YOUNG pacifier guard crosses the mouth plane" % def.id)
+			_check(failures, teat is MeshInstance3D and teat.position.z > 0.0,
+				"%s: YOUNG pacifier teat crosses the mouth plane" % def.id)
+			_check(failures, seal is MeshInstance3D and seal.position.z > 0.0,
+				"%s: YOUNG pacifier has no flush mouth seal" % def.id)
+		rig.reset_modifiers()
+
 		rig.deformer.reset()
 		var back_tip: Vector3 = rig.skeleton.get_bone_pose_position(tip)
 		_check(failures, back_tip.distance_to(rest_tip) < 0.001,

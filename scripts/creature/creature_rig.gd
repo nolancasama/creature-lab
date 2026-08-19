@@ -116,6 +116,7 @@ var _weak_region_groups: Array[String] = []
 var _ground_warning_emitted := false
 var _head_bounds := AABB()
 var _head_bounds_ready := false
+var _head_points := PackedVector3Array() ## Dominant head-family vertices, in body space.
 
 
 static func create(def: AnimalDefinition) -> CreatureRig:
@@ -691,6 +692,7 @@ func head_bounds() -> AABB:
 	if _head_bounds_ready:
 		return _head_bounds
 	_head_bounds_ready = true
+	_head_points.clear()
 	_head_bounds = AABB(Vector3(0, definition.stand_height * 0.8, 0), Vector3.ONE * 0.1)
 	if skeleton == null or mesh_instance == null or mesh_instance.mesh == null:
 		return _head_bounds
@@ -731,6 +733,7 @@ func head_bounds() -> AABB:
 		if best < 0.5 or not family.has(best_bone):
 			continue
 		var point := verts[v] * _normal_scale + _model_root.position
+		_head_points.append(point)
 		if not found:
 			box = AABB(point, Vector3.ZERO)
 			found = true
@@ -739,6 +742,36 @@ func head_bounds() -> AABB:
 	if found:
 		_head_bounds = box
 	return _head_bounds
+
+
+## The foremost piece of actual mesh close to a requested face height. A whole-head AABB
+## only knows the single furthest nose/beak vertex; using that Z at every height leaves a
+## rigid mouth prop floating wherever the lips sit behind the nose tip.
+func _head_front_at(target_y: float, span: float, half_w: float, fallback: float) -> float:
+	var best_z := INF
+	var found := false
+	var band := maxf(span * 0.075, 0.002)
+	var centre_limit := maxf(half_w * 0.72, 0.002)
+	for point in _head_points:
+		if absf(point.y - target_y) > band or absf(point.x) > centre_limit:
+			continue
+		best_z = minf(best_z, point.z)
+		found = true
+	if found:
+		return best_z
+
+	# Very low-poly mouths can have no vertex in a narrow horizontal band. Choose the
+	# nearest central profile vertex rather than falling back to the unrelated nose tip.
+	var best_distance := INF
+	for point in _head_points:
+		if absf(point.x) > centre_limit:
+			continue
+		var distance := absf(point.y - target_y)
+		if distance < best_distance - 0.0001 or (is_equal_approx(distance, best_distance) and point.z < best_z):
+			best_distance = distance
+			best_z = point.z
+			found = true
+	return best_z if found else fallback
 
 
 ## Named points on the face, derived from head_bounds(), in body space. Both AGE kits hang
@@ -756,14 +789,33 @@ func face_anchors() -> Dictionary:
 	var half_w: float = minf(box.size.x, depth * 0.95) * 0.5
 	var front: float = box.position.z ## Models face -Z, so this is the nose or beak.
 	var base: float = box.position.y
+	# Head scaling happens about the head bone, not about the centre of its AABB. AGE props
+	# that must touch the enlarged head need that real pivot to follow the same transform.
+	var head_pivot := box.get_center()
+	if skeleton != null and definition != null:
+		var head_idx := skeleton.find_bone(definition.socket_bone("head_top"))
+		if head_idx != -1:
+			head_pivot = skeleton.get_bone_global_rest(head_idx).origin * _normal_scale \
+				+ _model_root.position
+	var mouth_y := base + span * 0.30
+	# A skin marking is centred over the whole muzzle, while a pacifier belongs at the
+	# lower lip. Keeping separate heights prevents the rigid prop from reading as though
+	# it were stuck to the animal's nose.
+	var mouth_surface_y := base + span * 0.18
+	var mouth_front := _head_front_at(mouth_surface_y, span, half_w, front)
 	return {
 		"front": front,
 		"base": base,
 		"span": span,
 		"depth": depth,
 		"half_w": half_w,
+		"head_pivot": head_pivot,
 		# Fractions chosen against the seven measured boxes, not one species.
-		"mouth": Vector3(0.0, base + span * 0.30, front + depth * 0.08),
+		"mouth": Vector3(0.0, mouth_y, front + depth * 0.08),
+		# Unlike the centre of a skin marking, a rigid prop cannot sit inside the mesh.
+		# This point is on the front plane of the measured muzzle and is used as YOUNG's
+		# no-penetration contact plane.
+		"mouth_surface": Vector3(0.0, mouth_surface_y, mouth_front),
 		"chin": Vector3(0.0, base + span * 0.08, front + depth * 0.26),
 		"eye": Vector3(half_w * 0.62, base + span * 0.66, front + depth * 0.34),
 		"brow": Vector3(half_w * 0.60, base + span * 0.86, front + depth * 0.30),

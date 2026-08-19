@@ -635,8 +635,6 @@
           "size": 0.34
         },
         "pacifier": {
-          "forward": 0.98,
-          "down": 0.56,
           "size": 0.4
         }
       },
@@ -1275,10 +1273,7 @@
           "down": 0.14
         },
         "pacifier": {
-          "size": 0.2,
-          "forward": 0.6,
-          "down": 0.12,
-          "tilt": -12.0
+          "size": 0.2
         }
       }
     },

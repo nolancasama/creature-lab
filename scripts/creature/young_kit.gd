@@ -58,29 +58,56 @@ static func _paint_cheeks(rig: CreatureRig, def: AnimalDefinition, a: Dictionary
 	], ROSY, 1.0)
 
 
-## Guard disc plus teat at the mouth, on one pivot so `tilt` turns them together - a
-## pacifier is a rigid object, and rotating the guard alone pulled the teat out through the
-## disc. It tilts because almost no snout points straight ahead; negative is nose-down.
+## Guard disc plus teat at the mouth, on one pivot so they follow the muzzle together.
+## The pivot is the actual mouth surface after YOUNG's head-bone scale. Local +Z points
+## away from the head; consequently every piece is built at positive Z and cannot cross
+## the surface plane. The teat touches that plane tangentially and the guard sits behind it.
 static func _add_pacifier(rig: CreatureRig, def: AnimalDefinition, a: Dictionary, hs: float) -> void:
-	var mouth: Vector3 = a["mouth"]
+	var mouth: Vector3 = a["mouth_surface"]
+	var head_pivot: Vector3 = a["head_pivot"]
 	var size := def.young_value("pacifier", "size", 0.52) * float(a["depth"]) * hs
-	var tilt := def.young_value("pacifier", "tilt", -18.0)
-	var at := mouth + Vector3(0.0,
-		def.young_value("pacifier", "down", 0.0) * float(a["span"]),
-		def.young_value("pacifier", "forward", 0.20) * float(a["depth"]) * FORWARD)
+	# A scaled head moves its surface away from the head-bone pivot. Applying precisely the
+	# same point transform keeps the prop attached instead of leaving it at the adult face.
+	var at := head_pivot + (mouth - head_pivot) * hs
+	# Optional authored corrections remain surface-relative: positive `down` lowers the
+	# contact and positive `forward` moves it out, never silently adding a default air gap.
+	at += Vector3(0.0,
+		-def.young_value("pacifier", "down", 0.0) * float(a["span"]) * hs,
+		def.young_value("pacifier", "forward", 0.0) * float(a["depth"]) * hs * FORWARD)
+
+	# Point the pacifier along the head-pivot-to-mouth ray. This follows a low horse muzzle,
+	# a level cat muzzle and an upright bird beak without a species-specific hard-coded tilt.
+	var outward := Vector3(0.0, at.y - head_pivot.y, at.z - head_pivot.z).normalized()
+	if outward.length_squared() < 0.5 or outward.z > -0.05:
+		outward = Vector3.FORWARD
+	var angle := atan2(-outward.y, outward.z) \
+		+ deg_to_rad(def.young_value("pacifier", "tilt", 0.0))
 
 	var pivot := Node3D.new()
 	pivot.name = "Pacifier"
-	pivot.rotation_degrees = Vector3(tilt, 0.0, 0.0)
+	pivot.rotation.x = angle
 
 	var guard := _cylinder(size, size * 0.20, PACIFIER_GUARD, 0.22)
+	guard.name = "Guard"
 	guard.rotation_degrees = Vector3(90.0, 0.0, 0.0) ## Cylinders build along Y; face it out.
+	guard.position.z = size * 0.44
 	pivot.add_child(guard)
 
-	var teat := _sphere(size * 0.50, PACIFIER_TEAT, 0.12)
-	teat.scale = Vector3(1.0, 1.0, 1.30)
-	teat.position = Vector3(0.0, 0.0, size * 0.28 * FORWARD)
+	var teat := _sphere(size * 0.42, PACIFIER_TEAT, 0.12)
+	teat.name = "Teat"
+	teat.scale = Vector3(1.0, 1.0, 0.80)
+	# Half of the teat's scaled Z diameter: its rear pole is exactly at the mouth plane.
+	teat.position.z = size * 0.42 * 0.80 * 0.5
 	pivot.add_child(teat)
+
+	# A sphere meets a plane at only one mathematical point, which still reads as a tiny
+	# air gap after rasterisation. This narrow flat-ended seal runs from the surface plane
+	# into the teat: visibly attached, while its rear face remains exactly at Z = 0.
+	var seal := _cylinder(size * 0.18, size * 0.18, PACIFIER_TEAT, 0.12)
+	seal.name = "MouthSeal"
+	seal.rotation_degrees = Vector3(90.0, 0.0, 0.0)
+	seal.position.z = size * 0.09
+	pivot.add_child(seal)
 
 	rig.add_accessory(pivot, at)
 

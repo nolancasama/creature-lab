@@ -70,14 +70,13 @@ extends Resource
 ## odd angle, not to be filled in seven times. Keys, all optional:
 ##   head_scale   float  - how much larger the head bone gets.
 ##   cheek        {size, spacing, forward, down}
-##   pacifier     {size, forward, down, tilt}  - tilt in degrees, negative = nose-down
+##   pacifier     {size, forward, down, tilt}  - surface-relative corrections; positive
+##                                                down lowers it, tilt is in degrees
 ##
 ##   tint         "#rrggbb" - the young coat colour; defaults to a lightened skin colour.
 ##
-## Every distance is a MULTIPLE of CreatureRig.muzzle_reach() - the same unit the built-in
-## defaults are written in - so an override reads on the same scale as the value it
-## replaces, and a chicken and a horse can share one number. `down` may be negative to
-## reach a head that is carried at an angle.
+## Every distance is a multiple of the measured face depth (or usable head span for
+## vertical offsets), so an override reads on the same scale as its built-in fallback.
 @export var young: Dictionary = {}
 
 ## OLD tuning, same shape and same unit as `young`. Keys, all optional:
