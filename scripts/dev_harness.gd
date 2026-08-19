@@ -9,6 +9,7 @@ extends RefCounted
 ##   godot --path . -- --backtest          abandon a half-finished round, then restart it
 ##   godot --path . -- --splittest         the SAY_SPLIT present-tense pass, end to end
 ##   godot --path . -- --shot=present      the centred present-tense panel
+##   godot --path . -- --shot=carousel     recording screen after one carousel step
 ##   godot --path . -- --look=young        one creature wearing one trait word, then quit
 ##   godot --path . -- --look=young:horse  the same, on a named animal
 ##   godot --path . -- --look=young+big    several traits stacked on one creature
@@ -351,7 +352,7 @@ static func _screenshot(main: Node, phase: String) -> void:
 	# seen from --shot=lab, which only ever shows the idle screen.
 	if phase == "present":
 		Settings.say_mode = Settings.SAY_SPLIT
-	_goto("lab" if phase in ["say", "present"] else phase)
+	_goto("lab" if phase in ["say", "present", "carousel"] else phase)
 	await main.get_tree().create_timer(SHOT_DELAY).timeout
 	if phase == "say":
 		var word_lab := _find_word_lab(Router.current_scene)
@@ -361,6 +362,11 @@ static func _screenshot(main: Node, phase: String) -> void:
 	elif phase == "present":
 		var _reached: bool = await _drive_past_pass(main.get_tree(), "shot")
 		await main.get_tree().create_timer(1.2).timeout
+	elif phase == "carousel":
+		var carousel := _find_word_lab(Router.current_scene)
+		if carousel != null:
+			carousel._step(1)
+		await main.get_tree().create_timer(DescriptorCarousel.SLIDE_TIME + 0.1).timeout
 	await RenderingServer.frame_post_draw
 	var image := main.get_viewport().get_texture().get_image()
 	var path := "user://shot_%s.png" % phase
@@ -791,6 +797,32 @@ static func _carousel_checks(failures: Array[String], main: Node) -> void:
 	_check(failures, car._slots.size() >= 2, "carousel: not enough cards to scroll")
 	_check(failures, car._slot_category(car._slots[car._slots.size() - 1]) == Content.COLOR_CATEGORY,
 		"carousel: colours are not the last card")
+
+	# Sliding a selection must move only the contents of the fixed centre cell. Moving the
+	# HBox-managed cell itself changes the whole row's layout, which previously shifted the
+	# selected words left and covered one chevron after the first click.
+	var host_position := car._main_host.position
+	car._step(1)
+	_check(failures, car._main_host.position.is_equal_approx(host_position),
+		"carousel: stepping moved the centre layout cell")
+	_check(failures, car._left_arrow.visible and car._right_arrow.visible,
+		"carousel: stepping hid a chevron")
+	_check(failures, absf(car._main_card.position.x) <= 26.01,
+		"carousel: slide escaped its fixed centre cell")
+	if car._slide != null and car._slide.is_valid():
+		car._slide.kill()
+	car._main_card.position.x = 0.0
+	car._index = 0
+	car._step(-1) ## Wrap backward onto the one-card COLOURS slot.
+	_check(failures, car._main_host.position.is_equal_approx(host_position),
+		"carousel: backward wrap moved the centre layout cell")
+	_check(failures, car._left_arrow.visible and car._right_arrow.visible,
+		"carousel: backward wrap hid a chevron")
+	_check(failures, car._word_cards[0].visible and not car._word_cards[1].visible,
+		"carousel: colour slot did not settle into one centred card")
+	if car._slide != null and car._slide.is_valid():
+		car._slide.kill()
+	car._main_card.position.x = 0.0
 
 	# Every wheel position, in both directions, must leave the two colours different.
 	var colours := Content.enabled_colors()

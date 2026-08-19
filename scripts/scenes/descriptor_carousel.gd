@@ -53,6 +53,7 @@ var _now_index := 0
 
 var _views := {} ## View -> Control
 var _prev_card: PanelContainer = null
+var _main_host: Control = null ## Fixed layout cell; only its child slides.
 var _main_card: HBoxContainer = null
 var _word_cards: Array[Button] = []
 var _next_card: PanelContainer = null
@@ -120,10 +121,23 @@ func _build_category_view(page: VBoxContainer) -> void:
 	# The pair arrives as two cards, not one card with two words on it. A pair is two
 	# choices, and the card the student taps is the state the animal starts in - so the
 	# thing they tap has to be the word itself, with its own edges.
+	# The row's Container must own a fixed cell, not the card that animates. Moving a
+	# Container-managed child by setting position.x corrupts its layout offsets: after the
+	# first click the pair was pulled toward x=0 and overlapped one chevron. The host never
+	# moves; the card slides locally inside it and is clipped at the cell edges.
+	_main_host = Control.new()
+	_main_host.name = "MainCardHost"
+	_main_host.custom_minimum_size = Vector2(
+		WORD_CARD_SIZE.x * 2.0 + WORD_GAP, WORD_CARD_SIZE.y)
+	_main_host.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_main_host.clip_contents = true
+	row.add_child(_main_host)
+
 	_main_card = UiKit.hbox(WORD_GAP)
+	_main_card.name = "SlidingWordCards"
 	_main_card.alignment = BoxContainer.ALIGNMENT_CENTER
-	_main_card.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	row.add_child(_main_card)
+	_main_host.add_child(_main_card)
+	_main_card.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	for i in 2:
 		var word_card := Button.new()
 		word_card.custom_minimum_size = WORD_CARD_SIZE
@@ -188,6 +202,8 @@ func _step(direction: int) -> void:
 		_slide.kill()
 	# The card arrives from the side it came from, so the movement itself says which way
 	# the deck went - a card that only fades leaves that ambiguous.
+	# Local to MainCardHost. The arrows, side previews and host retain the positions the
+	# outer HBox assigned them throughout the animation.
 	_main_card.position.x = -direction * 26.0
 	_slide = create_tween()
 	_slide.tween_property(_main_card, "position:x", 0.0, SLIDE_TIME) \
