@@ -25,9 +25,14 @@ extends Resource
 ## below the hip, so TALL/SHORT changes leg length without touching the torso.
 @export var legs: Array[Dictionary] = []
 
-## STRONG/WEAK muscle groups: name -> {"bones": PackedStringArray}. Nesting between
-## groups is resolved by walking the skeleton, not declared here.
+## Historical body-region map retained for compatibility and neutral measurements. The
+## Strong/Weak pair no longer deforms any of these chest or body regions.
 @export var bulk: Dictionary = {}
+
+## Forelimb data shared by STRONG's bone-following muscle shells and WEAK's one-for-one
+## replacement arms. Keys per side: bone, original_root, chain, kind, offset, rotation,
+## scale. STRONG leaves the chain intact; WEAK collapses original_root while replacing it.
+@export var forelimbs: Dictionary = {}
 
 ## Optional STRONG/WEAK rib treatment, expressed as fractions of this mesh's local
 ## AABB: {"center": [x,y,z], "size": [x,y,z], "count": 3..5, "depth": number}.
@@ -40,9 +45,6 @@ extends Resource
 ## rather than inferred from a whole-model bounding box at runtime.
 @export var foot_contacts: Dictionary = {}
 @export var ground_neutral := false ## Opt-in correction for an authored uneven stance.
-
-## Which species finishing pose closes the power-up: stomp | rear | puff | flex.
-@export var flourish: String = "puff"
 
 ## HARD/SOFT tuning. How far this species puffs and squashes when it turns soft, how
 ## much it keeps jiggling afterwards, and which appendages loosen up.
@@ -78,6 +80,15 @@ extends Resource
 ## reach a head that is carried at an angle.
 @export var young: Dictionary = {}
 
+## OLD tuning, same shape and same unit as `young`. Keys, all optional:
+##   grey     {muzzle_size, muzzle_forward, muzzle_down, temple_size, temple_forward,
+##             temple_up, temple_spacing}
+##   beard    {size, forward, down, length}
+##   specs    {size, spacing, forward, up, wire}
+##   brow     {length, thickness, spacing, forward, up, angle}  - angle in degrees
+##   tint     "#rrggbb" - the colour of the aging markings.
+@export var old: Dictionary = {}
+
 
 static func from_dict(d: Dictionary) -> AnimalDefinition:
 	var a := AnimalDefinition.new()
@@ -96,6 +107,9 @@ static func from_dict(d: Dictionary) -> AnimalDefinition:
 	for group_name in d.get("bulk", {}):
 		var group: Dictionary = d["bulk"][group_name]
 		a.bulk[str(group_name)] = {"bones": PackedStringArray(group.get("bones", []))}
+	var forelimb_cfg = d.get("forelimbs", {})
+	if forelimb_cfg is Dictionary:
+		a.forelimbs = (forelimb_cfg as Dictionary).duplicate(true)
 	var ribs = d.get("ribs", {})
 	if ribs is Dictionary:
 		a.rib_profile = ribs.duplicate(true)
@@ -103,7 +117,6 @@ static func from_dict(d: Dictionary) -> AnimalDefinition:
 		a.foot_contacts[str(leg_id)] = BodyPartSpec.to_v3(
 			d["foot_contacts"][leg_id], Vector3.ZERO)
 	a.ground_neutral = bool(d.get("ground_neutral", false))
-	a.flourish = str(d.get("flourish", "puff"))
 	var feel: Dictionary = d.get("feel", {})
 	a.soft_puff = float(feel.get("puff", 0.15))
 	a.soft_squash = float(feel.get("squash", 0.55))
@@ -123,6 +136,9 @@ static func from_dict(d: Dictionary) -> AnimalDefinition:
 	var young_cfg = d.get("young", {})
 	if young_cfg is Dictionary:
 		a.young = (young_cfg as Dictionary).duplicate(true)
+	var old_cfg = d.get("old", {})
+	if old_cfg is Dictionary:
+		a.old = (old_cfg as Dictionary).duplicate(true)
 	return a
 
 
@@ -130,6 +146,32 @@ func bulk_bones_for(group: String) -> PackedStringArray:
 	if bulk.has(group):
 		return bulk[group].get("bones", PackedStringArray())
 	return PackedStringArray()
+
+
+## Resolve one existing front leg/wing without naming species in code. Explicit animal
+## data is preferred; the shoulder map remains a safe fallback for imported animals.
+func forelimb_config(side: String) -> Dictionary:
+	var side_cfg: Dictionary = {}
+	var raw_side = forelimbs.get(side, {})
+	if raw_side is Dictionary:
+		side_cfg = (raw_side as Dictionary).duplicate(true)
+	var suffix := ".L" if side == "left" else ".R"
+	var fallback_bone := ""
+	for bone in bulk_bones_for("shoulder"):
+		if str(bone).ends_with(suffix):
+			fallback_bone = str(bone)
+			break
+	if fallback_bone.is_empty() and not bulk_bones_for("shoulder").is_empty():
+		fallback_bone = str(bulk_bones_for("shoulder")[0])
+	return {
+		"bone": str(side_cfg.get("bone", fallback_bone)),
+		"original_root": str(side_cfg.get("original_root", side_cfg.get("bone", fallback_bone))),
+		"chain": PackedStringArray(side_cfg.get("chain", [side_cfg.get("bone", fallback_bone)])),
+		"kind": str(side_cfg.get("kind", "leg")),
+		"offset": BodyPartSpec.to_v3(side_cfg.get("offset", null), Vector3.ZERO),
+		"rotation": BodyPartSpec.to_v3(side_cfg.get("rotation", null), Vector3.ZERO),
+		"scale": float(side_cfg.get("scale", forelimbs.get("scale", 1.0))),
+	}
 
 
 func foot_contact_for(leg_id: String) -> Vector3:
@@ -176,3 +218,20 @@ func young_tint() -> Color:
 	if young.has("tint"):
 		return Color.html(str(young["tint"]))
 	return skin_color.lightened(0.45)
+
+
+## The OLD counterpart of young_value(): same unit (multiples of the measured muzzle
+## length), same fallback contract.
+func old_value(group: String, key: String, fallback: float) -> float:
+	var cfg = old.get(group, {})
+	if cfg is Dictionary and (cfg as Dictionary).has(key):
+		return float((cfg as Dictionary)[key])
+	return fallback
+
+
+## The colour of the aging markings. Grey by default; overridable for a species whose own
+## colouring would swallow it.
+func old_tint() -> Color:
+	if old.has("tint"):
+		return Color.html(str(old["tint"]))
+	return Color("#b9bec6")

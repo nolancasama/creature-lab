@@ -63,10 +63,13 @@ func _build_library() -> void:
 	_library["thud"] = _blip(150.0, 62.0, 0.26, 0.55)
 	# A long airy sag for muscles deflating - the "pffft" the design asks for.
 	_library["deflate"] = _blip(540.0, 85.0, 0.72, 0.30)
+	# A tiny, deliberately unimpressive squeak for WEAK's failed arm flex.
+	_library["weak"] = _blip(520.0, 690.0, 0.16, 0.20)
 	_library["clang"] = _clang()
 	_library["boing"] = _boing()
 	_library["puff"] = _blip(340.0, 620.0, 0.34, 0.18)
 	_library["baby"] = _coo()
+	_library["elder"] = _chuckle()
 
 
 ## A decaying sine that glides from one pitch to another - the workhorse UI sound.
@@ -185,6 +188,31 @@ func _coo() -> AudioStreamWAV:
 			var envelope: float = sin(PI * t)
 			# A quiet second harmonic softens the tone without muddying it.
 			samples[index] = (sin(phase) * 0.82 + sin(phase * 2.0) * 0.18) * envelope * 0.30
+			index += 1
+		index += gap
+	return _to_wav(samples)
+
+
+## The OLD cue: three short low notes, each a touch lower than the last - a contented
+## "heh heh heh" rather than a word. Deliberately warm and low: the brief asks for old and
+## wise, not sick, so there is no rasp, no wobble at the end and no falling sigh, all of
+## which read as unwell rather than amused.
+func _chuckle() -> AudioStreamWAV:
+	var notes := [196.0, 185.0, 174.0]
+	var per := int(MIX_RATE * 0.095)
+	var gap := int(MIX_RATE * 0.045)
+	var samples := PackedFloat32Array()
+	samples.resize((per + gap) * notes.size())
+	var index := 0
+	for n in notes:
+		var phase := 0.0
+		for i in per:
+			var t := float(i) / float(per)
+			phase += TAU * float(n) / float(MIX_RATE)
+			# Rounded either side so each note is a soft "heh" rather than a click, and a
+			# little third harmonic for a chesty rather than a thin tone.
+			var envelope: float = sin(PI * t)
+			samples[index] = (sin(phase) * 0.75 + sin(phase * 3.0) * 0.25) * envelope * 0.26
 			index += 1
 		index += gap
 	return _to_wav(samples)

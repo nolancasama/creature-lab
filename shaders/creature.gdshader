@@ -35,7 +35,7 @@ uniform float sweep_glow : hint_range(0.0, 4.0) = 0.0;
 // radially toward that segment; projection along the segment never changes. This keeps
 // every joint and all skeletal transforms untouched while visibly reducing soft-tissue
 // volume. The fixed upper bound keeps the shader inexpensive on classroom hardware.
-const int MAX_WEAK_REGIONS = 16;
+const int MAX_WEAK_REGIONS = 20;
 uniform int weak_region_count = 0;
 uniform vec3 weak_region_start[MAX_WEAK_REGIONS];
 uniform vec3 weak_region_end[MAX_WEAK_REGIONS];
@@ -51,16 +51,29 @@ uniform vec3 rib_size = vec3(1.0);
 uniform float rib_count : hint_range(3.0, 5.0) = 4.0;
 uniform float rib_depth : hint_range(0.0, 0.08) = 0.02;
 
-// YOUNG's rosy cheeks. Painted into the surface rather than stuck on it as geometry: a
-// blush is a marking, and a flattened ball of pink parked on the muzzle read as something
-// growing out of the face. Two model-space centres with a soft radial falloff, so the
-// patch follows the head wherever the skinning puts it and curves with the cheek instead
-// of hovering flat against it.
-uniform float cheek_amount : hint_range(0.0, 1.0) = 0.0;
-uniform vec4 cheek_colour : source_color = vec4(1.0, 0.62, 0.77, 1.0);
-uniform vec3 cheek_left = vec3(0.0);
-uniform vec3 cheek_right = vec3(0.0);
-uniform float cheek_radius = 0.001;
+// Skin markings for the AGE trait: YOUNG's rosy cheeks, and OLD's grey muzzle and brow.
+// Painted into the surface rather than stuck on as geometry - a blush and a greying muzzle
+// are markings, and the same idea as meshes read as things growing out of the face.
+//
+// One shared list rather than a system per trait: both are "tint the skin inside these
+// spheres", they never apply at once (both are AGE), and the alternative was two near
+// identical sets of uniforms. Radii are per patch so a wide muzzle and a small brow can
+// sit in the same list. Applied AFTER the recolour and the wash on purpose - a marking
+// sits on top of the skin, so a blue creature keeps pink cheeks and grey whiskers rather
+// than getting blue-tinted ones, which is what keeps AGE readable against the COLOUR card.
+const int MAX_PATCHES = 6;
+uniform int patch_count = 0;
+uniform vec3 patch_center[MAX_PATCHES];
+uniform float patch_radius[MAX_PATCHES];
+uniform vec4 patch_colour : source_color = vec4(1.0, 0.62, 0.77, 1.0);
+uniform float patch_amount : hint_range(0.0, 1.0) = 0.0;
+
+// Greys only the DARK parts of the texture, which on a striped or masked animal means the
+// markings and not the coat between them. Keyed on the texture's own luminance rather than
+// on a mask nobody authored, so it costs no extra data per species.
+uniform float grey_dark_amount : hint_range(0.0, 1.0) = 0.0;
+// Greys everything, gently - for a species whose whole coat should silver.
+uniform float grey_coat_amount : hint_range(0.0, 1.0) = 0.0;
 
 varying float model_height;
 varying float rib_groove;
@@ -92,7 +105,10 @@ void vertex() {
 			weak_region_radius[i], radial_distance);
 		float deformation = joint_pin * radial_mask * weak_region_amount[i]
 			* (1.0 - weak_region_scale[i]);
-		if (deformation > best_deformation) {
+		// Compared by magnitude, not by value: a region whose scale is above 1.0 produces a
+		// negative deformation and swells the limb outwards instead of slimming it, and a
+		// plain greater-than would discard every one of those.
+		if (abs(deformation) > abs(best_deformation)) {
 			best_deformation = deformation;
 			best_radial = radial;
 		}
@@ -133,14 +149,26 @@ void fragment() {
 	// readable at normal camera distance. With weak_rib_amount == 0 this is neutral.
 	albedo *= 1.0 - rib_groove * 0.12;
 
-	// Rosy cheeks, painted over whatever colour the creature ended up. Applied AFTER the
-	// recolour and the wash on purpose: a blush sits on top of the skin, so a blue young
-	// animal still has pink cheeks rather than blue-tinted ones.
-	float blush = 0.0;
-	if (cheek_amount > 0.0) {
-		float near = min(length(model_pos - cheek_left), length(model_pos - cheek_right));
-		blush = (1.0 - smoothstep(0.45, 1.0, near / max(cheek_radius, 0.0001))) * cheek_amount;
-		albedo = mix(albedo, cheek_colour.rgb, blush * 0.85);
+	// AGE markings. `near` is the distance to the closest patch in units of that patch's
+	// own radius, so one falloff curve serves patches of different sizes.
+	if (patch_amount > 0.0) {
+		float near = 1e9;
+		for (int i = 0; i < MAX_PATCHES; i++) {
+			if (i >= patch_count) {
+				break;
+			}
+			near = min(near, length(model_pos - patch_center[i]) / max(patch_radius[i], 0.0001));
+		}
+		float marking = (1.0 - smoothstep(0.45, 1.0, near)) * patch_amount;
+		albedo = mix(albedo, patch_colour.rgb, marking * 0.85);
+	}
+	if (grey_dark_amount > 0.0) {
+		// `lum` is the untinted texture's own light/dark pattern, so this keys off the
+		// stripes themselves and survives the creature being recoloured.
+		albedo = mix(albedo, patch_colour.rgb, (1.0 - smoothstep(0.10, 0.55, lum)) * grey_dark_amount);
+	}
+	if (grey_coat_amount > 0.0) {
+		albedo = mix(albedo, patch_colour.rgb, grey_coat_amount);
 	}
 
 	// How hardened this particular fragment is: 1 below the travelling edge, 0 above.

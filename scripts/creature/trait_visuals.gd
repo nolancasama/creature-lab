@@ -12,7 +12,6 @@ extends RefCounted
 
 const HOT := Color("#ff7a2f")
 const COLD := Color("#8fd6ff")
-const AGED := Color("#8f8c86")
 
 ## The stand height the HOT flames were visually tuned against (the dog). Other species
 ## scale their flame size by their own height over this.
@@ -82,6 +81,7 @@ static func apply_all(rig: CreatureRig, traits: Dictionary, animate := false) ->
 	# remembers they were there, so re-picking young greets the student again.
 	if not saw_age:
 		rig.young_applied = false
+		rig.old_applied = false
 
 	if rig.deformer != null:
 		if animate:
@@ -174,13 +174,6 @@ static func _apply_thermal(rig: CreatureRig, value: float, mid: float, animate :
 		var skull := _bone_point(rig, "head_top", Vector3(0, h * 0.90, h * 0.20))
 		var rear := _bone_point(rig, "rear", Vector3(0, h * 0.55, -h * 0.35))
 
-		# Base flames licking up around the feet, spread across the footprint but kept
-		# narrow enough that they stay a skirt around the legs rather than reading as
-		# separate little campfires dotted over the platform.
-		var feet := Fx.make("flame", HOT, h * 0.26, flame_scale)
-		Fx.spread_along(feet, Vector3(h * 0.10, h * 0.01, h * 0.20))
-		rig.add_thermal_fx(feet, Vector3(0, h * 0.02, 0))
-
 		# The main sheet of fire, running the length of the spine. The emission box is
 		# deliberately TALL - it spans from inside the torso to above the back line - so
 		# it does not matter that the spine bone sits anywhere from 0.51 to 0.85 of stand
@@ -245,11 +238,15 @@ static func _apply_age(rig: CreatureRig, value: float, mid: float, animate := fa
 	var was_young := rig.young_applied
 	rig.young_applied = value <= 0.5
 
+	var was_old := rig.old_applied
+	rig.old_applied = value > 0.5
+
 	if value > 0.5: # old
-		rig.tint_role("skin", AGED, 0.32)
-		rig.scale_body(Vector3(1.0, 0.94, 1.0)) # a little stooped
-		rig.tempo *= 0.75
-		rig.add_fx(Fx.make("dust", Color("#c9c2b4"), 0.6), Vector3(0, mid * 0.5, 0))
+		# No body squash, no slowed tempo, no grey wash, no dust - see OldKit for what each
+		# of those collided with. The whole of OLD is now on the face.
+		OldKit.apply(rig)
+		if animate and not was_old:
+			Audio.play("elder", rig.definition.voice_pitch)
 		return
 
 	# young
@@ -262,8 +259,7 @@ static func _apply_age(rig: CreatureRig, value: float, mid: float, animate := fa
 		# jaw and ears with it, so nothing below the neck moves.
 		rig.scale_bone(head_bone, Vector3.ONE * head_scale)
 
-	var head := _bone_point(rig, "head_top", Vector3(0, rig.definition.stand_height * 0.9, 0))
-	YoungKit.apply(rig, head, head_scale)
+	YoungKit.apply(rig, head_scale)
 
 	rig.tint_role("skin", def.young_tint(), 0.32)
 	rig.tempo *= 1.25

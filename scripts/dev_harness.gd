@@ -378,6 +378,14 @@ static func _selftest(main: Node) -> void:
 		for group in MuscleDeformer.GROUPS:
 			_check(failures, not def.bulk_bones_for(group).is_empty(),
 				"%s has no bones for muscle group '%s'" % [def.id, group])
+		for side in ["left", "right"]:
+			var forelimb := def.forelimb_config(side)
+			_check(failures, not str(forelimb.bone).is_empty(),
+				"%s has no %s forelimb attachment" % [def.id, side])
+			_check(failures, not str(forelimb.original_root).is_empty(),
+				"%s has no %s original forelimb root" % [def.id, side])
+			_check(failures, (forelimb.chain as PackedStringArray).size() >= 2,
+				"%s has no usable %s Strong limb chain" % [def.id, side])
 		_check(failures, def.legs.size() >= 2, "%s has fewer than 2 legs configured" % def.id)
 		for leg in def.legs:
 			_check(failures, def.foot_contacts.has(str(leg.get("id", ""))),
@@ -388,6 +396,11 @@ static func _selftest(main: Node) -> void:
 			all_bones.append_array(Array(def.body_bones))
 			for group in MuscleDeformer.GROUPS:
 				all_bones.append_array(Array(def.bulk_bones_for(group)))
+			for side in ["left", "right"]:
+				var forelimb := def.forelimb_config(side)
+				all_bones.append(str(forelimb.bone))
+				all_bones.append(str(forelimb.original_root))
+				all_bones.append_array(Array(forelimb.chain as PackedStringArray))
 			all_bones.append_array(Array(def.leg_bones))
 			for leg in def.legs:
 				all_bones.append_array(Array(leg["bones"] as PackedStringArray))
@@ -424,40 +437,87 @@ static func _selftest(main: Node) -> void:
 		_check(failures, rig.deformer.lift < -0.005,
 			"%s: SHORT legs did not lower the body" % def.id)
 
-		# STRONG may scale its muscle bones. WEAK must leave every joint transform neutral
-		# and make the visible change exclusively through absolute shader parameters.
+		# STRONG swells the intact live forelimbs; every bone, paw and wing stays authored.
+		# WEAK alone replaces exactly the two configured front legs/wings.
 		rig.deformer.reset()
 		var neutral_positions: Array[Vector3] = []
 		for bone_idx in rig.skeleton.get_bone_count():
 			neutral_positions.append(rig.skeleton.get_bone_pose_position(bone_idx))
-		var chest_bone := rig.skeleton.find_bone(def.bulk_bones_for("chest")[0])
+		var forelimb_roots := rig.muscle.limb_morph.original_root_bones()
 		rig.muscle.set_state(1.35)
-		_check(failures, rig.skeleton.get_bone_pose_scale(chest_bone).x > 1.05,
-			"%s: STRONG did not thicken the chest" % def.id)
+		for bone_idx in rig.skeleton.get_bone_count():
+			var bone_name := rig.skeleton.get_bone_name(bone_idx)
+			_check(failures, rig.skeleton.get_bone_pose_scale(bone_idx).is_equal_approx(Vector3.ONE),
+				"%s: STRONG altered existing limb/body bone '%s'" % [def.id, bone_name])
+			_check(failures, rig.skeleton.get_bone_pose_position(bone_idx).is_equal_approx(neutral_positions[bone_idx]),
+				"%s: STRONG moved existing joint '%s'" % [def.id, bone_name])
+		_check(failures, rig.muscle.morph_amount > 0.99,
+			"%s: STRONG forelimb morph did not activate" % def.id)
+		var morph := rig.muscle.limb_morph
+		_check(failures, morph != null and morph.mode == ForelimbMorph.Mode.STRONG,
+			"%s: STRONG did not reach the strong forelimb mode" % def.id)
+		if morph != null:
+			# STRONG must grow the animal's own limb, never add geometry of its own.
+			_check(failures, morph.strong_swell("left") > 0.9 and morph.strong_swell("right") > 0.9,
+				"%s: STRONG did not swell both forelimbs" % def.id)
+			var weak_arm_mesh := func(m: MeshInstance3D) -> bool:
+				return morph.left_weak_arm.is_ancestor_of(m) or morph.right_weak_arm.is_ancestor_of(m)
+			_check(failures,
+				morph.find_children("*", "MeshInstance3D", true, false).all(weak_arm_mesh),
+				"%s: STRONG added geometry instead of growing the animal's own limb" % def.id)
+			_check(failures, not morph.left_weak_arm.visible and not morph.right_weak_arm.visible,
+				"%s: WEAK arms leaked into STRONG" % def.id)
+			morph.set_side_enabled("left", false)
+			_check(failures, is_zero_approx(morph.strong_swell("left"))
+				and morph.strong_swell("right") > 0.9,
+				"%s: forelimb muscles cannot be enabled independently" % def.id)
+			var left_root := rig.skeleton.find_bone(forelimb_roots[0])
+			_check(failures, rig.skeleton.get_bone_pose_scale(left_root).is_equal_approx(Vector3.ONE),
+				"%s: STRONG did not preserve its original limb" % def.id)
+			morph.set_side_enabled("left", true)
 		rig.muscle.set_state(0.60)
 		for bone_idx in rig.skeleton.get_bone_count():
-			_check(failures, rig.skeleton.get_bone_pose_scale(bone_idx).is_equal_approx(Vector3.ONE),
-				"%s: WEAK scaled skeletal bone '%s'" % [def.id, rig.skeleton.get_bone_name(bone_idx)])
+			var bone_name := rig.skeleton.get_bone_name(bone_idx)
+			if forelimb_roots.has(bone_name):
+				_check(failures, rig.skeleton.get_bone_pose_scale(bone_idx).x < 0.03,
+					"%s: WEAK did not replace original forelimb '%s'" % [def.id, bone_name])
+			else:
+				_check(failures, rig.skeleton.get_bone_pose_scale(bone_idx).is_equal_approx(Vector3.ONE),
+					"%s: WEAK altered non-forelimb bone '%s'" % [def.id, bone_name])
 			_check(failures, rig.skeleton.get_bone_pose_position(bone_idx).is_equal_approx(neutral_positions[bone_idx]),
 				"%s: WEAK moved joint '%s'" % [def.id, rig.skeleton.get_bone_name(bone_idx)])
 		_check(failures, is_zero_approx(rig.muscle.lift),
 			"%s: WEAK changed the creature root height" % def.id)
+		_check(failures, morph.mode == ForelimbMorph.Mode.WEAK and morph.visible,
+			"%s: WEAK forelimb replacements are not visible" % def.id)
+		_check(failures, morph.left_weak_arm.get_node_or_null("TinyBiceps") is MeshInstance3D
+			and morph.right_weak_arm.get_node_or_null("LimpHand") != null,
+			"%s: WEAK arms lack skinny muscles or limp hands" % def.id)
+		_check(failures, is_zero_approx(morph.strong_swell("left"))
+			and is_zero_approx(morph.strong_swell("right")),
+			"%s: STRONG's swollen forelimbs leaked into WEAK" % def.id)
 		var region_amounts: PackedFloat32Array = rig.material.get_shader_parameter("weak_region_amount")
-		var visible_weak := false
+		var chest_deformed := false
 		for amount in region_amounts:
-			visible_weak = visible_weak or amount > 0.9
-		_check(failures, visible_weak, "%s: WEAK mesh thinning did not activate" % def.id)
-		_check(failures, float(rig.material.get_shader_parameter("weak_rib_amount")) > 0.9,
-			"%s: WEAK rib deformation did not activate" % def.id)
+			chest_deformed = chest_deformed or amount > 0.001
+		_check(failures, not chest_deformed,
+			"%s: WEAK retained old body-region shrinking" % def.id)
+		_check(failures, float(rig.material.get_shader_parameter("weak_rib_amount")) < 0.001,
+			"%s: WEAK retained old chest/rib deformation" % def.id)
 		rig.muscle.set_state(1.35)
 		rig.muscle.set_state(0.60)
-		_check(failures, rig.skeleton.get_bone_pose_scale(chest_bone).is_equal_approx(Vector3.ONE),
-			"%s: STRONG to WEAK retained skeletal bulk" % def.id)
+		_check(failures, morph.mode == ForelimbMorph.Mode.WEAK
+			and is_zero_approx(morph.strong_swell("left")) and morph.left_weak_arm.visible,
+			"%s: STRONG to WEAK retained the wrong arm form" % def.id)
 		rig.muscle.reset()
-		_check(failures, absf(rig.skeleton.get_bone_pose_scale(chest_bone).x - 1.0) < 0.001,
-			"%s: muscle did not return to rest" % def.id)
+		_check(failures, not morph.visible and morph.mode == ForelimbMorph.Mode.NEUTRAL,
+			"%s: forelimb morph did not return to rest" % def.id)
+		for root_name in forelimb_roots:
+			var root_idx := rig.skeleton.find_bone(root_name)
+			_check(failures, rig.skeleton.get_bone_pose_scale(root_idx).is_equal_approx(Vector3.ONE),
+				"%s: neutral did not restore original forelimb '%s'" % [def.id, root_name])
 		_check(failures, float(rig.material.get_shader_parameter("weak_rib_amount")) < 0.001,
-			"%s: WEAK surface deformation did not reset" % def.id)
+			"%s: neutral retained old WEAK surface deformation" % def.id)
 
 		# HARD must shine and stiffen; SOFT must puff and stay loose. The two have to
 		# move opposite directions or the adjectives are not distinguishable.
@@ -476,6 +536,19 @@ static func _selftest(main: Node) -> void:
 		rig.feel.reset()
 		_check(failures, rig.feel.scale_multiplier.is_equal_approx(Vector3.ONE),
 			"%s: feel did not return to rest" % def.id)
+
+		# OLD's supplied concave beard silhouette must exist on every species and remain
+		# readable from both the default profile and a user-dragged front view.
+		rig.reset_modifiers()
+		OldKit.apply(rig)
+		var beard := rig.accessory_root.get_node_or_null("OldBeard")
+		_check(failures, beard != null, "%s: OLD beard was not built" % def.id)
+		if beard != null:
+			_check(failures, beard.get_node_or_null("FrontSilhouette") is MeshInstance3D,
+				"%s: OLD beard has no front silhouette" % def.id)
+			_check(failures, beard.get_node_or_null("SideSilhouette") is MeshInstance3D,
+				"%s: OLD beard has no profile silhouette" % def.id)
+		rig.reset_modifiers()
 
 		rig.deformer.reset()
 		var back_tip: Vector3 = rig.skeleton.get_bone_pose_position(tip)
@@ -519,6 +592,70 @@ static func _selftest(main: Node) -> void:
 				"%s: rear pair grounding became asymmetric" % def.id)
 		main.remove_child(rig)
 		rig.free()
+
+	# Exercise both real timed transitions. STRONG must swell around the original downward
+	# limbs without moving a joint; WEAK may replace those same two configured limbs.
+	var animated_strong := CreatureFactory.build_plain(Content.animals[0].id)
+	main.add_child(animated_strong)
+	await main.get_tree().process_frame
+	var neutral_body_scale: Vector3 = animated_strong.body.scale
+	var neutral_front_positions := {}
+	for side in ["left", "right"]:
+		for bone_name in animated_strong.definition.forelimb_config(side).chain:
+			var bone_idx := animated_strong.skeleton.find_bone(bone_name)
+			neutral_front_positions[bone_name] = animated_strong.skeleton.get_bone_pose_position(bone_idx)
+	animated_strong.muscle.animate_to(1.35)
+	await main.get_tree().create_timer(0.08).timeout
+	_check(failures, not animated_strong.muscle.limb_morph.visible,
+		"STRONG muscle volume appeared before its glow began")
+	_check(failures, animated_strong.body.scale.is_equal_approx(neutral_body_scale),
+		"STRONG power-up scaled the animal during its charge")
+	await main.get_tree().create_timer(0.34).timeout
+	_check(failures, animated_strong.muscle.limb_morph.visible
+		and animated_strong.muscle.morph_amount > 0.5,
+		"STRONG timed growth did not add muscle to both forelimbs")
+	_check(failures, animated_strong.body.scale.is_equal_approx(neutral_body_scale),
+		"STRONG muscle growth scaled the animal")
+	for bone_name in neutral_front_positions:
+		var bone_idx := animated_strong.skeleton.find_bone(bone_name)
+		_check(failures, animated_strong.skeleton.get_bone_pose_position(bone_idx)
+			.is_equal_approx(neutral_front_positions[bone_name]),
+			"STRONG moved existing forelimb joint '%s'" % bone_name)
+	await main.get_tree().create_timer(0.55).timeout
+	_check(failures, absf(animated_strong.muscle.morph_amount - 1.0) < 0.02
+		and animated_strong.muscle.limb_morph.flex < 0.01
+		and absf(animated_strong.muscle.yaw) < 0.001,
+		"STRONG did not settle naturally without a flex pose")
+	animated_strong.muscle.animate_to(1.0)
+	await main.get_tree().create_timer(0.55).timeout
+	_check(failures, not animated_strong.muscle.limb_morph.visible,
+		"undoing STRONG did not restore the original forelimbs")
+
+	animated_strong.muscle.animate_to(0.60)
+	await main.get_tree().create_timer(0.12).timeout
+	_check(failures, not animated_strong.muscle.limb_morph.visible,
+		"WEAK forelimbs changed before their morph began")
+	await main.get_tree().create_timer(0.40).timeout
+	_check(failures, animated_strong.muscle.limb_morph.visible
+		and animated_strong.muscle.limb_morph.mode == ForelimbMorph.Mode.WEAK
+		and animated_strong.muscle.morph_amount > 0.7,
+		"WEAK timed morph did not reveal both skinny forelimbs")
+	var saw_failed_flex := false
+	for sample in 12:
+		await main.get_tree().create_timer(0.06).timeout
+		saw_failed_flex = saw_failed_flex or animated_strong.muscle.limb_morph.flex > 0.25
+	_check(failures, saw_failed_flex, "WEAK did not attempt its failed flex")
+	await main.get_tree().create_timer(0.20).timeout
+	_check(failures, animated_strong.muscle.limb_morph.flex < 0.05,
+		"WEAK failed flex did not droop back down")
+	_check(failures, animated_strong.body.scale.is_equal_approx(neutral_body_scale),
+		"WEAK morph scaled the animal")
+	animated_strong.muscle.animate_to(1.0)
+	await main.get_tree().create_timer(0.50).timeout
+	_check(failures, not animated_strong.muscle.limb_morph.visible,
+		"undoing WEAK did not restore the original forelimbs")
+	main.remove_child(animated_strong)
+	animated_strong.free()
 
 	# Traits and fantasy assembly, exercised across every pair and both directions.
 	for def in Content.animals:

@@ -49,11 +49,10 @@ const PANEL_WIDTH := -PANEL_LEFT + PANEL_RIGHT ## 648 - the rect's actual width.
 ## any extra tuning.
 const PRESENT_SIZE := Vector2(720, 360)
 const SAY_IT_WIDTH := 540 ## 720 less a quarter - the docked panel below the platform.
-## At or just under SpeechPanel's own content minimum, so its two centring expanders have
-## little or nothing left to distribute and the panel is effectively packed. That is the
-## intent - it was 350 to give the sentence room to centre in, and is deliberately tighter
-## now; the sentence sits where the content leaves it rather than floating mid-panel.
-const SAY_IT_HEIGHT := 280
+## Below SpeechPanel's own content minimum (~298), so the panel is fully packed: its two
+## centring expanders have nothing to distribute, and the vbox is what decides the spacing.
+## Deliberately tight - this came down from 350 in two steps.
+const SAY_IT_HEIGHT := 224
 const SAY_IT_BOTTOM_MARGIN := 24
 
 ## Content-hugging rather than the tall shared rect: three animal-button rows plus Start,

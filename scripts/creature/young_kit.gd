@@ -18,17 +18,14 @@ extends RefCounted
 ## creature.gdshader): a blush is a marking on the skin, and the same idea as geometry was
 ## a flattened ball of pink that read as something growing out of the face.
 ##
-## Everything is positioned in the same normalised space as the sockets: origin at the head
-## bone, +Y up, distances as fractions of stand_height. Offsets are multiplied by the head
-## scale, because the enlarged head has pushed its own surface out by exactly that much -
-## without it the pacifier ends up buried inside a bigger muzzle.
+## Props hang off CreatureRig.face_anchors(), which measures the head from the mesh's own
+## skin weights. An earlier version scaled offsets off a single "muzzle reach" number, and
+## it could not be made to work: the same multipliers that sat a pacifier on a dog's snout
+## buried it in the tiger's and left it in mid-air beside the penguin's beak, because a
+## scalar says how LONG a head is and nothing about how high or how steeply it is carried.
 ##
-## FORWARD is -Z, the glTF convention these models are authored in. Confirmed from the
-## skeletons rather than assumed: every species' head bone sits at negative Z (the dog's at
-## -0.91, the tiger's at -1.30, the horse's at -1.20) with the body trailing behind it
-## toward +Z. Note the `face` socket's authored offset is +Z, which points *backward* into
-## the skull - it is positioned for hanging fantasy parts off, so its magnitude is a useful
-## measure of muzzle reach but its direction must not be followed.
+## FORWARD is -Z, the glTF convention these models are authored in - every species' head
+## bone sits at negative Z with the body trailing behind it.
 const FORWARD := -1.0
 
 const ROSY := Color("#ff9ec4")
@@ -36,61 +33,56 @@ const PACIFIER_GUARD := Color("#ffd166")
 const PACIFIER_TEAT := Color("#ffe6b8")
 
 
-## Build every baby feature onto `rig`, around a head sitting at `head` (normalised space)
-## that has already been scaled up by `head_scale`.
-static func apply(rig: CreatureRig, head: Vector3, head_scale: float) -> void:
+## Build every baby feature onto `rig`. `hs` is the head scale already applied to the head
+## bone, which the props are nudged outward by so they clear the enlarged skull.
+static func apply(rig: CreatureRig, hs: float) -> void:
 	var def := rig.definition
-	# The muzzle's real length, measured off the model - see CreatureRig.muzzle_reach().
-	# Every default below is a fraction of it, so a tiger's long head and a chicken's
-	# short one place their own features without either needing an override.
-	var reach := rig.muzzle_reach()
+	var a := rig.face_anchors()
 
-	_paint_cheeks(rig, def, head, head_scale, reach)
-	_add_pacifier(rig, def, head, head_scale, reach)
+	_paint_cheeks(rig, def, a, hs)
+	_add_pacifier(rig, def, a, hs)
 
 
-## Handed to the shader as two centres and a radius, in body space - CreatureRig.set_cheeks()
-## converts. Because the patch is evaluated against the skinned vertex position, it stays
-## on the cheek as the head scales up rather than needing to be moved with it.
-static func _paint_cheeks(rig: CreatureRig, def: AnimalDefinition, head: Vector3,
-		hs: float, reach: float) -> void:
-	var size := def.young_value("cheek", "size", 0.40) * reach * hs
-	var spacing := def.young_value("cheek", "spacing", 0.25) * reach * hs
-	var forward := def.young_value("cheek", "forward", 0.69) * reach * hs * FORWARD
-	var down := def.young_value("cheek", "down", 0.33) * reach * hs
-	var at := head + Vector3(0.0, -down, forward)
-	rig.set_cheeks(at + Vector3(-spacing, 0.0, 0.0), at + Vector3(spacing, 0.0, 0.0),
-		size, ROSY, 1.0)
+## On the side of the face, not on the snout: placed further forward the patch lands on the
+## nose and reads as a pink muzzle rather than as a blush.
+static func _paint_cheeks(rig: CreatureRig, def: AnimalDefinition, a: Dictionary, hs: float) -> void:
+	var cheek: Vector3 = a["cheek"]
+	var size := def.young_value("cheek", "size", 0.42) * float(a["depth"]) * hs
+	var at := Vector3(0.0, cheek.y, cheek.z) + Vector3(0.0,
+		def.young_value("cheek", "down", 0.0) * float(a["span"]),
+		def.young_value("cheek", "forward", 0.0) * float(a["depth"]) * FORWARD)
+	var spacing := cheek.x * def.young_value("cheek", "spacing", 1.0) * hs
+	rig.set_patches([
+		{"at": at + Vector3(-spacing, 0.0, 0.0), "radius": size},
+		{"at": at + Vector3(spacing, 0.0, 0.0), "radius": size},
+	], ROSY, 1.0)
 
 
-## Guard disc plus teat, on the centreline below the eyes.
-##
-## Both hang off one pivot so `tilt` turns them together - a pacifier is a rigid object, and
-## rotating the guard while the teat stayed on the horizontal would pull it out through the
-## disc. The tilt exists because almost no snout points straight ahead: muzzles and beaks
-## angle downward, and a pacifier held dead level reads as stuck to the face rather than
-## held in the mouth. Negative is nose-down (a rotation about X sends -Z upward).
-static func _add_pacifier(rig: CreatureRig, def: AnimalDefinition, head: Vector3,
-		hs: float, reach: float) -> void:
-	var size := def.young_value("pacifier", "size", 0.46) * reach * hs
-	var forward := def.young_value("pacifier", "forward", 1.10) * reach * hs * FORWARD
-	var down := def.young_value("pacifier", "down", 0.19) * reach * hs
-	var tilt := def.young_value("pacifier", "tilt", -20.0)
+## Guard disc plus teat at the mouth, on one pivot so `tilt` turns them together - a
+## pacifier is a rigid object, and rotating the guard alone pulled the teat out through the
+## disc. It tilts because almost no snout points straight ahead; negative is nose-down.
+static func _add_pacifier(rig: CreatureRig, def: AnimalDefinition, a: Dictionary, hs: float) -> void:
+	var mouth: Vector3 = a["mouth"]
+	var size := def.young_value("pacifier", "size", 0.52) * float(a["depth"]) * hs
+	var tilt := def.young_value("pacifier", "tilt", -18.0)
+	var at := mouth + Vector3(0.0,
+		def.young_value("pacifier", "down", 0.0) * float(a["span"]),
+		def.young_value("pacifier", "forward", 0.20) * float(a["depth"]) * FORWARD)
 
 	var pivot := Node3D.new()
 	pivot.name = "Pacifier"
 	pivot.rotation_degrees = Vector3(tilt, 0.0, 0.0)
 
-	var guard := _cylinder(size, size * 0.22, PACIFIER_GUARD, 0.22)
+	var guard := _cylinder(size, size * 0.20, PACIFIER_GUARD, 0.22)
 	guard.rotation_degrees = Vector3(90.0, 0.0, 0.0) ## Cylinders build along Y; face it out.
 	pivot.add_child(guard)
 
-	var teat := _sphere(size * 0.52, PACIFIER_TEAT, 0.12)
-	teat.scale = Vector3(1.0, 1.0, 1.35) ## Drawn out into a soft nub.
-	teat.position = Vector3(0.0, 0.0, size * 0.30 * FORWARD)
+	var teat := _sphere(size * 0.50, PACIFIER_TEAT, 0.12)
+	teat.scale = Vector3(1.0, 1.0, 1.30)
+	teat.position = Vector3(0.0, 0.0, size * 0.28 * FORWARD)
 	pivot.add_child(teat)
 
-	rig.add_accessory(pivot, head + Vector3(0.0, -down, forward))
+	rig.add_accessory(pivot, at)
 
 
 # --- Primitives --------------------------------------------------------------

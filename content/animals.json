@@ -1,5 +1,5 @@
 {
-  "_comment": "Animals are skinned models from res://models/animals.glb (ITHappy 'Animals FREE' pack, free for commercial use). 'body_bones' are the torso segments the LONG/SHORT trait pushes apart - translating bones rather than scaling them is what stretches the torso without stretching the head, legs or tail. 'legs' lists each leg's telescoping segments in the order they pop out for TALL. 'stand_height' is the display height every animal is normalised to. Socket offsets are in those normalised units, Y up. 'bulk' identifies STRONG muscle bones and the neutral centerlines used by mesh-only WEAK thinning. 'ribs' tunes WEAK's shallow chest grooves. 'foot_contacts' stores explicit sole/hoof offsets for final grounding. 'flourish' picks the species finishing pose. 'feel' tunes HARD/SOFT per species: how far the body puffs and squashes when soft, how strongly it keeps jiggling afterwards, and which appendages go floppy.",
+  "_comment": "Animals are skinned models from res://models/animals.glb (ITHappy 'Animals FREE' pack, free for commercial use). 'body_bones' are the torso segments the LONG/SHORT trait pushes apart - translating bones rather than scaling them is what stretches the torso without stretching the head, legs or tail. 'legs' lists each leg's telescoping segments in the order they pop out for TALL. 'stand_height' is the display height every animal is normalised to. Socket offsets are in those normalised units, Y up. 'forelimbs' maps each existing front leg or bird wing to STRONG's bone-following muscle shell and WEAK's skinny-arm replacement. 'foot_contacts' stores explicit sole/hoof offsets for final grounding. 'feel' tunes HARD/SOFT per species: how far the body puffs and squashes when soft, how strongly it keeps jiggling afterwards, and which appendages go floppy.",
   "roles": {
     "_comment": "Colours for fantasy add-on parts, which are still built from primitives.",
     "dark": "#26262e",
@@ -163,6 +163,21 @@
           ]
         }
       },
+      "forelimbs": {
+        "scale": 1.0,
+        "left": {
+          "bone": "front_shoulder.L",
+          "original_root": "front_shoulder.L",
+          "kind": "leg",
+          "chain": ["front_thigh.L", "front_shin.L", "front_foot.L"]
+        },
+        "right": {
+          "bone": "front_shoulder.R",
+          "original_root": "front_shoulder.R",
+          "kind": "leg",
+          "chain": ["front_thigh.R", "front_shin.R", "front_foot.R"]
+        }
+      },
       "veins": [
         {
           "bone": "front_shoulder.L",
@@ -192,7 +207,6 @@
           "size": 0.187
         }
       ],
-      "flourish": "stomp",
       "feel": {
         "puff": 0.203,
         "squash": 0.55,
@@ -354,6 +368,21 @@
           ]
         }
       },
+      "forelimbs": {
+        "scale": 0.92,
+        "left": {
+          "bone": "front_shoulder.L",
+          "original_root": "front_shoulder.L",
+          "kind": "leg",
+          "chain": ["front_thigh.L", "front_shin.L", "front_foot.L"]
+        },
+        "right": {
+          "bone": "front_shoulder.R",
+          "original_root": "front_shoulder.R",
+          "kind": "leg",
+          "chain": ["front_thigh.R", "front_shin.R", "front_foot.R"]
+        }
+      },
       "veins": [
         {
           "bone": "front_shoulder.L",
@@ -383,7 +412,6 @@
           "size": 0.153
         }
       ],
-      "flourish": "flex",
       "feel": {
         "puff": 0.216,
         "squash": 0.58,
@@ -547,6 +575,21 @@
           ]
         }
       },
+      "forelimbs": {
+        "scale": 1.1,
+        "left": {
+          "bone": "shoulder.L",
+          "original_root": "shoulder.L",
+          "kind": "leg",
+          "chain": ["front_thigh.L", "front_shin.L", "front_foot.L"]
+        },
+        "right": {
+          "bone": "shoulder.R",
+          "original_root": "shoulder.R",
+          "kind": "leg",
+          "chain": ["front_thigh.R", "front_shin.R", "front_foot.R"]
+        }
+      },
       "veins": [
         {
           "bone": "shoulder.L",
@@ -576,7 +619,6 @@
           "size": 0.238
         }
       ],
-      "flourish": "flex",
       "feel": {
         "puff": 0.189,
         "squash": 0.52,
@@ -596,6 +638,12 @@
           "forward": 0.98,
           "down": 0.56,
           "size": 0.4
+        }
+      },
+      "old": {
+        "specs": {
+          "size": 0.3,
+          "spacing": 0.85
         }
       }
     },
@@ -750,6 +798,21 @@
           ]
         }
       },
+      "forelimbs": {
+        "scale": 1.0,
+        "left": {
+          "bone": "front_shoulder.L",
+          "original_root": "front_shoulder.L",
+          "kind": "leg",
+          "chain": ["front_thigh.L", "front_shin.L", "front_foot.L"]
+        },
+        "right": {
+          "bone": "front_shoulder.R",
+          "original_root": "front_shoulder.R",
+          "kind": "leg",
+          "chain": ["front_thigh.R", "front_shin.R", "front_foot.R"]
+        }
+      },
       "veins": [
         {
           "bone": "front_shoulder.L",
@@ -797,7 +860,6 @@
           "size": 0.204
         }
       ],
-      "flourish": "rear",
       "feel": {
         "puff": 0.135,
         "squash": 0.44,
@@ -960,6 +1022,21 @@
           ]
         }
       },
+      "forelimbs": {
+        "scale": 0.95,
+        "left": {
+          "bone": "front_shoulder.L",
+          "original_root": "front_shoulder.L",
+          "kind": "leg",
+          "chain": ["front_thigh.L", "front_shin.L", "front_foot.L"]
+        },
+        "right": {
+          "bone": "front_shoulder.R",
+          "original_root": "front_shoulder.R",
+          "kind": "leg",
+          "chain": ["front_thigh.R", "front_shin.R", "front_foot.R"]
+        }
+      },
       "veins": [
         {
           "bone": "front_shoulder.L",
@@ -998,7 +1075,6 @@
           "size": 0.17
         }
       ],
-      "flourish": "rear",
       "feel": {
         "puff": 0.162,
         "squash": 0.48,
@@ -1137,6 +1213,21 @@
           ]
         }
       },
+      "forelimbs": {
+        "scale": 0.88,
+        "left": {
+          "bone": "fin.L",
+          "original_root": "fin.L",
+          "kind": "wing",
+          "chain": ["fin.L", "fin.001.L"]
+        },
+        "right": {
+          "bone": "fin.R",
+          "original_root": "fin.R",
+          "kind": "wing",
+          "chain": ["fin.R", "fin.001.R"]
+        }
+      },
       "veins": [
         {
           "bone": "spine.004",
@@ -1166,7 +1257,6 @@
           "size": 0.17
         }
       ],
-      "flourish": "puff",
       "feel": {
         "puff": 0.405,
         "squash": 0.62,
@@ -1317,6 +1407,21 @@
           ]
         }
       },
+      "forelimbs": {
+        "scale": 0.82,
+        "left": {
+          "bone": "shoulder.L",
+          "original_root": "shoulder.L",
+          "kind": "wing",
+          "chain": ["shoulder.L", "Wing.L"]
+        },
+        "right": {
+          "bone": "shoulder.R",
+          "original_root": "shoulder.R",
+          "kind": "wing",
+          "chain": ["shoulder.R", "Wing.R"]
+        }
+      },
       "veins": [
         {
           "bone": "spine.004",
@@ -1346,7 +1451,6 @@
           "size": 0.153
         }
       ],
-      "flourish": "puff",
       "feel": {
         "puff": 0.459,
         "squash": 0.6,

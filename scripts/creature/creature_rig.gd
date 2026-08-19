@@ -8,8 +8,7 @@ extends Node3D
 ## difference. What changed underneath:
 ##   long/short  -> push the torso bones apart (see CreatureDeformer)
 ##   tall/short  -> telescope the leg bones, one leg at a time
-##   strong      -> scale authored muscle bones
-##   weak        -> radially contract mesh vertices around neutral bone centerlines
+##   strong/weak -> morph the two existing front legs or wings into opposite arm forms
 ##   colour      -> a shader that re-lights the target colour with the texture's own
 ##                  light/dark pattern (see shaders/creature.gdshader for why)
 ##
@@ -24,7 +23,8 @@ const DEFAULT_RIB_PROFILE := {
 	"count": 4.0,
 	"depth": 0.020,
 }
-const MAX_WEAK_REGIONS := 16
+const MAX_WEAK_REGIONS := 20
+const MAX_PATCHES := 6 ## Mirrors the shader's own cap on AGE skin markings.
 const WEAK_REGION_SCALE := {
 	"chest": 0.65,
 	"neck": 0.72,
@@ -32,6 +32,11 @@ const WEAK_REGION_SCALE := {
 	"front_limb": 0.57,
 	"rear_limb": 0.60,
 	"lower_limb": 0.64,
+	# Above 1.0, so STRONG swells this region instead of slimming it. The animal's own
+	# upper foreleg is what becomes the muscle, so it has to grow far past its authored
+	# girth - anything subtle here just reads as a slightly chubby leg.
+	"strong_forelimb_left": 3.2,
+	"strong_forelimb_right": 3.2,
 }
 const WEAK_REGION_RADIUS := {
 	"chest": 0.27,
@@ -40,6 +45,10 @@ const WEAK_REGION_RADIUS := {
 	"front_limb": 0.11,
 	"rear_limb": 0.11,
 	"lower_limb": 0.085,
+	# Tight, unlike the slimming regions: a swell pushes every vertex it catches outwards,
+	# so a generous radius would balloon the chest and the far leg along with this one.
+	"strong_forelimb_left": 0.085,
+	"strong_forelimb_right": 0.085,
 }
 
 const ROLE_FALLBACKS := {
@@ -67,7 +76,7 @@ var sockets := {} ## socket name -> Node3D
 var part_materials := {} ## role -> StandardMaterial3D, for fantasy add-ons
 
 var deformer: CreatureDeformer = null ## Body length and per-leg lengths.
-var muscle: MuscleDeformer = null ## STRONG/WEAK bulk and posture.
+var muscle: MuscleDeformer = null ## STRONG/WEAK one-for-one forelimb morphs.
 var feel: FeelDeformer = null ## HARD/SOFT shine, puff, squash and jiggle.
 
 var tempo := 1.0 ## Idle animation speed; the SPEED modifier drives this.
@@ -92,6 +101,7 @@ var thermal_applied := NAN
 ## and the baby sound must greet the student once when the creature becomes young - not
 ## again on every unrelated tap that happens afterwards.
 var young_applied := false
+var old_applied := false ## The same one-shot gate for OLD's elderly chuckle.
 var moving := false ## Zoo creatures set this to swing their legs.
 
 var _model_root: Node3D = null
@@ -103,6 +113,8 @@ var _posed_bones := {} ## bone index -> true, so reset only touches what we chan
 var _swayed := false ## Whether appendages currently carry a sway, so it can be cleared
 var _weak_region_groups: Array[String] = []
 var _ground_warning_emitted := false
+var _head_bounds := AABB()
+var _head_bounds_ready := false
 
 
 static func create(def: AnimalDefinition) -> CreatureRig:
@@ -204,7 +216,10 @@ func _reset_material() -> void:
 	material.set_shader_parameter("emission_flicker", 0.0)
 	material.set_shader_parameter("roughness_value", 0.85)
 	material.set_shader_parameter("metallic_value", 0.0)
-	material.set_shader_parameter("cheek_amount", 0.0)
+	material.set_shader_parameter("patch_count", 0)
+	material.set_shader_parameter("patch_amount", 0.0)
+	material.set_shader_parameter("grey_dark_amount", 0.0)
+	material.set_shader_parameter("grey_coat_amount", 0.0)
 	set_weak_mesh({})
 
 
@@ -232,6 +247,21 @@ func _configure_weak_regions() -> void:
 		if not bones.is_empty():
 			_append_weak_region("lower_limb", bones[0], skeleton_to_mesh, mesh_span,
 				starts, ends, radii, scales)
+	# One region per forelimb, so STRONG can swell whichever sides are actually wearing the
+	# word. Taken from the authored forelimb chain rather than the muscle-group lists, so
+	# the swell follows the same limb the WEAK replacement uses.
+	for side in ["left", "right"]:
+		var forelimb := definition.forelimb_config(side)
+		var forelimb_chain: PackedStringArray = forelimb.chain
+		if forelimb_chain.is_empty():
+			continue
+		# The second bone, not the first: a quadruped's humerus is buried inside its chest,
+		# so swelling it puffs the ribs rather than the leg. The bone below it is the free
+		# leg the child actually reads as the foreleg. Stopping short of the paw keeps the
+		# muscle belly high on that leg, where an upper arm's would be.
+		var segment := 1 if forelimb_chain.size() >= 2 else 0
+		_append_weak_region("strong_forelimb_%s" % side, str(forelimb_chain[segment]),
+			skeleton_to_mesh, mesh_span, starts, ends, radii, scales, 0.20, -0.10)
 	for i in range(starts.size(), MAX_WEAK_REGIONS):
 		starts.append(Vector3.ZERO)
 		ends.append(Vector3.UP)
@@ -256,9 +286,15 @@ func _transform_to_ancestor(node: Node3D, ancestor: Node3D) -> Transform3D:
 	return result
 
 
+## `overshoot` lengthens the capsule past both joints, as a fraction of the segment. The
+## shader deliberately pins the first and last sixth of every region so joints keep their
+## shape, which is right for slimming a limb but leaves a full-width collar at each end -
+## and STRONG's replacement arm has to sit exactly where that collar is. Pushing the
+## capsule's ends outside the real segment puts the fully squeezed middle over all of it.
 func _append_weak_region(group: String, bone_name: String, skeleton_to_mesh: Transform3D,
 		mesh_span: float, starts: Array[Vector3], ends: Array[Vector3],
-		radii: Array[float], scales: Array[float]) -> void:
+		radii: Array[float], scales: Array[float], overshoot_start := 0.0,
+		overshoot_end := 0.0) -> void:
 	if _weak_region_groups.size() >= MAX_WEAK_REGIONS:
 		return
 	var idx := skeleton.find_bone(bone_name)
@@ -279,6 +315,12 @@ func _append_weak_region(group: String, bone_name: String, skeleton_to_mesh: Tra
 	var end: Vector3 = skeleton_to_mesh * end_source
 	if start.distance_squared_to(end) < 0.000001:
 		return
+	if not is_zero_approx(overshoot_start) or not is_zero_approx(overshoot_end):
+		# Asymmetric, and negative values pull an end inwards: the muscle belly needs to
+		# stop short of the paw, which stays exactly as the animator authored it.
+		var along := end - start
+		start -= along * overshoot_start
+		end += along * overshoot_end
 	starts.append(start)
 	ends.append(end)
 	radii.append(mesh_span * float(WEAK_REGION_RADIUS.get(group, 0.10)))
@@ -476,16 +518,34 @@ func to_model_space(body_point: Vector3) -> Vector3:
 	return (body_point - _model_root.position) / _normal_scale
 
 
-## YOUNG's blush. Centres and radius arrive in body space and are converted here, so
-## callers never have to know the model's internal scale.
-func set_cheeks(left: Vector3, right: Vector3, radius: float, color: Color, amount: float) -> void:
+## AGE's skin markings - YOUNG's blush, OLD's grey muzzle and brow. `spots` is a list of
+## {"at": Vector3, "radius": float} in body space; both are converted here, so callers never
+## have to know the model's internal scale. The shader caps the list at MAX_PATCHES.
+func set_patches(spots: Array, color: Color, amount: float) -> void:
 	if material == null:
 		return
-	material.set_shader_parameter("cheek_left", to_model_space(left))
-	material.set_shader_parameter("cheek_right", to_model_space(right))
-	material.set_shader_parameter("cheek_radius", maxf(radius / maxf(_normal_scale, 0.0001), 0.0001))
-	material.set_shader_parameter("cheek_colour", color)
-	material.set_shader_parameter("cheek_amount", clampf(amount, 0.0, 1.0))
+	var centers := PackedVector3Array()
+	var radii := PackedFloat32Array()
+	for spot in spots:
+		if centers.size() >= MAX_PATCHES:
+			break
+		centers.append(to_model_space(spot.get("at", Vector3.ZERO)))
+		radii.append(maxf(float(spot.get("radius", 0.0)) / maxf(_normal_scale, 0.0001), 0.0001))
+	material.set_shader_parameter("patch_count", centers.size())
+	material.set_shader_parameter("patch_center", centers)
+	material.set_shader_parameter("patch_radius", radii)
+	material.set_shader_parameter("patch_colour", color)
+	material.set_shader_parameter("patch_amount", clampf(amount, 0.0, 1.0) if centers.size() > 0 else 0.0)
+
+
+## OLD's coat greying. `dark` greys only the texture's dark markings (a tiger's stripes),
+## `coat` greys everything gently (a cat going silver). Both use the patch colour, so a
+## species picks its greying style without picking a second colour.
+func set_greying(dark: float, coat: float) -> void:
+	if material == null:
+		return
+	material.set_shader_parameter("grey_dark_amount", clampf(dark, 0.0, 1.0))
+	material.set_shader_parameter("grey_coat_amount", clampf(coat, 0.0, 1.0))
 
 
 func set_surface(role: String, roughness: float, metallic: float) -> void:
@@ -593,6 +653,97 @@ func clear_thermal_fx() -> void:
 
 
 ## Roughly where the top of the creature is right now, for labels and camera framing.
+## The head's actual bounding box, in body space, found from the mesh's own skin weights:
+## every vertex whose dominant bone is the head bone or one of its descendants. This is the
+## one measurement that makes face props placeable without per-species guesswork - it gives
+## the real nose tip, chin, crown and width of a chicken's head and a horse's alike, where
+## a scalar "muzzle reach" only ever gave a length and left the height and angle to be
+## guessed at. Computed once per rig and cached; the meshes are a few thousand vertices.
+func head_bounds() -> AABB:
+	if _head_bounds_ready:
+		return _head_bounds
+	_head_bounds_ready = true
+	_head_bounds = AABB(Vector3(0, definition.stand_height * 0.8, 0), Vector3.ONE * 0.1)
+	if skeleton == null or mesh_instance == null or mesh_instance.mesh == null:
+		return _head_bounds
+
+	var head_bone := definition.socket_bone("head_top")
+	var root := skeleton.find_bone(head_bone)
+	if root == -1:
+		return _head_bounds
+
+	# The head bone plus everything hanging off it - jaw, ears, horns.
+	var family := {root: true}
+	for b in skeleton.get_bone_count():
+		var walk := skeleton.get_bone_parent(b)
+		while walk != -1:
+			if walk == root:
+				family[b] = true
+				break
+			walk = skeleton.get_bone_parent(walk)
+
+	var arrays := mesh_instance.mesh.surface_get_arrays(0)
+	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var bones: PackedInt32Array = arrays[Mesh.ARRAY_BONES]
+	var weights: PackedFloat32Array = arrays[Mesh.ARRAY_WEIGHTS]
+	if verts.is_empty() or bones.is_empty() or bones.size() != verts.size() * 4:
+		return _head_bounds
+
+	var found := false
+	var box := AABB()
+	for v in verts.size():
+		# Dominant influence only: a vertex half-owned by the neck belongs to the neck.
+		var best := 0.0
+		var best_bone := -1
+		for j in 4:
+			var w := weights[v * 4 + j]
+			if w > best:
+				best = w
+				best_bone = bones[v * 4 + j]
+		if best < 0.5 or not family.has(best_bone):
+			continue
+		var point := verts[v] * _normal_scale + _model_root.position
+		if not found:
+			box = AABB(point, Vector3.ZERO)
+			found = true
+		else:
+			box = box.expand(point)
+	if found:
+		_head_bounds = box
+	return _head_bounds
+
+
+## Named points on the face, derived from head_bounds(), in body space. Both AGE kits hang
+## their props off these instead of off multiples of a scalar, which is what finally put a
+## pacifier on a beak and a chicken's and on a horse's muzzle from the same numbers.
+##
+## Two clamps matter. The head box is measured from skin weights, so a deer's antlers and a
+## tiger's ears are inside it: the raw width would set eye spacing from antler tip to antler
+## tip, and the raw height would put the brow above the crown. Both are therefore limited
+## against the head's DEPTH, which no species inflates.
+func face_anchors() -> Dictionary:
+	var box := head_bounds()
+	var depth: float = maxf(box.size.z, 0.001)
+	var span: float = minf(box.size.y, depth * 1.15) ## Usable head height.
+	var half_w: float = minf(box.size.x, depth * 0.95) * 0.5
+	var front: float = box.position.z ## Models face -Z, so this is the nose or beak.
+	var base: float = box.position.y
+	return {
+		"front": front,
+		"base": base,
+		"span": span,
+		"depth": depth,
+		"half_w": half_w,
+		# Fractions chosen against the seven measured boxes, not one species.
+		"mouth": Vector3(0.0, base + span * 0.30, front + depth * 0.08),
+		"chin": Vector3(0.0, base + span * 0.08, front + depth * 0.26),
+		"eye": Vector3(half_w * 0.62, base + span * 0.66, front + depth * 0.34),
+		"brow": Vector3(half_w * 0.60, base + span * 0.86, front + depth * 0.30),
+		"cheek": Vector3(half_w * 0.92, base + span * 0.48, front + depth * 0.52),
+		"temple": Vector3(half_w * 0.80, base + span * 0.78, front + depth * 0.70),
+	}
+
+
 ## How far the muzzle reaches in front of the head bone, measured from the model itself
 ## rather than inferred from an authored socket offset.
 ##
@@ -689,6 +840,13 @@ func foot_contact_positions() -> Array[Vector3]:
 		return contacts
 	var skeleton_to_body := body.global_transform.affine_inverse() * skeleton.global_transform
 	for leg in definition.legs:
+		# A quadruped's front legs have become arms in STRONG/WEAK, so they are no longer
+		# floor contacts. Rear feet continue to support the body; birds already list only
+		# their two actual legs here, so their wing replacement needs no special case.
+		if muscle != null and muscle.replaces_front_limbs() \
+				and str(leg.get("id", "")).begins_with("front"):
+			contacts.append(Vector3(INF, INF, INF))
+			continue
 		var bones: PackedStringArray = leg.get("bones", PackedStringArray())
 		if bones.is_empty():
 			contacts.append(Vector3(INF, INF, INF))

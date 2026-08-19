@@ -103,13 +103,6 @@
       ]
     },
     {
-      "id": "elder_beard", "display_name": "Elder Beard", "trigger": "old", "socket": "face",
-      "parts": [
-        {"id": "eb_a", "shape": "capsule", "size": [0.3, 0.62, 0.3], "pos": [0, -0.1, 0.02], "off": [0, -0.31, 0], "role": "belly"},
-        {"id": "eb_b", "shape": "box",     "size": [0.5, 0.09, 0.14], "pos": [0, 0.1, 0.04], "role": "belly"}
-      ]
-    },
-    {
       "id": "spring_sprout", "display_name": "Spring Sprout", "trigger": "young", "socket": "head_top",
       "parts": [
         {"id": "sp_a", "shape": "capsule", "size": [0.06, 0.34, 0.06], "pos": [0, 0, 0], "off": [0, 0.17, 0], "role": "leaf"},
