@@ -80,7 +80,7 @@ static func _autoplay(main: Node) -> void:
 		[Content.COLOR_CATEGORY, "red", "blue"],
 	]
 	for pick in picks:
-		var word_lab: WordLab = _find_word_lab(Router.current_scene)
+		var word_lab: DescriptorCarousel = _find_word_lab(Router.current_scene)
 		if word_lab == null:
 			printerr("[autoplay] FAIL: no Word Lab in %s" % Router.current_scene)
 			tree.quit(1)
@@ -125,7 +125,8 @@ static func _backtest(main: Node) -> void:
 	await tree.create_timer(2.6).timeout
 	print("[backtest] %d slot(s) recorded, now backing out" % Game.current.slots_filled())
 
-	var back := _find_button(Router.current_scene, "<")
+	# By name, not by caption: the carousel's own left arrow is also "<".
+	var back := Router.current_scene.find_child("BackToPicking", true, false) as Button
 	if back == null:
 		printerr("[backtest] FAIL: no back button on the recording screen")
 		tree.quit(1)
@@ -278,10 +279,12 @@ static func _find_button(node: Node, text: String) -> Button:
 	return null
 
 
-static func _find_word_lab(node: Node) -> WordLab:
+## The carousel, not the Word List sheet behind its button - that sheet is a WordLab too,
+## and is deliberately inert, so searching for the older type would find the wrong one.
+static func _find_word_lab(node: Node) -> DescriptorCarousel:
 	if node == null:
 		return null
-	if node is WordLab:
+	if node is DescriptorCarousel:
 		return node
 	for child in node.get_children():
 		var found := _find_word_lab(child)
@@ -709,6 +712,7 @@ static func _selftest(main: Node) -> void:
 			rig.free()
 
 	_speed_checks(failures)
+	_carousel_checks(failures, main)
 	_grammar_checks(failures)
 
 	if failures.is_empty():
@@ -718,6 +722,47 @@ static func _selftest(main: Node) -> void:
 		for f in failures:
 			printerr("  - %s" % f)
 	main.get_tree().quit(0 if failures.is_empty() else 1)
+
+
+## The carousel replaced a grid that could not promise its own size. These assert the two
+## things that would silently break a lesson: a sentence that says nothing ("It was red.
+## Now it is red."), and content that outgrows the fixed panel - the failure that put the
+## Say It panel's Cancel button below the bottom of the screen while reporting itself
+## visible the whole time.
+static func _carousel_checks(failures: Array[String], main: Node) -> void:
+	var car := DescriptorCarousel.new()
+	main.add_child(car)
+
+	_check(failures, car._slots.size() >= 2, "carousel: not enough cards to scroll")
+	_check(failures, car._slot_category(car._slots[car._slots.size() - 1]) == Content.COLOR_CATEGORY,
+		"carousel: colours are not the last card")
+
+	# Every wheel position, in both directions, must leave the two colours different.
+	var colours := Content.enabled_colors()
+	for i in colours.size() * 2:
+		car._step_colour(false, 1)
+		_check(failures, car._was_index != car._now_index,
+			"carousel: colour wheels landed on the same colour stepping forward")
+	for i in colours.size() * 2:
+		car._step_colour(true, -1)
+		_check(failures, car._was_index != car._now_index,
+			"carousel: colour wheels landed on the same colour stepping back")
+
+	var first := Content.enabled_pairs()[0]
+	car.set_used(PackedStringArray([first.category]))
+	_check(failures, car._blocked(first.category), "carousel: a used category stayed selectable")
+	car.set_used(PackedStringArray())
+	car.set_locked(true)
+	_check(failures, car._blocked(first.category), "carousel: locking left cards selectable")
+	car.set_locked(false)
+
+	# Fixed panel: no view may need more room than the rect it is mounted in.
+	for view in [DescriptorCarousel.View.CATEGORY, DescriptorCarousel.View.COLOUR]:
+		car._show_view(view)
+		var needed := car.get_combined_minimum_size()
+		_check(failures, needed.x <= 648.0 and needed.y <= 620.0,
+			"carousel: view %d needs %s, more than the panel's 648x620" % [view, needed])
+	car.free()
 
 
 ## FAST and SLOW are behaviour, so what is worth asserting is that the behaviour is armed

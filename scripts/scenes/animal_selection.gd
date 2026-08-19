@@ -89,7 +89,7 @@ var _rig_animal := "" ## Which animal the live rig was built for.
 var _root: Control = null
 var _progress: Label = null
 var _progress_count: Label = null
-var _word_lab: WordLab = null
+var _word_lab: DescriptorCarousel = null
 var _speech: SpeechPanel = null
 
 var _pending := {}
@@ -479,23 +479,18 @@ func _enter_recording() -> void:
 
 
 func _build_recording_ui() -> void:
-	# Word Lab now owns the entire right panel - the same rect the picking screen's grid
-	# uses - rather than sharing it with Say It. It has more content than a fixed rect can
-	# always guarantee height for, so it still scrolls if it ever needs to.
-	var word_scroll := ScrollContainer.new()
-	word_scroll.set_anchors_and_offsets_preset(Control.PRESET_RIGHT_WIDE)
-	word_scroll.offset_left = PANEL_LEFT
-	word_scroll.offset_right = PANEL_RIGHT
-	word_scroll.offset_top = PANEL_TOP
-	word_scroll.offset_bottom = PANEL_BOTTOM
-	word_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	_root.add_child(word_scroll)
-
-	_word_lab = WordLab.new()
-	_word_lab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_word_lab.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	# The carousel owns the entire right panel, mounted straight onto the rect with no
+	# ScrollContainer around it. That is the point: it shows one card at a time, so it can
+	# promise a fixed size, and a scroll container would have let it drift back to being a
+	# list. Both states - the cards and the colour wheels - swap inside this same rect.
+	_word_lab = DescriptorCarousel.new()
+	_word_lab.set_anchors_and_offsets_preset(Control.PRESET_RIGHT_WIDE)
+	_word_lab.offset_left = PANEL_LEFT
+	_word_lab.offset_right = PANEL_RIGHT
+	_word_lab.offset_top = PANEL_TOP
+	_word_lab.offset_bottom = PANEL_BOTTOM
 	_word_lab.pair_selected.connect(_on_pair_selected)
-	word_scroll.add_child(_word_lab)
+	_root.add_child(_word_lab)
 	var animal := Content.animal(Game.current.animal_id) if Game.current != null else null
 	_word_lab.set_disabled_categories(animal.disabled_categories if animal != null else PackedStringArray())
 
@@ -503,6 +498,10 @@ func _build_recording_ui() -> void:
 
 	# Floating HUD
 	var back_btn := UiKit.icon_button("<", HUD_BUTTON)
+	# Named, because "<" is no longer a unique caption on this screen - the carousel uses
+	# it for its own left arrow, and a harness looking the button up by its text found the
+	# wrong one and quietly stopped abandoning the round.
+	back_btn.name = "BackToPicking"
 	back_btn.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
 	back_btn.offset_left = 24
 	back_btn.offset_right = 24 + HUD_BUTTON
