@@ -615,20 +615,21 @@ func add_accessory(node: Node3D, at := Vector3.ZERO) -> void:
 	accessory_root.add_child(node)
 
 
-## Face props must follow skeleton deformation as well as the Body node. LONG/SHORT moves
-## the skull through translated spine bones; a pacifier stored only under `accessory_root`
-## otherwise remains at the neutral mouth coordinate and floats beside the transformed face.
-## The prop's authored position already includes YOUNG's head scaling, so only the live
-## bone-origin delta is applied here (applying the full scaled basis would scale it twice).
+## Face props must follow skeleton deformation as well as the Body node. Store the complete
+## head transform at the instant the prop is fitted, then apply the head's live transform
+## delta on every update. Using only the bone origin is insufficient: a rotating or scaled
+## head can move the mouth even when the bone's origin barely changes.
 func add_bone_accessory(node: Node3D, at: Vector3, bone: String) -> void:
 	if skeleton == null or bone.is_empty() or skeleton.find_bone(bone) == -1:
 		add_accessory(node, at)
 		return
-	node.set_meta("follow_bone", bone)
-	node.set_meta("follow_base_at", at)
-	node.set_meta("follow_base_origin", _bone_origin_in_body(bone, true))
-	accessory_root.add_child(node)
+	if skeleton.has_method("force_update_all_bone_transforms"):
+		skeleton.force_update_all_bone_transforms()
 	node.position = at
+	node.set_meta("follow_bone", bone)
+	node.set_meta("follow_base_prop", node.transform)
+	node.set_meta("follow_base_bone", _bone_transform_in_body(bone))
+	accessory_root.add_child(node)
 
 
 ## Refresh all bone-following props immediately after a snapped deformation and once per
@@ -650,19 +651,22 @@ func sync_bone_accessories() -> void:
 			continue
 		var prop := child as Node3D
 		var bone := str(prop.get_meta("follow_bone"))
-		var base_at: Vector3 = prop.get_meta("follow_base_at", prop.position)
-		var base_origin: Vector3 = prop.get_meta("follow_base_origin", _bone_origin_in_body(bone, true))
-		prop.position = base_at + _bone_origin_in_body(bone, false) - base_origin
+		var base_prop: Transform3D = prop.get_meta("follow_base_prop", prop.transform)
+		var base_bone: Transform3D = prop.get_meta("follow_base_bone", _bone_transform_in_body(bone))
+		prop.transform = _bone_transform_in_body(bone) * base_bone.affine_inverse() * base_prop
 
 
-func _bone_origin_in_body(bone: String, rest: bool) -> Vector3:
+func _bone_transform_in_body(bone: String) -> Transform3D:
 	if skeleton == null:
-		return Vector3.ZERO
+		return Transform3D.IDENTITY
 	var index := skeleton.find_bone(bone)
 	if index == -1:
-		return Vector3.ZERO
-	var pose := skeleton.get_bone_global_rest(index) if rest else skeleton.get_bone_global_pose(index)
-	return _transform_to_ancestor(skeleton, body) * pose.origin
+		return Transform3D.IDENTITY
+	return _transform_to_ancestor(skeleton, body) * skeleton.get_bone_global_pose(index)
+
+
+func _bone_origin_in_body(bone: String, _rest := false) -> Vector3:
+	return _bone_transform_in_body(bone).origin
 
 
 func clear_accessories() -> void:
