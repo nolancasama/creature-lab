@@ -623,6 +623,13 @@ static func _selftest(main: Node) -> void:
 				"%s: OLD lenses exceed the usable head" % def.id)
 			_check(failures, lens_spacing + lens_size * 0.5 <= float(anchors["half_w"]) * 1.09,
 				"%s: OLD frames extend too far beyond the head" % def.id)
+			if def.id == "deer":
+				var deer_eye: Vector3 = anchors["eye"]
+				_check(failures,
+					spectacles.position.y <= deer_eye.y - float(anchors["span"]) * 0.30,
+					"deer: OLD glasses returned above the painted eye line")
+				_check(failures, lens_size <= float(anchors["depth"]) * 0.225,
+					"deer: OLD lenses became too large for its narrow face")
 		var beard := rig.accessory_root.get_node_or_null("OldBeard")
 		_check(failures, beard != null, "%s: OLD beard was not built" % def.id)
 		if beard != null:
