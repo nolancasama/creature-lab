@@ -15,11 +15,14 @@ const CHOICE_FREE := "free"
 const CHOICE_GUIDED := "guided"
 
 ## How much of the target sentence is printed above the mic.
-## How much of the transformation the student has to say out loud. Past-only is the
-## default: "It was small." is one short clause a beginner can actually produce, and short
-## utterances are recognised far more reliably than the full compound sentence. The
-## creature still changes both ways either way - this is about speaking, not about what
-## gets recorded.
+## How much of the transformation the student has to say out loud. Split is the default:
+## the student says "It was small." card by card, then meets all three "Now it is ___"
+## sentences together in a pass of their own once the past tense is done.
+##
+## It keeps what past-only was for - every utterance is still one short clause, which a
+## beginner can produce and a recogniser handles far more reliably than the full compound
+## sentence - while still asking for the present tense, which is half the grammar the game
+## exists to teach and which past-only never asks a student to say at all.
 const SAY_PAST := "past" ## "It was small."
 const SAY_SPLIT := "split" ## Past for each card, then all three "Now it is ___" together.
 const SAY_FULL := "full" ## "It was small. Now it is big."
@@ -34,7 +37,7 @@ const STRICT_NORMAL := 1
 const STRICT_EXACT := 2
 
 var choice_mode: String = CHOICE_FREE
-var say_mode: String = SAY_PAST
+var say_mode: String = SAY_SPLIT
 var prompt_mode: String = PROMPT_FULL
 var strictness: int = STRICT_NORMAL
 var enabled_pairs := PackedStringArray() ## Empty = all.

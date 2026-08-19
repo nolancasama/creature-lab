@@ -96,6 +96,21 @@ static func _autoplay(main: Node) -> void:
 		await tree.create_timer(2.6).timeout
 		print("[autoplay] slot %d recorded" % Game.current.slots_filled())
 
+	# The default asks for the three present-tense sentences in a pass of their own once
+	# the past tense is done, so a run through the real signal path has to answer those
+	# too. Reading the mode rather than assuming it: this is the check that is supposed to
+	# notice when the default changes.
+	if Settings.split_pass():
+		await tree.create_timer(1.0).timeout
+		if Game.phase != Game.Phase.ANIMAL_SELECTION:
+			printerr("[autoplay] FAIL: no present-tense pass in split mode")
+			tree.quit(1)
+			return
+		for entry in Game.current.entries:
+			Speech.submit_typed(GrammarValidator.expected_present(str(entry["after"])))
+			await tree.create_timer(2.4).timeout
+		print("[autoplay] present-tense pass answered")
+
 	# The transformation sequence plus the fade into the naming screen. It is longer than
 	# the old walk-into-the-chamber version: three spoken sentences, each with its own
 	# surge, before the peak and the reveal.
@@ -496,6 +511,33 @@ static func _selftest(main: Node) -> void:
 		_check(failures, cold_probe.breath_origin().distance_to(expected_breath_origin) < 0.001,
 			"%s: COLD breath is detached from the snout" % def.id)
 		cold_probe.free()
+
+		# Persistent HOT fire must share the creature's movement frame. Local particle
+		# coordinates keep flames already in flight attached during FAST's dashes too.
+		TraitVisuals.apply_all(rig, {"TEMPERATURE": "hot"})
+		_check(failures, rig.thermal_follows_body,
+			"%s: HOT fire was not marked to follow the creature" % def.id)
+		var hot_particles := 0
+		for hot_child in rig.thermal_fx_root.get_children():
+			if hot_child is GPUParticles3D:
+				hot_particles += 1
+				_check(failures, (hot_child as GPUParticles3D).local_coords,
+					"%s: emitted HOT flames remain in world space" % def.id)
+		_check(failures, hot_particles >= 4,
+			"%s: HOT did not build its persistent flame layers" % def.id)
+		rig.body.position = Vector3(0.37, 0.08, -0.21)
+		rig.body.rotation.y = 0.24
+		rig._sync_thermal_fx_to_body()
+		_check(failures, rig.thermal_fx_root.position.is_equal_approx(rig.body.position),
+			"%s: HOT fire root did not follow creature movement" % def.id)
+		_check(failures,
+			rig.thermal_fx_root.transform.basis.is_equal_approx(rig.body.transform.basis.orthonormalized()),
+			"%s: HOT fire root did not follow creature turning" % def.id)
+		rig.clear_thermal_fx()
+		rig.thermal_applied = NAN
+		rig.reset_modifiers()
+		rig.body.position = Vector3.ZERO
+		rig.body.rotation = Vector3.ZERO
 
 		# LONG must actually move the torso, TALL must actually lift the body, and both
 		# must return to exactly rest - otherwise a cancelled card leaves a dent.
