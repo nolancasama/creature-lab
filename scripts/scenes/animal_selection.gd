@@ -28,6 +28,7 @@ const CAMERA_AIM := Vector3(-0.5, 0.95, 0.0)
 ## Looks lower than the picking camera, moving the animal/platform upward on screen and
 ## leaving a stable console region below without shrinking the animal.
 const RECORDING_CAMERA_AIM := Vector3(-0.5, 0.22, 0.0)
+const CAMERA_MOVE_TIME := 0.55 ## Long enough to read as a move, short enough not to wait.
 
 ## Picking and recording are overlays on one screen, so they share one panel rect: the
 ## Word Lab / Say It stack lands exactly where the animal grid was, and nothing resizes
@@ -79,6 +80,8 @@ var _preview_root: Node3D = null
 var _rig: CreatureRig = null
 var _platform: Node3D = null
 var _camera: Camera3D = null
+var _camera_aim := CAMERA_AIM ## look_at keeps no record of its target; the tween needs one.
+var _camera_shift := CAMERA_SHIFT
 
 # Picking UI
 var _picking_panel: Control = null
@@ -178,13 +181,34 @@ func _build_stage() -> void:
 ## Picking reserves the right side for animal buttons. Recording removes that split and
 ## uses the optical centre for the animal/platform group. The world objects never move,
 ## so switching words, colours and speech cannot introduce geometry jumps.
-func _set_recording_composition(recording: bool) -> void:
+func _set_recording_composition(recording: bool, animate := false) -> void:
 	if _camera == null:
 		return
+	var target_aim := RECORDING_CAMERA_AIM if recording else CAMERA_AIM
+	var target_shift := 0.0 if recording else CAMERA_SHIFT
+	if not animate or not is_inside_tree():
+		_compose(target_aim, target_shift)
+		return
+	# Picking an animal used to cut straight to the recording framing. Moving instead keeps
+	# the animal the student just chose continuously in view, so it reads as the lab
+	# settling on their pick rather than as a different screen appearing.
+	var from_aim := _camera_aim
+	var from_shift := _camera_shift
+	var tween := create_tween()
+	tween.tween_method(func(t: float) -> void:
+			_compose(from_aim.lerp(target_aim, t), lerpf(from_shift, target_shift, t)),
+		0.0, 1.0, CAMERA_MOVE_TIME).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+
+
+## Both halves of the framing move together: the aim, and how far the lens is shifted to
+## leave room for the picking panel. Driven by one factor so they cannot disagree part way.
+func _compose(aim: Vector3, shift: float) -> void:
+	_camera_aim = aim
+	_camera_shift = shift
 	_camera.set_perspective(CAMERA_FOV, _camera.near, _camera.far)
-	_camera.look_at(RECORDING_CAMERA_AIM if recording else CAMERA_AIM)
-	if not recording:
-		_lens_shift(_camera, CAMERA_SHIFT)
+	if not is_zero_approx(shift):
+		_lens_shift(_camera, shift)
+	_camera.look_at(aim)
 
 
 ## Shifts the rendered image sideways by a number of screen pixels, by offsetting the
@@ -484,7 +508,7 @@ func _present_advance() -> void:
 ## changes, only what is shown on top of it.
 func _enter_recording() -> void:
 	_mode = Mode.RECORDING
-	_set_recording_composition(true)
+	_set_recording_composition(true, true)
 	_dragging_view = false
 	_colour_preview = ""
 	if _preview_root != null:
