@@ -124,6 +124,17 @@ func _install() -> void:
 	      }
 	      return first;
 	    },
+	    // Written to the browser console so a silent transformation can be diagnosed from a
+	    // classroom laptop. The capture fails quietly by design - it must never interrupt a
+	    // lesson - which also means it needs somewhere to say that it failed.
+	    report: function (note) {
+	      var made = [];
+	      for (var k in lens) { made.push(k + ':' + lens[k].toFixed(2) + 's'); }
+	      console.log('[creature-voice] ' + note
+	        + ' supported=' + this.supported()
+	        + ' stream=' + (stream ? 'open' : 'none')
+	        + ' clips={' + made.join(' ') + '}');
+	    },
 	    halt: function () { if (playing) { try { playing.pause(); playing.onended = null; } catch (e) {} playing = null; } },
 	    clear: function () {
 	      this.halt();
@@ -156,11 +167,20 @@ func keep_for(slot: int) -> void:
 	if not _supported or slot < 0:
 		return
 	JavaScriptBridge.eval("%s.keep(%d)" % [BRIDGE, slot], true)
+	if slot < PRESENT_SLOT:
+		report("kept past half %d" % slot)
 
 
 ## The present half of a split sentence, filed against the entry it completes.
 func keep_present_for(index: int) -> void:
 	keep_for(PRESENT_SLOT + index)
+	report("kept present half %d" % index)
+
+
+## Prints the recorder's state to the browser console.
+func report(note: String) -> void:
+	if _supported:
+		JavaScriptBridge.eval('%s.report("%s")' % [BRIDGE, note], true)
 
 
 func has_clip(slot: int) -> bool:

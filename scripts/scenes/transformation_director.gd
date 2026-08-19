@@ -101,6 +101,7 @@ func _beat(index: int, total: int, sentence: String) -> void:
 	_banner.text = sentence
 	# The student's own voice if it was captured, the lab's if it was not. Either way the
 	# words are on the banner, because a classroom with the sound off still gets the beat.
+	Voice.report("beat %d" % index)
 	var spoken := Voice.play_sentence(index)
 	if spoken <= 0.0:
 		Tts.speak(sentence, 0.95)

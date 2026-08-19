@@ -392,7 +392,7 @@ static func _screenshot(main: Node, phase: String) -> void:
 				if colour_carousel._slot_category(colour_carousel._slots[i]) == Content.COLOR_CATEGORY:
 					colour_carousel._index = i
 					colour_carousel._refresh()
-					colour_carousel._activate(0)
+					colour_carousel._activate()
 					break
 			colour_carousel._step_colour(1)
 			if phase in ["color-after", "color-say"]:
@@ -621,17 +621,18 @@ static func _selftest(main: Node) -> void:
 		# never a muzzle-length out in space on horses or birds.
 		rig.reset_modifiers()
 		OldKit.apply(rig)
-		var spectacles := rig.accessory_root.get_node_or_null("OldSpectacles")
+		var spectacles := rig.find_accessory("OldSpectacles")
 		_check(failures, spectacles != null, "%s: OLD spectacles were not built" % def.id)
 		if spectacles != null:
+			var spectacles_in_body := rig.accessory_transform_in_body(spectacles)
 			var surface_front := float(spectacles.get_meta("surface_front"))
 			var clearance := float(spectacles.get_meta("clearance"))
 			var lens_size := float(spectacles.get_meta("lens_size"))
 			var lens_spacing := float(spectacles.get_meta("lens_spacing"))
 			var anchors := rig.face_anchors()
-			_check(failures, spectacles.position.z <= surface_front - clearance + 0.0001,
+			_check(failures, spectacles_in_body.origin.z <= surface_front - clearance + 0.0001,
 				"%s: OLD spectacles intersect the face" % def.id)
-			_check(failures, surface_front - spectacles.position.z < float(anchors["depth"]) * 0.09,
+			_check(failures, surface_front - spectacles_in_body.origin.z < float(anchors["depth"]) * 0.09,
 				"%s: OLD spectacles float too far ahead of the face" % def.id)
 			_check(failures, lens_size <= float(anchors["span"]) * 0.421
 				and lens_size <= float(anchors["half_w"]) * 0.921,
@@ -641,11 +642,11 @@ static func _selftest(main: Node) -> void:
 			if def.id == "deer":
 				var deer_eye: Vector3 = anchors["eye"]
 				_check(failures,
-					spectacles.position.y <= deer_eye.y - float(anchors["span"]) * 0.30,
+					spectacles_in_body.origin.y <= deer_eye.y - float(anchors["span"]) * 0.30,
 					"deer: OLD glasses returned above the painted eye line")
 				_check(failures, lens_size <= float(anchors["depth"]) * 0.225,
 					"deer: OLD lenses became too large for its narrow face")
-		var beard := rig.accessory_root.get_node_or_null("OldBeard")
+		var beard := rig.find_accessory("OldBeard")
 		_check(failures, beard != null, "%s: OLD beard was not built" % def.id)
 		if beard != null:
 			_check(failures, beard.get_node_or_null("FrontSilhouette") is MeshInstance3D,
@@ -654,20 +655,22 @@ static func _selftest(main: Node) -> void:
 				"%s: OLD beard has no profile silhouette" % def.id)
 		if spectacles != null and beard != null:
 			var old_head_bone := def.socket_bone("head_top")
-			var glasses_relative: Vector3 = spectacles.position \
-				- rig._bone_origin_in_body(old_head_bone, false)
-			var beard_relative: Vector3 = beard.position \
-				- rig._bone_origin_in_body(old_head_bone, false)
+			var glasses_relative: Transform3D = rig._bone_transform_in_body(old_head_bone) \
+				.affine_inverse() * rig.accessory_transform_in_body(spectacles)
+			var beard_relative: Transform3D = rig._bone_transform_in_body(old_head_bone) \
+				.affine_inverse() * rig.accessory_transform_in_body(beard)
 			var old_length_pair := Content.pair_for_category("LENGTH")
 			if old_length_pair != null:
 				rig.deformer.set_state(old_length_pair.value_for("short"), 1.0)
 				rig.sync_bone_accessories()
-				var short_head := rig._bone_origin_in_body(old_head_bone, false)
+				var short_head := rig._bone_transform_in_body(old_head_bone)
 				_check(failures,
-					(spectacles.position - short_head).distance_to(glasses_relative) < 0.001,
+					(short_head.affine_inverse() * rig.accessory_transform_in_body(spectacles)) \
+						.is_equal_approx(glasses_relative),
 					"%s: OLD glasses did not follow the head through SHORT" % def.id)
 				_check(failures,
-					(beard.position - short_head).distance_to(beard_relative) < 0.001,
+					(short_head.affine_inverse() * rig.accessory_transform_in_body(beard)) \
+						.is_equal_approx(beard_relative),
 					"%s: OLD beard did not follow the head through SHORT" % def.id)
 		rig.reset_modifiers()
 
@@ -677,7 +680,7 @@ static func _selftest(main: Node) -> void:
 		var young_scale := def.young_head_scale()
 		rig.scale_bone(def.socket_bone("head_top"), Vector3.ONE * young_scale)
 		YoungKit.apply(rig, young_scale)
-		var pacifier := rig.accessory_root.get_node_or_null("Pacifier")
+		var pacifier := rig.find_accessory("Pacifier")
 		_check(failures, pacifier != null, "%s: YOUNG pacifier was not built" % def.id)
 		if pacifier != null:
 			var anchors := rig.face_anchors()
@@ -694,7 +697,8 @@ static func _selftest(main: Node) -> void:
 				+ (contact - anchors["head_pivot"]) * young_scale
 			expected_contact.z += def.young_value("pacifier", "forward", 0.0) \
 				* float(anchors["depth"]) * young_scale * -1.0
-			_check(failures, pacifier.position.distance_to(expected_contact) < 0.001,
+			_check(failures,
+				rig.accessory_transform_in_body(pacifier).origin.distance_to(expected_contact) < 0.001,
 				"%s: YOUNG pacifier detached from its scaled mouth" % def.id)
 			var guard := pacifier.get_node_or_null("Guard")
 			var teat := pacifier.get_node_or_null("Teat")
@@ -705,15 +709,15 @@ static func _selftest(main: Node) -> void:
 			# BODY_LENGTH translates the head through the spine. The pacifier must retain the
 			# same head-relative offset after SHORT instead of staying at its neutral position.
 			var head_bone := def.socket_bone("head_top")
-			var relative_to_head: Vector3 = pacifier.position \
-				- rig._bone_origin_in_body(head_bone, false)
+			var relative_to_head: Transform3D = rig._bone_transform_in_body(head_bone) \
+				.affine_inverse() * rig.accessory_transform_in_body(pacifier)
 			var length_pair := Content.pair_for_category("LENGTH")
 			if length_pair != null:
 				rig.deformer.set_state(length_pair.value_for("short"), 1.0)
 				rig.sync_bone_accessories()
-				var short_relative: Vector3 = pacifier.position \
-					- rig._bone_origin_in_body(head_bone, false)
-				_check(failures, short_relative.distance_to(relative_to_head) < 0.001,
+				var short_relative: Transform3D = rig._bone_transform_in_body(head_bone) \
+					.affine_inverse() * rig.accessory_transform_in_body(pacifier)
+				_check(failures, short_relative.is_equal_approx(relative_to_head),
 					"%s: YOUNG pacifier did not follow the head through SHORT" % def.id)
 		rig.reset_modifiers()
 
@@ -856,19 +860,21 @@ static func _selftest(main: Node) -> void:
 		_check(failures, young_creature != null,
 			"%s: SHORT + YOUNG finished creature failed to build" % def.id)
 		if young_creature != null:
-			var final_pacifier := young_creature.accessory_root.get_node_or_null("Pacifier")
+			var final_pacifier := young_creature.find_accessory("Pacifier")
 			_check(failures, final_pacifier != null,
 				"%s: SHORT + YOUNG finished creature lost its pacifier" % def.id)
 			if final_pacifier != null:
 				var final_bone := def.socket_bone("head_top")
-				var base_prop: Transform3D = final_pacifier.get_meta(
-					"follow_base_prop", final_pacifier.transform)
-				var base_bone: Transform3D = final_pacifier.get_meta(
-					"follow_base_bone", young_creature._bone_transform_in_body(final_bone))
-				var expected_prop := young_creature._bone_transform_in_body(final_bone) \
-					* base_bone.affine_inverse() * base_prop
-				_check(failures, final_pacifier.transform.is_equal_approx(expected_prop),
-					"%s: finished pacifier is not locked to the transformed head" % def.id)
+				var mount := final_pacifier.get_parent()
+				_check(failures, mount is BoneAttachment3D,
+					"%s: finished pacifier does not use a native bone mount" % def.id)
+				if mount is BoneAttachment3D:
+					var bone_mount := mount as BoneAttachment3D
+					_check(failures, bone_mount.get_parent() == young_creature.skeleton,
+						"%s: pacifier bone mount is detached from the skeleton" % def.id)
+					_check(failures,
+						bone_mount.bone_idx == young_creature.skeleton.find_bone(final_bone),
+						"%s: pacifier bone mount targets the wrong bone" % def.id)
 			young_creature.free()
 
 	for pair in Content.pairs:

@@ -106,10 +106,16 @@ func _ready() -> void:
 ## Colours ride at the end of the same deck rather than in a panel of their own: to a
 ## student "what colour was it" is one more transformation to choose, not a different
 ## kind of question.
+## One card per adjective, not one per pair. A student choosing "It was big" is making a
+## single choice, and showing them two words at once asks them to read both and work out
+## which half they want before they can move. Its opposite is still what the animal
+## becomes - that is the pair's job, not the card's - so the deck runs big, small, tall,
+## short, and tapping any one of them says the animal started there.
 func _build_slots() -> void:
 	_slots.clear()
 	for pair in Content.enabled_pairs():
-		_slots.append(pair)
+		for word in pair.words():
+			_slots.append({"pair": pair, "word": str(word)})
 	if not Content.enabled_colors().is_empty():
 		_slots.append(Content.COLOR_CATEGORY)
 
@@ -127,15 +133,15 @@ func _build_category_view(page: VBoxContainer) -> void:
 	_prev_card = _side_card()
 	row.add_child(_prev_card)
 
-	# The pair arrives as two cards, not one card with two words on it. A pair is two
-	# choices, and the card the student taps is the state the animal starts in - so the
-	# thing they tap has to be the word itself, with its own edges.
 	# The row's Container must own a fixed cell, not the card that animates. Moving a
 	# Container-managed child by setting position.x corrupts its layout offsets: after the
 	# first click the pair was pulled toward x=0 and overlapped one chevron. The host never
 	# moves; the card slides locally inside it and is clipped at the cell edges.
 	_main_host = Control.new()
 	_main_host.name = "MainCardHost"
+	# Kept at the old two-card width so the console's centre column did not narrow when the
+	# deck went to one word at a time - the surrounding layout is fixed, and a card that
+	# suddenly occupied half of it would leave the row looking unbalanced.
 	_main_host.custom_minimum_size = Vector2(
 		WORD_CARD_SIZE.x * 2.0 + WORD_GAP, WORD_CARD_SIZE.y)
 	_main_host.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -147,14 +153,13 @@ func _build_category_view(page: VBoxContainer) -> void:
 	_main_card.alignment = BoxContainer.ALIGNMENT_CENTER
 	_main_host.add_child(_main_card)
 	_main_card.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	for i in 2:
-		var word_card := Button.new()
-		word_card.custom_minimum_size = WORD_CARD_SIZE
-		word_card.focus_mode = Control.FOCUS_NONE
-		word_card.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		word_card.pressed.connect(_activate.bind(i))
-		_main_card.add_child(word_card)
-		_word_cards.append(word_card)
+	var word_card := Button.new()
+	word_card.custom_minimum_size = Vector2(WORD_CARD_SIZE.x * 2.0 + WORD_GAP, WORD_CARD_SIZE.y)
+	word_card.focus_mode = Control.FOCUS_NONE
+	word_card.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	word_card.pressed.connect(_activate)
+	_main_card.add_child(word_card)
+	_word_cards.append(word_card)
 
 	_next_card = _side_card()
 	row.add_child(_next_card)
@@ -219,30 +224,27 @@ func _step(direction: int) -> void:
 		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 
 
-func _slot_words(slot) -> PackedStringArray:
-	if slot is TraitDefinition:
-		return (slot as TraitDefinition).words()
-	return PackedStringArray(["colours"])
+func _slot_pair(slot) -> TraitDefinition:
+	if slot is Dictionary:
+		return (slot as Dictionary).get("pair", null)
+	return null
 
 
 func _slot_category(slot) -> String:
-	if slot is TraitDefinition:
-		return (slot as TraitDefinition).category
-	return Content.COLOR_CATEGORY
+	var pair := _slot_pair(slot)
+	return pair.category if pair != null else Content.COLOR_CATEGORY
 
 
-## Two words side by side with a gap, never "big <-> small": see the glyph note above.
 func _slot_title(slot) -> String:
-	if slot is TraitDefinition:
-		var pair: TraitDefinition = slot
-		return "%s    %s" % [pair.word_a.to_upper(), pair.word_b.to_upper()]
+	if slot is Dictionary:
+		return str((slot as Dictionary).get("word", "")).to_upper()
 	return "COLOURS"
 
 
-## Which half was tapped IS the direction: tapping "big" says the animal was big and will
-## become small. That is the one instruction this game has always given, and asking again
-## on a second screen would only add a step to say what the tap already said.
-func _activate(half: int) -> void:
+## The card that was tapped IS the direction: tapping "big" says the animal was big and
+## will become small. That is the one instruction this game has always given, and asking
+## again on a second screen would only add a step to say what the tap already said.
+func _activate() -> void:
 	if _slots.is_empty():
 		return
 	var slot = _slots[_index]
@@ -250,9 +252,9 @@ func _activate(half: int) -> void:
 	if _blocked(category):
 		Audio.play("fail", 0.9)
 		return
-	if slot is TraitDefinition:
-		var pair: TraitDefinition = slot
-		var before := pair.word_a if half == 0 else pair.word_b
+	var pair := _slot_pair(slot)
+	if pair != null:
+		var before := str((slot as Dictionary).get("word", ""))
 		Audio.play("select")
 		pair_selected.emit(pair.category, before, pair.opposite_of(before))
 		return
@@ -536,17 +538,12 @@ func _refresh() -> void:
 	var done: bool = _used.has(category)
 	var blocked := _blocked(category)
 
-	var words := _slot_words(slot)
 	var face := UiKit.OK.darkened(0.55) if done else Color("#16233a")
 	var edge := UiKit.OK if done else UiKit.ACCENT
-	for i in _word_cards.size():
-		var card := _word_cards[i]
-		# Colours are one card, not two: there is no opposite of red to put on the other.
-		card.visible = i < words.size()
-		if not card.visible:
-			continue
-		card.text = words[i].to_upper() if slot is TraitDefinition else "COLOURS"
-		card.add_theme_font_size_override("font_size", UiKit.H3)
+	for card in _word_cards:
+		card.visible = true
+		card.text = _slot_title(slot)
+		card.add_theme_font_size_override("font_size", UiKit.H2)
 		card.disabled = blocked
 		for state in ["normal", "disabled"]:
 			card.add_theme_stylebox_override(state, UiKit.stylebox(face, 14, 2, edge, 10))
@@ -556,9 +553,6 @@ func _refresh() -> void:
 			UiKit.stylebox(face.darkened(0.18), 14, 2, UiKit.ACCENT, 10))
 		card.add_theme_color_override("font_color", UiKit.TEXT)
 		card.add_theme_color_override("font_disabled_color", UiKit.MUTED)
-		card.custom_minimum_size = Vector2(
-			WORD_CARD_SIZE.x if words.size() > 1 else WORD_CARD_SIZE.x * 2 + WORD_GAP,
-			WORD_CARD_SIZE.y)
 
 	_side(_prev_card, wrapi(_index - 1, 0, _slots.size()))
 	_side(_next_card, wrapi(_index + 1, 0, _slots.size()))

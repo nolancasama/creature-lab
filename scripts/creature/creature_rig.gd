@@ -117,6 +117,7 @@ var _ground_warning_emitted := false
 var _head_bounds := AABB()
 var _head_bounds_ready := false
 var _head_points := PackedVector3Array() ## Dominant head-family vertices, in body space.
+var _bone_accessory_hosts: Array[BoneAttachment3D] = [] ## Native head-bone mounts for face props.
 
 
 static func create(def: AnimalDefinition) -> CreatureRig:
@@ -615,10 +616,8 @@ func add_accessory(node: Node3D, at := Vector3.ZERO) -> void:
 	accessory_root.add_child(node)
 
 
-## Face props must follow skeleton deformation as well as the Body node. Store the complete
-## head transform at the instant the prop is fitted, then apply the head's live transform
-## delta on every update. Using only the bone origin is insufficient: a rotating or scaled
-## head can move the mouth even when the bone's origin barely changes.
+## Mount face props on Godot's native bone follower. The prop is authored in Body space,
+## so preserve that fitted transform while reparenting it beneath the selected bone.
 func add_bone_accessory(node: Node3D, at: Vector3, bone: String) -> void:
 	if skeleton == null or bone.is_empty() or skeleton.find_bone(bone) == -1:
 		add_accessory(node, at)
@@ -626,34 +625,47 @@ func add_bone_accessory(node: Node3D, at: Vector3, bone: String) -> void:
 	if skeleton.has_method("force_update_all_bone_transforms"):
 		skeleton.force_update_all_bone_transforms()
 	node.position = at
-	node.set_meta("follow_bone", bone)
-	node.set_meta("follow_base_prop", node.transform)
-	node.set_meta("follow_base_bone", _bone_transform_in_body(bone))
-	accessory_root.add_child(node)
+	var fitted_in_body := node.transform
+	var host := BoneAttachment3D.new()
+	host.name = "AccessoryBone_%s" % node.name
+	skeleton.add_child(host)
+	host.bone_idx = skeleton.find_bone(bone)
+	host.override_pose = false
+	host.on_skeleton_update()
+	node.transform = _transform_to_ancestor(host, body).affine_inverse() * fitted_in_body
+	host.add_child(node)
+	_bone_accessory_hosts.append(host)
 
 
-## Refresh all bone-following props immediately after a snapped deformation and once per
-## frame while an animated deformation is running.
+## Refresh native mounts immediately after a snapped deformation. During normal animation
+## BoneAttachment3D receives skeleton updates itself; this method is for factory/test paths
+## which can change a pose before the rig enters the SceneTree.
 func sync_bone_accessories() -> void:
-	if accessory_root == null or skeleton == null:
-		return
-	var has_followers := false
-	for child in accessory_root.get_children():
-		if child is Node3D and child.has_meta("follow_bone"):
-			has_followers = true
-			break
-	if not has_followers:
+	if skeleton == null or _bone_accessory_hosts.is_empty():
 		return
 	if skeleton.has_method("force_update_all_bone_transforms"):
 		skeleton.force_update_all_bone_transforms()
-	for child in accessory_root.get_children():
-		if not child is Node3D or not child.has_meta("follow_bone"):
+	for host in _bone_accessory_hosts:
+		if is_instance_valid(host):
+			host.on_skeleton_update()
+
+
+func find_accessory(accessory_name: String) -> Node3D:
+	if accessory_root != null:
+		var loose := accessory_root.find_child(accessory_name, true, false)
+		if loose is Node3D:
+			return loose as Node3D
+	for host in _bone_accessory_hosts:
+		if not is_instance_valid(host):
 			continue
-		var prop := child as Node3D
-		var bone := str(prop.get_meta("follow_bone"))
-		var base_prop: Transform3D = prop.get_meta("follow_base_prop", prop.transform)
-		var base_bone: Transform3D = prop.get_meta("follow_base_bone", _bone_transform_in_body(bone))
-		prop.transform = _bone_transform_in_body(bone) * base_bone.affine_inverse() * base_prop
+		var mounted := host.find_child(accessory_name, true, false)
+		if mounted is Node3D:
+			return mounted as Node3D
+	return null
+
+
+func accessory_transform_in_body(node: Node3D) -> Transform3D:
+	return _transform_to_ancestor(node, body)
 
 
 func _bone_transform_in_body(bone: String) -> Transform3D:
@@ -670,11 +682,18 @@ func _bone_origin_in_body(bone: String, _rest := false) -> Vector3:
 
 
 func clear_accessories() -> void:
-	if accessory_root == null:
-		return
-	for child in accessory_root.get_children():
-		accessory_root.remove_child(child)
-		child.queue_free()
+	if accessory_root != null:
+		for child in accessory_root.get_children():
+			accessory_root.remove_child(child)
+			child.queue_free()
+	for host in _bone_accessory_hosts:
+		if not is_instance_valid(host):
+			continue
+		var parent := host.get_parent()
+		if parent != null:
+			parent.remove_child(host)
+		host.queue_free()
+	_bone_accessory_hosts.clear()
 
 
 ## Pose-scale one named bone. YOUNG uses this for the head; keeping it public means
@@ -1041,7 +1060,6 @@ func _process(delta: float) -> void:
 	body.scale = _trait_scale * squash
 	_swing_legs((sin(_clock * 5.0) * 0.5 if moving else 0.0) * motion)
 	_sway_appendages(motion)
-	sync_bone_accessories()
 	_apply_grounding(delta)
 
 
