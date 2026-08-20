@@ -86,6 +86,15 @@ func run(state: CreatureState) -> void:
 	var creature := CreatureFactory.build_fantasy(state)
 	_stage.set_rig(creature)
 	if creature != null and not _skip:
+		# Measured now, at full size, before the grow tween shrinks it: the machine came
+		# down over the "It was" animal, and a creature turning big or tall grows straight
+		# into it. Done here rather than at the end because the clipping happens during the
+		# growth, not after it - and the steam is at its thickest, so the machine lifting
+		# clear is not something anyone sees happen.
+		await _stage.get_tree().process_frame
+		if not _alive():
+			return
+		_stage.array.settle_to(_work_height())
 		creature.scale = Vector3.ONE * 0.72
 		var grow := _stage.create_tween()
 		grow.tween_property(creature, "scale", Vector3.ONE, GROW_TIME).set_trans(Tween.TRANS_BACK)

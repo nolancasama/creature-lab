@@ -932,6 +932,7 @@ static func _selftest(main: Node) -> void:
 	_speed_checks(failures)
 	_carousel_checks(failures, main)
 	_voice_checks(failures)
+	_compile_checks(failures)
 	_present_pass_checks(failures)
 	_leg_growth_checks(failures)
 	_grammar_checks(failures)
@@ -984,6 +985,46 @@ static func _leg_growth_checks(failures: Array[String]) -> void:
 ## clip. What must hold is that a missing clip reports itself as missing - a recorder that
 ## quietly claims a length would make the sequence wait out that length in silence instead
 ## of having the lab speak - and that one child's recording cannot outlive their round.
+## Loads every script and scene in the project. Nothing else here does: selftest builds
+## rigs directly and never opens a screen, so a script that does not compile stays green
+## through the whole suite and only shows up as a grey rectangle in a browser. That has
+## happened twice - a redesign left a call behind, and a tap handler used `:=` on an
+## untyped `pressed` - and both times every check below passed while the screen was dead.
+##
+## Loading is enough. A GDScript with a parse error fails to load, and a scene whose script
+## will not compile fails with it, which is exactly the breakage being caught. Nothing is
+## instantiated: these screens expect game state, and a check that needs the game set up
+## correctly before it can run is a check that ends up switched off.
+static func _compile_checks(failures: Array[String]) -> void:
+	var pending: Array[String] = ["res://scripts", "res://scenes", "res://ui"]
+	var loaded := 0
+	while not pending.is_empty():
+		var here: String = pending.pop_back()
+		var dir := DirAccess.open(here)
+		if dir == null:
+			continue
+		dir.list_dir_begin()
+		var entry := dir.get_next()
+		while entry != "":
+			var full := here.path_join(entry)
+			if dir.current_is_dir():
+				pending.append(full)
+			elif entry.ends_with(".gd") or entry.ends_with(".tscn"):
+				loaded += 1
+				# A broken GDScript still loads - it comes back as a Resource that cannot be
+				# instantiated - so the object existing proves nothing on its own.
+				var res := ResourceLoader.load(full)
+				var ok := res != null
+				if ok and res is GDScript:
+					ok = (res as GDScript).can_instantiate()
+				_check(failures, ok,
+					"%s does not compile - every scene using it is a grey screen" % full)
+			entry = dir.get_next()
+		dir.list_dir_end()
+	# A walk that finds nothing would pass silently for ever, which is worse than no check.
+	_check(failures, loaded > 20, "compile check found almost nothing to load")
+
+
 static func _voice_checks(failures: Array[String]) -> void:
 	Voice.clear()
 	_check(failures, is_zero_approx(Voice.clip_length(0)) and not Voice.has_clip(0),

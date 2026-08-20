@@ -194,6 +194,18 @@ func descend(to_y := WORK_HEIGHT, duration := 1.7) -> void:
 	Audio.play("thud", 0.9)
 
 
+## Moves to a new working height from wherever it currently is, without the park-and-drop
+## descend() does. Used when the creature turns out to be bigger than the one the machine
+## came down over - it grows into "big" or "tall" partway through, and the machine has to
+## get out of its way rather than be worn.
+func settle_to(to_y: float, duration := 0.45) -> void:
+	if is_equal_approx(position.y, to_y):
+		return
+	var tween := create_tween()
+	tween.tween_property(self, "position:y", to_y, duration) \
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+
+
 func park(to_y := WORK_HEIGHT) -> void:
 	visible = true
 	position.y = to_y
