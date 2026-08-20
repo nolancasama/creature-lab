@@ -82,6 +82,7 @@ var feel: FeelDeformer = null ## HARD/SOFT shine, puff, squash and jiggle.
 var pace: PaceDeformer = null ## FAST/SLOW dashes, twitches and drawn-out actions.
 
 var tempo := 1.0 ## Idle animation speed; the SPEED modifier drives this.
+var movement_locked := false ## Transformation presentation keeps FAST on the platform.
 
 ## COLD's shivering, written by ColdEffect and folded into the idle pass. It lives on
 ## the rig rather than on the effect node so that freeing the effect - which happens on
@@ -1029,7 +1030,7 @@ func make_ghost(color: Color, alpha := 0.3) -> void:
 # --- Idle life ---------------------------------------------------------------
 
 func _process(delta: float) -> void:
-	_clock += delta * tempo * (pace.playback if pace != null else 1.0)
+	_clock += delta * tempo * (pace.playback if pace != null and not movement_locked else 1.0)
 	# Idle motion is added on top of the deformation, never in place of it, so a
 	# transformed creature keeps its new proportions while it breathes and walks.
 	# Both deformers contribute to the body transform, so their effects compose rather
@@ -1067,7 +1068,7 @@ func _process(delta: float) -> void:
 	# SPEED moves the whole animal around the platform, so its offset joins the others
 	# here rather than replacing them: a fast animal still breathes, jiggles and shivers
 	# while it dashes.
-	if pace != null:
+	if pace != null and not movement_locked:
 		pace.tick(delta)
 		offset += pace.offset
 		twist += pace.yaw

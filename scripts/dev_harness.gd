@@ -111,10 +111,11 @@ static func _autoplay(main: Node) -> void:
 			await tree.create_timer(2.4).timeout
 		print("[autoplay] present-tense pass answered")
 
-	# The transformation sequence plus the fade into the naming screen. It is longer than
-	# the old walk-into-the-chamber version: three spoken sentences, each with its own
-	# surge, before the peak and the reveal.
-	await tree.create_timer(20.0).timeout
+	# The transformation sequence plus the fade into the naming screen. It grows every time
+	# a beat is added to it - three spoken sentences, each with a surge and now a pause to
+	# let its trait land, then the peak and the reveal. Generous on purpose: this wait
+	# failing means "the lab never finished", which is a slow and confusing thing to debug.
+	await tree.create_timer(30.0).timeout
 
 	var ok := Game.phase == Game.Phase.NAMING
 	print("[autoplay] ended in phase %s" % Game.Phase.keys()[Game.phase])
@@ -248,7 +249,7 @@ static func _splittest(main: Node) -> void:
 
 	# Same longer sequence the autoplay wait accounts for: three spoken sentences with
 	# their surges, then the peak and the reveal.
-	await tree.create_timer(20.0).timeout
+	await tree.create_timer(30.0).timeout
 	var ok := Game.phase == Game.Phase.NAMING
 	print("[splittest] ended in phase %s" % Game.Phase.keys()[Game.phase])
 	print("[splittest] PASS" if ok else "[splittest] FAIL: expected NAMING")

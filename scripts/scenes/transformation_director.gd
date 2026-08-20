@@ -27,6 +27,7 @@ extends RefCounted
 const BEAT_SPEAK := 1.9
 const MAX_BEAT := 6.0 ## A runaway recording must not hold the whole sequence open.
 const REVEAL_HOLD := 1.1
+const TRAIT_SETTLE := 2.2 ## Let one trait finish visibly before the next sentence begins.
 ## Gap between the top of the animal and the lowest part of the machine. Enough to read as
 ## "hanging over it" rather than "resting on it", and enough that the bolts have somewhere
 ## to travel.
@@ -54,6 +55,7 @@ func request_skip() -> void:
 func run(state: CreatureState) -> void:
 	if not _alive():
 		return
+	_stage.lock_creature_movement()
 	_banner_text = _banner.text
 	_show_banner()
 
@@ -66,25 +68,30 @@ func run(state: CreatureState) -> void:
 		_stage.face_rig_to_camera()
 		await _stage.array.descend(_work_height())
 
-	# Each sentence: the lab says it, the machine answers it. Three of them, each one
-	# harder than the last, so the sequence builds instead of just repeating.
-	var sentences := state.sentences()
+	# Each sentence: the lab says it, the machine answers it. Keep the before state as the
+	# starting point and add exactly one after-trait after each sentence's zap.
+	var entries := state.entries
+	var staged_traits := state.before_traits()
 	if not _skip:
-		for i in sentences.size():
+		for i in entries.size():
 			if not _alive():
 				return
-			await _beat(i, sentences.size(), str(sentences[i]))
+			await _beat(i, entries.size(), str(entries[i]["sentence"]), entries[i], staged_traits)
 
 	if not _alive():
 		return
 	await _peak()
 
-	# The same CreatureState, read the other way round - swapped while the steam is at its
-	# thickest, so the change happens inside the cloud rather than as a visible pop.
+	# A skipped sequence still needs the finished state immediately. During the normal path the
+	# live rig has already changed one trait at a time, so finish that same rig instead of
+	# replacing it with an all-at-once build.
 	if not _alive():
 		return
-	var creature := CreatureFactory.build_fantasy(state)
-	_stage.set_rig(creature)
+	if _skip:
+		_stage.set_rig(CreatureFactory.build_fantasy(state))
+	else:
+		CreatureFactory.finish_transformation(_stage.rig())
+	var creature := _stage.rig()
 	if creature != null and not _skip:
 		# Measured now, at full size, before the grow tween shrinks it: the machine came
 		# down over the "It was" animal, and a creature turning big or tall grows straight
@@ -111,7 +118,8 @@ func run(state: CreatureState) -> void:
 
 ## One sentence, one surge. The banner carries the words as well as the speaker, because
 ## a lab with its sound turned off is a real classroom and the beat still has to land.
-func _beat(index: int, total: int, sentence: String) -> void:
+func _beat(index: int, total: int, sentence: String, entry: Dictionary,
+		staged_traits: Dictionary) -> void:
 	var rising := float(index + 1) / float(total)
 	_banner.text = sentence
 	# The student's own voice if it was captured, the lab's if it was not. Either way the
@@ -148,11 +156,18 @@ func _beat(index: int, total: int, sentence: String) -> void:
 			_stage.vent_steam(rising * 0.5)
 		await _wait(0.06)
 	Fx.burst(_stage.mount, Vector3(0, 0.5, 0), "sparkle", UiKit.GOLD, 1.2 + rising)
-	await _wait(0.35)
+	await _wait(0.2)
+
+	# This is the one transformation belonging to this sentence. The cumulative dictionary
+	# preserves earlier changes, while the newly added category is the only new trait this
+	# zap can introduce.
+	staged_traits[str(entry["category"])] = str(entry["after"])
+	_stage.transform_to_traits(staged_traits)
+	await _wait(TRAIT_SETTLE)
 
 
-## Everything at once, and the only hard cut in the sequence - on the frame where the
-## energy peaks, a cut reads as impact rather than as losing the subject.
+## The final machine flourish, and the only hard cut in the sequence - the trait changes
+## have already happened one at a time, so this peak reads as the completed transformation.
 func _peak() -> void:
 	if _skip:
 		_stage.vent_steam(1.0)
@@ -184,6 +199,7 @@ func _reveal() -> void:
 	if _skip:
 		_stage.array.visible = false
 		_stage.reset_camera()
+		_stage.face_rig_to_camera()
 		return
 	var pull := _stage.frame(_hero_eye() + Vector3(-0.8, 0.35, 1.4) * _spread(),
 		_stage.STAND + Vector3(0, 0.45, 0), 1.6)
@@ -193,6 +209,9 @@ func _reveal() -> void:
 	await pull.finished
 	if not _alive():
 		return
+	# The camera has now reached its final reveal position; face the actual camera, not the
+	# earlier pre-descent framing.
+	_stage.face_rig_to_camera()
 	await _wait(REVEAL_HOLD)
 	if _alive():
 		_stage.reset_camera()

@@ -2,8 +2,8 @@ extends Node3D
 ## The transformation chamber screen. By the time the player arrives here, all three
 ## "It was..." sentences are already recorded - on the previous screen, alongside the
 ## animal itself. There is nothing left to type or say: the animal enters carrying the
-## combined "It was..." state, and the chamber executes the three "Now it is..."
-## instructions all at once.
+## combined "It was..." state, and the chamber executes one "Now it is..." instruction per
+## sentence.
 
 var stage: LabStage = null
 

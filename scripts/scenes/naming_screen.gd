@@ -8,6 +8,7 @@ extends Node3D
 
 const BEFORE_POS := Vector3(-4.9, 0.0, 0.0)
 const NOW_POS := Vector3(4.9, 0.0, 0.0)
+const FRONT_FACING := PI
 
 var _candidates := PackedStringArray()
 var _index := 0
@@ -64,19 +65,20 @@ func _build_stage() -> void:
 
 	if ghost != null:
 		ghost.position = BEFORE_POS + Vector3(0, 0.28, 0)
-		ghost.rotation.y = -0.7
+		ghost.rotation.y = FRONT_FACING
 		ghost.scale = Vector3.ONE * fit
 		_before_root = ghost
 		add_child(ghost)
 
 	_creature_root = Node3D.new()
 	_creature_root.position = NOW_POS + Vector3(0, 0.3, 0)
+	_creature_root.rotation.y = FRONT_FACING
 	_creature_root.scale = Vector3.ONE * fit
 	add_child(_creature_root)
 	if creature != null:
 		_creature_root.add_child(creature)
 
-	add_child(StageKit.camera(Vector3(0.0, 3.5, 11.4), Vector3(0.0, 0.8, 0.0), 50.0))
+	add_child(StageKit.camera(Vector3(0.0, 2.1, 11.4), Vector3(0.0, 1.0, 0.0), 50.0))
 
 
 func _comparison_floor() -> Node3D:

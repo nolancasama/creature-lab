@@ -69,6 +69,24 @@ func set_rig(new_rig: CreatureRig) -> void:
 		_rig.rotation.y = -0.85
 
 
+func lock_creature_movement() -> void:
+	if _rig == null:
+		return
+	_rig.movement_locked = true
+	_rig.moving = false
+	if _rig.pace != null:
+		_rig.pace.reset()
+
+
+## Apply the traits reached so far during the chamber sequence. The dictionary is
+## cumulative, so TraitVisuals can rebuild from a clean baseline while only the newly added
+## sentence trait animates from the current pose.
+func transform_to_traits(traits: Dictionary) -> void:
+	if _rig == null:
+		return
+	TraitVisuals.apply_all(_rig, traits, true)
+
+
 ## A short pop so a newly applied "It was..." trait is felt, not just seen.
 func punch() -> void:
 	if _rig == null:

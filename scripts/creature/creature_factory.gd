@@ -40,6 +40,14 @@ static func build_fantasy(state: CreatureState) -> CreatureRig:
 	return rig
 
 
+## The chamber has already animated the live rig through every after-trait. Add only the
+## finished-creature cue so the final beat does not reapply all three traits at once.
+static func finish_transformation(rig: CreatureRig) -> void:
+	if rig == null:
+		return
+	_make_creature_glow(rig)
+
+
 ## Legacy builder retained for data/tool compatibility. Finished creatures no longer call
 ## this function, because post-transformation attachments are disabled.
 ## Bolt on the modular parts triggered by the "Now it is ___" words. Deterministic:
