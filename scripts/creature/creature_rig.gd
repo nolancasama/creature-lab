@@ -763,12 +763,14 @@ func clear_thermal_fx() -> void:
 	thermal_fx_root.transform = Transform3D.IDENTITY
 
 
-## Follow the creature's translation and turning without inheriting transient squash.
-## Flame size is already normalised per species when the emitters are built.
+## Follow the creature's translation, turning and persistent trait scale without inheriting
+## transient squash. The scale matters: a shrunk animal must carry its flame anchors down with
+## its body instead of leaving them floating at the neutral height.
 func _sync_thermal_fx_to_body() -> void:
 	if not thermal_follows_body or thermal_fx_root == null or body == null:
 		return
-	thermal_fx_root.transform = Transform3D(body.transform.basis.orthonormalized(), body.position)
+	var body_basis := body.transform.basis.orthonormalized().scaled(_trait_scale)
+	thermal_fx_root.transform = Transform3D(body_basis, body.position)
 
 
 ## Roughly where the top of the creature is right now, for labels and camera framing.

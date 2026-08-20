@@ -63,6 +63,7 @@ func run(state: CreatureState) -> void:
 		await _stage.frame(_hero_eye(), _machine_aim(), 1.0).finished
 		if not _alive():
 			return
+		_stage.face_rig_to_camera()
 		await _stage.array.descend(_work_height())
 
 	# Each sentence: the lab says it, the machine answers it. Three of them, each one

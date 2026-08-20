@@ -8,6 +8,7 @@ extends Node3D
 
 const BEFORE_POS := Vector3(-4.6, 0.0, 0.0)
 const NOW_POS := Vector3(4.6, 0.0, 0.0)
+const DISPLAY_PLATFORM_TILT := -0.275
 
 var _candidates := PackedStringArray()
 var _index := 0
@@ -43,10 +44,12 @@ func _build_stage() -> void:
 
 	var before_platform := StageKit.platform(1.55, Color("#1b2438"), UiKit.MUTED)
 	before_platform.position = BEFORE_POS
+	before_platform.rotation.x = DISPLAY_PLATFORM_TILT
 	add_child(before_platform)
 
 	var now_platform := StageKit.platform(1.9, Color("#243352"), UiKit.GOLD)
 	now_platform.position = NOW_POS
+	now_platform.rotation.x = DISPLAY_PLATFORM_TILT
 	add_child(now_platform)
 
 	var ghost := CreatureFactory.build_before_ghost(Game.current)

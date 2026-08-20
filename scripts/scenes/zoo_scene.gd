@@ -11,6 +11,7 @@ const ORBIT_SPEED := 0.006
 const ZOOM_LIMITS := Vector2(9.0, 26.0)
 const FOCUS_DISTANCE := 8.0
 const YARD_CAMERA_TARGET := Vector3(0.0, 1.2, 0.0)
+const PINCH_ZOOM_SCALE := 0.018
 
 var _camera: Camera3D = null
 var _yaw := 0.4
@@ -23,6 +24,9 @@ var _info_body: VBoxContainer = null
 var _creatures: Node3D = null
 var _focused_brain: CreatureBrain = null
 var _distance_before_focus := 24.0
+var _touch_points := {}
+var _pinching := false
+var _pinch_distance := 0.0
 
 
 func _ready() -> void:
@@ -229,7 +233,11 @@ func _dismiss_info() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if _focused_brain != null:
 		return
-	if event is InputEventMouseButton:
+	if event is InputEventScreenTouch:
+		_handle_screen_touch(event)
+	elif event is InputEventScreenDrag:
+		_handle_screen_drag(event)
+	elif event is InputEventMouseButton:
 		var button: InputEventMouseButton = event
 		if button.button_index == MOUSE_BUTTON_LEFT:
 			_dragging = button.pressed
@@ -244,6 +252,40 @@ func _unhandled_input(event: InputEvent) -> void:
 		_yaw -= motion.relative.x * ORBIT_SPEED
 		_pitch = clampf(_pitch - motion.relative.y * ORBIT_SPEED, 0.12, 1.25)
 		_update_camera()
+
+
+func _handle_screen_touch(event: InputEventScreenTouch) -> void:
+	if event.pressed:
+		_touch_points[event.index] = event.position
+		if _touch_points.size() == 2:
+			_pinching = true
+			_pinch_distance = _touch_distance()
+	else:
+		_touch_points.erase(event.index)
+		if _touch_points.size() < 2:
+			_pinching = false
+			_pinch_distance = 0.0
+
+
+func _handle_screen_drag(event: InputEventScreenDrag) -> void:
+	if not _pinching or not _touch_points.has(event.index):
+		return
+	_touch_points[event.index] = event.position
+	var distance := _touch_distance()
+	if _pinch_distance > 0.0 and distance > 0.0:
+		_distance = clampf(_distance - (distance - _pinch_distance) * PINCH_ZOOM_SCALE,
+			ZOOM_LIMITS.x, ZOOM_LIMITS.y)
+		_update_camera()
+	_pinch_distance = distance
+
+
+func _touch_distance() -> float:
+	if _touch_points.size() < 2:
+		return 0.0
+	var ids := _touch_points.keys()
+	var first: Vector2 = _touch_points[ids[0]]
+	var second: Vector2 = _touch_points[ids[1]]
+	return first.distance_to(second)
 
 
 func _update_camera() -> void:

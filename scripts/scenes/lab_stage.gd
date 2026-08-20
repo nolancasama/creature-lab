@@ -108,6 +108,18 @@ func reset_camera() -> void:
 	cut_to(CAMERA_POS, CAMERA_AIM)
 
 
+## Face the animal toward the camera after the final pre-descent framing has settled. The
+## initial three-quarter pose keeps the lab readable while editing; the reveal beat gets a
+## true front view so the animal is looking directly at the student.
+func face_rig_to_camera() -> void:
+	if _rig == null or camera == null:
+		return
+	var direction := camera.global_position - _rig.global_position
+	direction.y = 0.0
+	if direction.length_squared() > 0.0001:
+		_rig.global_rotation.y = atan2(-direction.x, -direction.z)
+
+
 func _apply_frame(t: float) -> void:
 	if camera == null:
 		return
