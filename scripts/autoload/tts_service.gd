@@ -18,12 +18,18 @@ func _pick_voice() -> void:
 	if voices.is_empty():
 		voices = DisplayServer.tts_get_voices_for_language("en_US")
 	if voices.is_empty():
+		voices = DisplayServer.tts_get_voices()
+	if voices.is_empty():
 		return
 	_voice_id = str(voices[0])
 	_available = true
 
 
 func available() -> bool:
+	# Web speech voices are populated asynchronously. An empty list during _ready() is not
+	# a permanent failure, so retry whenever UI or gameplay is about to use speech.
+	if not _available:
+		_pick_voice()
 	return _available and Settings.tts_enabled
 
 

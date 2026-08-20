@@ -38,14 +38,11 @@ const PANEL_RIGHT := -32
 const HUD_TOP := 24 ## Top edge of the floating buttons, above the panel on both sub-states.
 const PROGRESS_FONT := UiKit.SMALL * 3 ## Readable from the back of a classroom.
 const HUD_BUTTON := 52 ## Back button size.
-const GEAR_BUTTON_SIZE := HUD_BUTTON * 2 ## Doubled - settings is the one control every
-## teacher needs to find without hunting, so it gets the HUD's largest touch target.
+const GEAR_BUTTON_SIZE := 70 ## 33% smaller than the former 104px settings gear.
 const GEAR_ICON := preload("res://ui/gear.svg")
 const HUD_GAP := 24 ## Visible gap between the HUD row and the panel below it.
-## Top edge for a HUD_BUTTON-sized control so its centre line matches the gear's. The gear
-## is twice the height, so sharing a top edge with it left the back button riding high - a
-## derived value rather than a typed one, or the two drift apart the next time either size
-## is touched.
+## Top edge for a HUD_BUTTON-sized control so its centre line matches the gear's. This is
+## derived rather than typed so the two stay aligned when either control changes size.
 const HUD_BUTTON_TOP := HUD_TOP + (GEAR_BUTTON_SIZE - HUD_BUTTON) / 2
 const PANEL_TOP := HUD_TOP + GEAR_BUTTON_SIZE + HUD_GAP ## Clears the gear, now the taller
                                                         ## of the two HUD buttons.
@@ -66,10 +63,8 @@ const SAY_IT_WIDTH := 620
 ## rather than trusted blind, since nothing here is a container that reports its own
 ## natural size back to the anchor math that positions it.
 const PICKING_PANEL_HEIGHT := 298
-const PROGRESS_SUB_FONT := UiKit.H2 ## The "(n of 3)" line beneath "Before" - present but
-                                    ## secondary, not competing with PROGRESS_FONT's scale.
 const PROGRESS_WIDTH := 420 ## Wide enough for "Before" at PROGRESS_FONT with room to spare.
-const PROGRESS_HEIGHT := 100 ## Both lines plus the small gap between them.
+const PROGRESS_HEIGHT := 64 ## The single "Before" heading.
 
 ## The animal sits centred in the gap beside the panel, which is always half the panel's
 ## span left of screen centre, whatever the window is doing. Applied as a lens shift - see
@@ -97,7 +92,6 @@ var _rig_animal := "" ## Which animal the live rig was built for.
 # Recording UI
 var _root: Control = null
 var _progress: Label = null
-var _progress_count: Label = null
 var _word_lab: DescriptorCarousel = null
 var _speech: SpeechPanel = null
 var _console: Control = null
@@ -322,7 +316,6 @@ func _clear_overlays() -> void:
 	_speech = null
 	_console = null
 	_progress = null
-	_progress_count = null
 	_buttons.clear() ## Freed with the panel; _preview() would otherwise iterate corpses.
 
 
@@ -452,7 +445,8 @@ func _enter_present() -> void:
 	var column := UiKit.vbox(10)
 	panel.add_child(column)
 
-	var heading := UiKit.label("Now say what it IS", UiKit.H2, UiKit.ACCENT)
+	var instruction := "say" if Speech.uses_microphone() else "type"
+	var heading := UiKit.label("Now %s what it IS" % instruction, UiKit.H2, UiKit.ACCENT)
 	heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	column.add_child(heading)
 
@@ -578,8 +572,8 @@ func _build_recording_ui() -> void:
 	_build_progress_display()
 
 
-## "Before" and its count share the actual screen centre with the optical centre of the
-## animal and platform, rather than the old free-space centre left of a descriptor panel.
+## "Before" shares the actual screen centre with the optical centre of the animal and
+## platform, rather than the old free-space centre left of a descriptor panel.
 func _build_progress_display() -> void:
 	var box := UiKit.vbox(2)
 	box.anchor_left = 0.5
@@ -596,11 +590,6 @@ func _build_progress_display() -> void:
 	_progress.add_theme_font_size_override("font_size", PROGRESS_FONT)
 	_progress.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(_progress)
-
-	_progress_count = UiKit.label("", UiKit.BODY, UiKit.GOLD)
-	_progress_count.add_theme_font_size_override("font_size", PROGRESS_SUB_FONT)
-	_progress_count.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	box.add_child(_progress_count)
 
 
 ## Say It replaces the carousel inside SelectionConsole instead of introducing another
@@ -627,8 +616,6 @@ func _sync_ui() -> void:
 	var assigned := _assigned_category()
 	if _progress != null:
 		_progress.text = "Before"
-	if _progress_count != null:
-		_progress_count.text = "(%d of %d)" % [mini(Game.current.slots_filled() + 1, CreatureState.SLOTS), CreatureState.SLOTS]
 
 	_word_lab.set_used(Game.current.used_categories())
 	_word_lab.set_restriction(assigned)
@@ -818,7 +805,7 @@ func _finish_sentence() -> void:
 		return
 	_busy = false
 	if Game.current != null and Game.current.is_complete():
-		if Settings.split_pass():
+		if Settings.needs_present_pass(Speech.uses_microphone()):
 			_enter_present()
 		else:
 			Game.set_phase(Game.Phase.CREATURE_LAB)

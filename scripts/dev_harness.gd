@@ -100,7 +100,7 @@ static func _autoplay(main: Node) -> void:
 	# the past tense is done, so a run through the real signal path has to answer those
 	# too. Reading the mode rather than assuming it: this is the check that is supposed to
 	# notice when the default changes.
-	if Settings.split_pass():
+	if Settings.needs_present_pass(Speech.uses_microphone()):
 		await tree.create_timer(1.0).timeout
 		if Game.phase != Game.Phase.ANIMAL_SELECTION:
 			printerr("[autoplay] FAIL: no present-tense pass in split mode")
@@ -790,14 +790,17 @@ static func _selftest(main: Node) -> void:
 				"%s: neutral front-paw correction became asymmetric" % def.id)
 			_check(failures, rig.deformer.ground_extension(2) < 0.001 and rig.deformer.ground_extension(3) < 0.001,
 				"%s: neutral correction changed the rear paws" % def.id)
-		rig.deformer.set_state(1.0, 1.35)
+		var height_pair := Content.pair_for_category("HEIGHT")
+		var tall_value := height_pair.value_for("tall") if height_pair != null else 2.20
+		rig.deformer.set_state(1.0, tall_value)
 		for ground_step in 4:
 			rig.solve_idle_grounding_immediately()
 		var contacts := rig.foot_contact_positions()
 		for contact_idx in contacts.size():
-			_check(failures, absf(contacts[contact_idx].y - CreatureRig.GROUND_CLEARANCE) < 0.025,
-				"%s: foot '%s' did not ground (y=%.3f)" % [def.id,
-					def.legs[contact_idx].get("id", ""), contacts[contact_idx].y])
+			_check(failures, absf(contacts[contact_idx].y - CreatureRig.GROUND_CLEARANCE) < 0.005,
+				"%s: foot '%s' did not ground (y=%.3f, correction=%.3f)" % [def.id,
+					def.legs[contact_idx].get("id", ""), contacts[contact_idx].y,
+					rig.deformer.ground_extension(contact_idx)])
 		if def.legs.size() >= 4:
 			_check(failures, is_equal_approx(rig.deformer.ground_extension(0), rig.deformer.ground_extension(1)),
 				"%s: front pair grounding became asymmetric" % def.id)
@@ -929,6 +932,7 @@ static func _selftest(main: Node) -> void:
 	_speed_checks(failures)
 	_carousel_checks(failures, main)
 	_voice_checks(failures)
+	_present_pass_checks(failures)
 	_leg_growth_checks(failures)
 	_grammar_checks(failures)
 
@@ -949,28 +953,23 @@ static func _selftest(main: Node) -> void:
 ## FACTOR: these chains are slanted differently front to rear, so an equal factor moves a
 ## steep chain further down than a shallow one and the pairs visibly stop matching.
 ##
-## apply() multiplies each bone's rest offset by the leg's factor, so a chain's vertical
-## drop scales by exactly that factor - which makes the growth each leg actually receives
-## natural_drop * (factor - 1), checkable without posing anything.
+## apply() multiplies every configured rest offset by the leg's factor. The deformer caches
+## the complete chain's vertical response in global rest space, including the first listed
+## segment, so growth is response * (factor - 1).
 static func _leg_growth_checks(failures: Array[String]) -> void:
+	var height_pair := Content.pair_for_category("HEIGHT")
+	var tall_value := height_pair.value_for("tall") if height_pair != null else 2.20
 	for def in Content.animals:
 		var rig := CreatureFactory.build_plain(def.id)
-		var sk := rig.skeleton
-		rig.deformer.set_state(1.0, 1.6)
+		rig.deformer.set_state(1.0, tall_value)
 		var lowest := INF
 		var highest := -INF
 		for i in def.legs.size():
-			var bones: PackedStringArray = def.legs[i].get("bones", PackedStringArray())
-			if bones.is_empty():
+			var response := rig.deformer.leg_vertical_response(i)
+			if response <= 0.0001:
 				continue
-			var top := sk.find_bone(bones[0])
-			var foot := sk.find_bone(bones[bones.size() - 1])
-			if top == -1 or foot == -1:
-				continue
-			var natural := absf(sk.get_bone_global_rest(top).origin.y
-				- sk.get_bone_global_rest(foot).origin.y)
 			var factor: float = rig.deformer.leg_lengths[i]
-			var growth := natural * (factor - 1.0)
+			var growth := response * (factor - 1.0)
 			lowest = minf(lowest, growth)
 			highest = maxf(highest, growth)
 		if lowest < INF and lowest > 0.0001:
@@ -1017,6 +1016,24 @@ static func _voice_checks(failures: Array[String]) -> void:
 	Voice.clear()
 
 
+## Past-only remains a useful microphone option, but typing must still practise the
+## present half. Full-sentence mode already contains it and must never duplicate it.
+static func _present_pass_checks(failures: Array[String]) -> void:
+	var original := Settings.say_mode
+	Settings.say_mode = Settings.SAY_PAST
+	_check(failures, Settings.needs_present_pass(false),
+		"typing: Past-only skipped the present-tense pass")
+	_check(failures, not Settings.needs_present_pass(true),
+		"speech: Past-only unexpectedly added a present-tense pass")
+	Settings.say_mode = Settings.SAY_SPLIT
+	_check(failures, Settings.needs_present_pass(false) and Settings.needs_present_pass(true),
+		"split: present-tense pass depends on the input backend")
+	Settings.say_mode = Settings.SAY_FULL
+	_check(failures, not Settings.needs_present_pass(false),
+		"typing: full sentence duplicated the present-tense pass")
+	Settings.say_mode = original
+
+
 ## The carousel replaced a grid that could not promise its own size. These assert the two
 ## things that would silently break a lesson: a sentence that says nothing ("It was red.
 ## Now it is red."), and content that outgrows the fixed panel - the failure that put the
@@ -1050,7 +1067,7 @@ static func _carousel_checks(failures: Array[String], main: Node) -> void:
 		"carousel: backward wrap moved the centre layout cell")
 	_check(failures, car._left_arrow.visible and car._right_arrow.visible,
 		"carousel: backward wrap hid a chevron")
-	_check(failures, car._word_cards[0].visible and not car._word_cards[1].visible,
+	_check(failures, car._word_cards.size() == 1 and car._word_cards[0].visible,
 		"carousel: colour slot did not settle into one centred card")
 	if car._slide != null and car._slide.is_valid():
 		car._slide.kill()

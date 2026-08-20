@@ -68,6 +68,7 @@ var body: Node3D = null ## Trait scaling lives here.
 var accessory_root: Node3D = null ## Worn items (YOUNG's bib, pacifier); inherits body scale.
 var fx_root: Node3D = null
 var thermal_fx_root: Node3D = null ## HOT/COLD's particle systems - see thermal_applied.
+var thermal_follows_body := false ## HOT moves with the creature; COLD's ground patch does not.
 var skeleton: Skeleton3D = null
 var mesh_instance: MeshInstance3D = null
 var material: ShaderMaterial = null
@@ -739,10 +740,16 @@ func clear_fx() -> void:
 
 
 ## Same as add_fx, but for HOT/COLD's own root, which reset_modifiers() deliberately
-## does not sweep - see thermal_applied.
-func add_thermal_fx(node: Node3D, at := Vector3.ZERO) -> void:
+## does not sweep - see thermal_applied. Persistent HOT particles use local coordinates
+## so already-emitted flames travel with a dashing creature instead of trailing behind.
+func add_thermal_fx(node: Node3D, at := Vector3.ZERO, follows_body := false) -> void:
 	node.position = at
 	thermal_fx_root.add_child(node)
+	if follows_body:
+		thermal_follows_body = true
+		if node is GPUParticles3D:
+			(node as GPUParticles3D).local_coords = true
+		_sync_thermal_fx_to_body()
 	if node is GPUParticles3D:
 		(node as GPUParticles3D).emitting = true
 
@@ -752,6 +759,16 @@ func add_thermal_fx(node: Node3D, at := Vector3.ZERO) -> void:
 func clear_thermal_fx() -> void:
 	for child in thermal_fx_root.get_children():
 		child.queue_free()
+	thermal_follows_body = false
+	thermal_fx_root.transform = Transform3D.IDENTITY
+
+
+## Follow the creature's translation and turning without inheriting transient squash.
+## Flame size is already normalised per species when the emitters are built.
+func _sync_thermal_fx_to_body() -> void:
+	if not thermal_follows_body or thermal_fx_root == null or body == null:
+		return
+	thermal_fx_root.transform = Transform3D(body.transform.basis.orthonormalized(), body.position)
 
 
 ## Roughly where the top of the creature is right now, for labels and camera framing.
@@ -1061,6 +1078,7 @@ func _process(delta: float) -> void:
 	_swing_legs((sin(_clock * 5.0) * 0.5 if moving else 0.0) * motion)
 	_sway_appendages(motion)
 	_apply_grounding(delta)
+	_sync_thermal_fx_to_body()
 
 
 ## Explicit sole/hoof points after skinning, adjective proportions and the base idle

@@ -189,20 +189,20 @@ static func _apply_thermal(rig: CreatureRig, value: float, mid: float, animate :
 		# the rest rise out through it, which is what fire on a back should look like.
 		var back_fire := Fx.make("flame", HOT, h * 0.10, flame_scale)
 		Fx.spread_along(back_fire, Vector3(h * 0.05, h * 0.14, h * 0.22))
-		rig.add_thermal_fx(back_fire, spine)
+		rig.add_thermal_fx(back_fire, spine, true)
 
 		# Small licks at the head and tail so the silhouette itself looks alight. The
 		# head one is deliberately small and sits at the skull bone rather than above the
 		# crown: a big plume rising off the top of the head reads as a candle wick.
-		rig.add_thermal_fx(Fx.make("flame", Color("#ffd27a"), h * 0.07, flame_scale * 0.5), skull)
-		rig.add_thermal_fx(Fx.make("flame", Color("#ff5a1f"), h * 0.08, flame_scale * 0.65), rear)
+		rig.add_thermal_fx(Fx.make("flame", Color("#ffd27a"), h * 0.07, flame_scale * 0.5), skull, true)
+		rig.add_thermal_fx(Fx.make("flame", Color("#ff5a1f"), h * 0.08, flame_scale * 0.65), rear, true)
 		# Quiet rising embers behind everything else.
-		rig.add_thermal_fx(Fx.make("embers", HOT, h * 0.5, flame_scale), Vector3(0, mid, 0))
+		rig.add_thermal_fx(Fx.make("embers", HOT, h * 0.5, flame_scale), Vector3(0, mid, 0), true)
 
 		# The fire has to light its surroundings or it reads as a decal stuck on top of
 		# the scene. Kept broad and dim rather than bright and tight - a hot puddle on
 		# the platform looks like a spotlight, a wide wash looks like firelight.
-		rig.add_thermal_fx(FlameLight.create(Color("#ff9a3c"), 1.5, h * 3.6), Vector3(0, h * 0.5, 0))
+		rig.add_thermal_fx(FlameLight.create(Color("#ff9a3c"), 1.5, h * 3.6), Vector3(0, h * 0.5, 0), true)
 
 		if animate:
 			rig.pulse_emission(energy * 1.8, energy, 0.55)

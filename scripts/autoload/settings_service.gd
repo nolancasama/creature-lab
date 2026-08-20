@@ -149,3 +149,11 @@ func past_only() -> bool:
 ## True when the present tense is collected as its own pass before the transformation.
 func split_pass() -> bool:
 	return say_mode == SAY_SPLIT
+
+
+## Typing does not have the recognition problem that makes a one-clause microphone round
+## useful, so a typed Past-only round still collects the missing "Now it is ___" half in
+## the existing present-tense pass. Full mode already collected both halves and must not
+## ask for the present a second time.
+func needs_present_pass(uses_microphone: bool) -> bool:
+	return split_pass() or (not uses_microphone and say_mode == SAY_PAST)

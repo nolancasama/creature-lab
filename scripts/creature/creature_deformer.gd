@@ -74,22 +74,11 @@ func _cache_rest_metrics() -> void:
 			var idx := _skeleton.find_bone(bone)
 			if idx != -1:
 				reach += _skeleton.get_bone_rest(idx).origin.length()
-		# Measured between the chain's ends in MODEL space, not by summing each bone's own
-		# local Y. A rest offset is expressed in its parent's frame, so on a rotated chain
-		# local Y is not "downward" at all - and on a horse and a deer it came out
-		# backwards, reporting the front legs as the shorter pair when their real vertical
-		# drop is half again the rear's. The normalisation below then grew the front pair
-		# hardest, which is the mismatch this measurement exists to prevent.
-		var vertical_reach := 0.0
-		if not bones.is_empty():
-			var top := _skeleton.find_bone(bones[0])
-			var foot := _skeleton.find_bone(bones[bones.size() - 1])
-			if top != -1 and foot != -1:
-				vertical_reach = absf(_skeleton.get_bone_global_rest(top).origin.y
-					- _skeleton.get_bone_global_rest(foot).origin.y)
-		# The floor is only a divide-by-zero guard now. At 0.35 of the 3D reach it was
-		# overriding perfectly good measurements on the very animals with the most slanted
-		# chains, putting back the front/rear disparity the measurement above removes.
+		# Measure the result of extending the COMPLETE configured chain. Measuring only from
+		# the first listed bone to the foot omits that first bone's own translated offset,
+		# even though apply() scales it too. That understated the front-leg response on deer,
+		# horse and tiger, leaving their front hooves floating at full TALL.
+		var vertical_reach := _measure_vertical_response(bones)
 		var guarded: float = maxf(vertical_reach, reach * 0.05)
 		_leg_reach.append(reach)
 		_leg_vertical_reach.append(guarded)
@@ -99,6 +88,23 @@ func _cache_rest_metrics() -> void:
 	_mean_vertical_reach /= float(maxi(_leg_vertical_reach.size(), 1))
 	if not _def.body_bones.is_empty():
 		_body_tip = _skeleton.find_bone(_def.body_bones[_def.body_bones.size() - 1])
+
+
+## Downward foot travel caused by adding one full factor to every configured segment.
+## Each local rest offset is expressed in its parent's frame, so rotate it through that
+## parent's global rest basis before summing. This is the exact foot-position derivative
+## for scaling those translations, without temporarily posing an out-of-tree skeleton.
+func _measure_vertical_response(bones: PackedStringArray) -> float:
+	var response := Vector3.ZERO
+	for bone in bones:
+		var idx := _skeleton.find_bone(bone)
+		if idx == -1:
+			continue
+		var parent := _skeleton.get_bone_parent(idx)
+		var parent_basis := _skeleton.get_bone_global_rest(parent).basis \
+			if parent != -1 else Basis.IDENTITY
+		response += parent_basis * _skeleton.get_bone_rest(idx).origin
+	return absf(response.y)
 
 
 # --- Applying the pose --------------------------------------------------------
@@ -196,6 +202,10 @@ func clear_ground_extensions(instant := true, delta := 0.0) -> void:
 
 func ground_extension(index: int) -> float:
 	return _ground_extensions[index] if index >= 0 and index < _ground_extensions.size() else 0.0
+
+
+func leg_vertical_response(index: int) -> float:
+	return _leg_vertical_reach[index] if index >= 0 and index < _leg_vertical_reach.size() else 0.0
 
 
 ## A newly selected animal already sits on its authored sole plane. Do not recompute

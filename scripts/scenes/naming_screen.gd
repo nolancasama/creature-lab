@@ -6,8 +6,8 @@ extends Node3D
 ## grammar is about; standing them side by side while the three sentences are on screen
 ## is the moment the lesson lands.
 
-const GHOST_POS := Vector3(-2.4, 0.0, 0.0)
-const CREATURE_POS := Vector3(1.7, 0.0, 0.0)
+const BEFORE_POS := Vector3(-2.55, 0.0, 0.0)
+const NOW_POS := Vector3(2.55, 0.0, 0.0)
 
 var _candidates := PackedStringArray()
 var _index := 0
@@ -38,13 +38,13 @@ func _build_stage() -> void:
 	add_child(StageKit.fill_light(Color("#fff2d0"), Vector3(2.4, 3.4, 3.4), 0.9, 14.0))
 	add_child(StageKit.ground(11.0, Color("#111a2a")))
 
-	var ghost_platform := StageKit.platform(1.5, Color("#1b2438"), UiKit.MUTED)
-	ghost_platform.position = GHOST_POS
-	add_child(ghost_platform)
+	var before_platform := StageKit.platform(1.55, Color("#1b2438"), UiKit.MUTED)
+	before_platform.position = BEFORE_POS
+	add_child(before_platform)
 
-	var creature_platform := StageKit.platform(1.9, Color("#243352"), UiKit.GOLD)
-	creature_platform.position = CREATURE_POS
-	add_child(creature_platform)
+	var now_platform := StageKit.platform(1.9, Color("#243352"), UiKit.GOLD)
+	now_platform.position = NOW_POS
+	add_child(now_platform)
 
 	var ghost := CreatureFactory.build_before_ghost(Game.current)
 	var creature := CreatureFactory.build_fantasy(Game.current)
@@ -60,19 +60,19 @@ func _build_stage() -> void:
 	var fit := clampf(2.9 / tallest, 0.3, 1.25)
 
 	if ghost != null:
-		ghost.position = GHOST_POS + Vector3(0, 0.28, 0)
+		ghost.position = BEFORE_POS + Vector3(0, 0.28, 0)
 		ghost.rotation.y = -0.7
 		ghost.scale = Vector3.ONE * fit
 		add_child(ghost)
 
 	_creature_root = Node3D.new()
-	_creature_root.position = CREATURE_POS + Vector3(0, 0.3, 0)
+	_creature_root.position = NOW_POS + Vector3(0, 0.3, 0)
 	_creature_root.scale = Vector3.ONE * fit
 	add_child(_creature_root)
 	if creature != null:
 		_creature_root.add_child(creature)
 
-	add_child(StageKit.camera(Vector3(-0.3, 3.5, 11.4), Vector3(-0.3, 0.8, 0.0), 50.0))
+	add_child(StageKit.camera(Vector3(0.0, 3.5, 11.4), Vector3(0.0, 0.8, 0.0), 50.0))
 
 
 func _build_ui() -> void:
@@ -90,11 +90,11 @@ func _build_ui() -> void:
 	panel.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
 	panel.offset_left = 120
 	panel.offset_right = -120
-	panel.offset_top = -300
+	panel.offset_top = -354
 	panel.offset_bottom = -28
 	root.add_child(panel)
 
-	var column := UiKit.vbox(10)
+	var column := UiKit.vbox(8)
 	panel.add_child(column)
 	column.add_child(UiKit.title("You created...", UiKit.H3, UiKit.MUTED))
 
@@ -105,37 +105,23 @@ func _build_ui() -> void:
 	_entry.custom_minimum_size = Vector2(0, 62)
 	column.add_child(_entry)
 
-	var sentences := UiKit.hbox(10)
-	sentences.alignment = BoxContainer.ALIGNMENT_CENTER
-	column.add_child(sentences)
-	for sentence in Game.current.sentences():
-		var chip := UiKit.panel(Color("#101a2b"), 10)
-		chip.add_child(UiKit.label(sentence, UiKit.SMALL, UiKit.TEXT))
-		sentences.add_child(chip)
-
-	var row := UiKit.hbox(12)
-	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	column.add_child(row)
+	var send := UiKit.button("Send to my zoo", UiKit.H3, true)
+	send.custom_minimum_size = Vector2(360, 54)
+	send.pressed.connect(_send_to_zoo)
+	column.add_child(send)
 
 	var another := UiKit.button("Another name", UiKit.H3)
-	another.custom_minimum_size = Vector2(240, 54)
+	another.custom_minimum_size = Vector2(360, 54)
 	another.pressed.connect(_next_name)
-	row.add_child(another)
+	column.add_child(another)
 
-	if Tts.available():
-		var listen := UiKit.button("Listen", UiKit.H3)
-		listen.custom_minimum_size = Vector2(150, 54)
-		listen.pressed.connect(func() -> void:
-			Tts.speak("%s. %s" % [_current_name(), " ".join(Game.current.sentences())]))
-		row.add_child(listen)
-
-	var send := UiKit.button("Send to my Zoo  ->", UiKit.H3, true)
-	send.custom_minimum_size = Vector2(300, 54)
-	send.pressed.connect(_send_to_zoo)
-	row.add_child(send)
+	var start_again := UiKit.button("Start again", UiKit.H3)
+	start_again.custom_minimum_size = Vector2(360, 54)
+	start_again.pressed.connect(_start_again)
+	column.add_child(start_again)
 
 
-## Labels the two platforms, so the ghost is unmistakably the "It was" version.
+## Labels the two platforms with the before/now comparison.
 func _build_captions() -> Control:
 	var bar := UiKit.hbox(0)
 	bar.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
@@ -144,11 +130,11 @@ func _build_captions() -> Control:
 	bar.offset_left = 60
 	bar.offset_right = -60
 
-	var was := UiKit.title("It was...", UiKit.H2, UiKit.MUTED)
-	was.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	bar.add_child(was)
+	var before := UiKit.title("Before", UiKit.H2, UiKit.MUTED)
+	before.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	bar.add_child(before)
 
-	var now := UiKit.title("Now it is...", UiKit.H2, UiKit.GOLD)
+	var now := UiKit.title("Now", UiKit.H2, UiKit.GOLD)
 	now.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	bar.add_child(now)
 	return bar
@@ -172,3 +158,9 @@ func _send_to_zoo() -> void:
 	Audio.play("success")
 	Game.finish_creature(_current_name())
 	Game.set_phase(Game.Phase.ZOO)
+
+
+func _start_again() -> void:
+	Audio.play("click")
+	Game.abandon_creature()
+	Game.set_phase(Game.Phase.ANIMAL_SELECTION)

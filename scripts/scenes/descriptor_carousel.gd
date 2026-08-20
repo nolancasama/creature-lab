@@ -30,15 +30,17 @@ enum View { CATEGORY, COLOUR }
 enum ColourStep { BEFORE, AFTER }
 
 ## Sized to fit the panel it is mounted in, not chosen for looks: the row is
-## arrow + side + main + side + arrow plus four gaps, and the right panel gives it 596px
-## once its own padding is taken off. Overshoot that and the far arrow lands outside the
-## panel, which is exactly how the first build shipped its right arrow off the edge.
+## arrow + side + main + side + arrow plus four gaps. Keep the total within the fixed
+## selection console or the far arrow lands outside it, which is exactly how the first
+## build shipped its right arrow off the edge.
 ## One card per adjective, side by side, so the pair still reads as a pair. Two of these
 ## plus the gap has to come in under what CARD_SIZE used to occupy or the row stops fitting.
 const WORD_CARD_SIZE := Vector2(140, 112)
 const WORD_GAP := 8
 const SIDE_CARD_SIZE := Vector2(112, 78)
-const ARROW_SIZE := 44
+const ARROW_SIZE := 55 ## 25% larger than the former 44px chevron controls.
+const CATEGORY_ARROW_FONT := 38 ## 25% larger than the former 30px glyphs.
+const COLOUR_ARROW_FONT := 28 ## 25% larger than the former 22px glyphs.
 const CAROUSEL_GAP := 8
 const SWATCH_SIZE := Vector2(220, 94)
 const COLOUR_SIDE_SIZE := Vector2(96, 68)
@@ -180,7 +182,7 @@ func _build_category_view(page: VBoxContainer) -> void:
 
 
 func _arrow(glyph: String, step: int) -> Button:
-	var b := UiKit.button(glyph, UiKit.H2)
+	var b := UiKit.button(glyph, CATEGORY_ARROW_FONT)
 	b.custom_minimum_size = Vector2(ARROW_SIZE, ARROW_SIZE)
 	b.focus_mode = Control.FOCUS_NONE
 	# Square, and centred against the cards. Left to fill, an HBox stretches it to the
@@ -278,8 +280,8 @@ func _build_colour_view(page: VBoxContainer) -> void:
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	page.add_child(row)
 
-	var left := UiKit.button("<", UiKit.H3)
-	left.custom_minimum_size = Vector2(44, 44)
+	var left := UiKit.button("<", COLOUR_ARROW_FONT)
+	left.custom_minimum_size = Vector2(ARROW_SIZE, ARROW_SIZE)
 	left.focus_mode = Control.FOCUS_NONE
 	left.size_flags_vertical = Control.SIZE_SHRINK_CENTER ## Square, not a full-height pill.
 	UiKit.style_button(left, UiKit.PANEL_HI)
@@ -296,19 +298,20 @@ func _build_colour_view(page: VBoxContainer) -> void:
 	_colour_next = _colour_card(COLOUR_SIDE_SIZE, 0.48)
 	row.add_child(_colour_next)
 
-	var right := UiKit.button(">", UiKit.H3)
-	right.custom_minimum_size = Vector2(44, 44)
+	var right := UiKit.button(">", COLOUR_ARROW_FONT)
+	right.custom_minimum_size = Vector2(ARROW_SIZE, ARROW_SIZE)
 	right.focus_mode = Control.FOCUS_NONE
 	right.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	UiKit.style_button(right, UiKit.PANEL_HI)
 	right.pressed.connect(func() -> void: _step_colour(1))
 	row.add_child(right)
 
-	var actions := UiKit.hbox(12)
+	var actions := UiKit.vbox(8)
 	actions.alignment = BoxContainer.ALIGNMENT_CENTER
 	page.add_child(actions)
 	_colour_confirm = UiKit.button("Confirm", UiKit.BODY, true)
 	_colour_confirm.custom_minimum_size = ACTION_SIZE
+	_colour_confirm.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	_colour_confirm.focus_mode = Control.FOCUS_NONE
 	UiKit.style_button(_colour_confirm, UiKit.CTA, true)
 	_colour_confirm.pressed.connect(_confirm_colour)
@@ -316,6 +319,7 @@ func _build_colour_view(page: VBoxContainer) -> void:
 
 	_colour_cancel = UiKit.button("Cancel", UiKit.BODY)
 	_colour_cancel.custom_minimum_size = ACTION_SIZE
+	_colour_cancel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	_colour_cancel.focus_mode = Control.FOCUS_NONE
 	UiKit.style_button(_colour_cancel, UiKit.PANEL_HI)
 	_colour_cancel.pressed.connect(_cancel_colour)

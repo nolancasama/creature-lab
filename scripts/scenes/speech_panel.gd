@@ -25,6 +25,7 @@ const LISTEN_WIDTH := 96
 
 var _sentence_label: RichTextLabel = null
 var _feedback: Label = null
+var _title: Label = null
 var _mic_button: Button = null
 var _entry: LineEdit = null
 var _listen_button: Button = null
@@ -57,11 +58,11 @@ func _build() -> void:
 	header.custom_minimum_size = Vector2(0, HEADER_HEIGHT)
 	column.add_child(header)
 
-	var title := UiKit.label("SAY IT", UiKit.H3, UiKit.ACCENT)
-	title.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	header.add_child(title)
+	_title = UiKit.label("SAY IT", UiKit.H3, UiKit.ACCENT)
+	_title.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	header.add_child(_title)
 
 	_listen_button = UiKit.button("Listen", UiKit.SMALL)
 	_listen_button.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
@@ -149,6 +150,7 @@ func _build() -> void:
 
 func _sync_input_mode() -> void:
 	var mic := Speech.uses_microphone()
+	_title.text = "SAY IT" if mic else "TYPE IT"
 	_mic_button.visible = mic
 	_entry.visible = not mic
 
