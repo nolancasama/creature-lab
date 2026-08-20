@@ -118,6 +118,22 @@ func _apply_frame(t: float) -> void:
 	camera.look_at_from_position(eye, look, Vector3.UP)
 
 
+## How high the creature currently reaches, in stage space. Read off the mesh through the
+## live transform chain, so it already accounts for the platform, BIG's body scale and
+## TALL's lift rather than assuming the animal is the size it was authored at. A horse
+## grown tall is more than twice a chicken, and a machine placed at one fixed height either
+## speared the tall one or hovered uselessly far above the short one.
+func creature_top() -> float:
+	if _rig == null or not is_instance_valid(_rig) or _rig.mesh_instance == null:
+		return STAND.y
+	var box := _rig.mesh_instance.get_aabb()
+	var to_stage := global_transform.affine_inverse() * _rig.mesh_instance.global_transform
+	var top := -INF
+	for i in 8:
+		top = maxf(top, (to_stage * box.get_endpoint(i)).y)
+	return top if is_finite(top) else STAND.y
+
+
 ## Vents around the rim, so the steam belongs to the platform the student has been
 ## watching rather than appearing from nowhere underneath the animal.
 func vent_steam(amount: float) -> void:

@@ -19,7 +19,11 @@ extends Node3D
 signal flash_requested(strength: float)
 
 const PARK_HEIGHT := 7.2 ## Out of frame above the platform.
-const WORK_HEIGHT := 3.05 ## Low enough to frame the animal, high enough to clear a horse.
+const WORK_HEIGHT := 3.05 ## Fallback only; the director sizes this to the actual creature.
+## How far the machine reaches below its own origin - the prong tips plus their bulbs.
+## Whatever height it is asked to work at, this much of it hangs underneath, so the caller
+## has something concrete to clear the animal by.
+const DROP_BELOW := 1.16
 const RING_COUNT := 3
 const PRONG_COUNT := 4
 const PRONG_REACH := 1.5
@@ -179,20 +183,20 @@ func _metal(color: Color) -> StandardMaterial3D:
 
 ## Comes down under its own weight and settles, rather than easing politely into place -
 ## it should land like something heavy arriving.
-func descend(duration := 1.7) -> void:
+func descend(to_y := WORK_HEIGHT, duration := 1.7) -> void:
 	visible = true
-	position.y = PARK_HEIGHT
+	position.y = maxf(to_y, PARK_HEIGHT)
 	Audio.play("charge", 0.7)
 	var tween := create_tween()
-	tween.tween_property(self, "position:y", WORK_HEIGHT, duration) \
+	tween.tween_property(self, "position:y", to_y, duration) \
 		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	await tween.finished
 	Audio.play("thud", 0.9)
 
 
-func park() -> void:
+func park(to_y := WORK_HEIGHT) -> void:
 	visible = true
-	position.y = WORK_HEIGHT
+	position.y = to_y
 
 
 func retract(duration := 1.4) -> void:

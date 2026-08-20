@@ -27,6 +27,11 @@ extends RefCounted
 const BEAT_SPEAK := 1.9
 const MAX_BEAT := 6.0 ## A runaway recording must not hold the whole sequence open.
 const REVEAL_HOLD := 1.1
+## Gap between the top of the animal and the lowest part of the machine. Enough to read as
+## "hanging over it" rather than "resting on it", and enough that the bolts have somewhere
+## to travel.
+const HEAD_CLEARANCE := 0.55
+const REFERENCE_TOP := 1.9 ## The creature height the framings were originally written for.
 const GROW_TIME := 0.7
 
 var _stage: LabStage = null
@@ -53,12 +58,12 @@ func run(state: CreatureState) -> void:
 	_show_banner()
 
 	if _skip:
-		_stage.array.park()
+		_stage.array.park(_work_height())
 	else:
 		await _stage.frame(_hero_eye(), _machine_aim(), 1.0).finished
 		if not _alive():
 			return
-		await _stage.array.descend()
+		await _stage.array.descend(_work_height())
 
 	# Each sentence: the lab says it, the machine answers it. Three of them, each one
 	# harder than the last, so the sequence builds instead of just repeating.
@@ -111,9 +116,9 @@ func _beat(index: int, total: int, sentence: String) -> void:
 	# sentence rather than a cut, so the animal never leaves the frame.
 	var eye := _hero_eye()
 	match index:
-		0: eye = _hero_eye() + Vector3(0.4, -0.6, -1.6)
-		1: eye = _stage.STAND + Vector3(3.4, 0.7, 4.4)
-		_: eye = _stage.STAND + Vector3(-3.6, 1.5, 4.0)
+		0: eye = _hero_eye() + Vector3(0.4, -0.6, -1.6) * _spread()
+		1: eye = _stage.STAND + Vector3(3.4, 0.7, 4.4) * _spread()
+		_: eye = _stage.STAND + Vector3(-3.6, 1.5, 4.0) * _spread()
 	_stage.frame(eye, _machine_aim(), BEAT_SPEAK + 0.5)
 
 	# Wait for the recording to actually finish rather than a fixed guess: a child who
@@ -145,7 +150,7 @@ func _peak() -> void:
 	Audio.play("transform", 1.0)
 	_stage.array.set_charge(1.0)
 	_stage.array.flash(0.85) ## Not a full white-out: the silhouette has to stay findable.
-	_stage.cut_to(_stage.STAND + Vector3(0.0, 1.2, 3.4), _machine_aim())
+	_stage.cut_to(_stage.STAND + Vector3(0.0, 1.2, 3.4) * _spread(), _machine_aim())
 	for i in 10:
 		if not _alive():
 			return
@@ -170,7 +175,7 @@ func _reveal() -> void:
 		_stage.array.visible = false
 		_stage.reset_camera()
 		return
-	var pull := _stage.frame(_hero_eye() + Vector3(-0.8, 0.35, 1.4),
+	var pull := _stage.frame(_hero_eye() + Vector3(-0.8, 0.35, 1.4) * _spread(),
 		_stage.STAND + Vector3(0, 0.45, 0), 1.6)
 	await _stage.array.retract()
 	if not _alive():
@@ -183,24 +188,42 @@ func _reveal() -> void:
 		_stage.reset_camera()
 
 
+## Where the machine hangs: clear of the tallest point of THIS animal, not at a height
+## picked for an average one. A tall horse used to stand inside the prongs.
+func _work_height() -> float:
+	var clear: float = _stage.creature_top() + HEAD_CLEARANCE + TransformArray.DROP_BELOW
+	return maxf(clear, TransformArray.WORK_HEIGHT)
+
+
+## How much further out everything has to sit for a creature taller than the one these
+## framings were written around. Never below 1.0: a chicken does not need the camera pushed
+## closer than the shot was designed for, it just needs the machine lower.
+func _spread() -> float:
+	return maxf(_stage.creature_top() / REFERENCE_TOP, 1.0)
+
+
 ## Slightly off-axis and above standing height: head-on hides the body behind the head,
-## which is the same reason set_rig turns the creature three-quarters on.
+## which is the same reason set_rig turns the creature three-quarters on. Scaled outward
+## for a tall animal so the machine above it stays in frame instead of being cropped.
 func _hero_eye() -> Vector3:
-	return _stage.STAND + Vector3(2.2, 1.4, 5.6)
+	return _stage.STAND + Vector3(2.2, 1.4, 5.6) * _spread()
 
 
 ## Between the animal's back and the machine's prongs. Aimed at the animal alone, the
 ## apparatus sits above the top of the frame and the student never sees the thing that is
 ## supposedly doing the transformation.
 func _machine_aim() -> Vector3:
-	return _stage.STAND + Vector3(0.0, 1.35, 0.0)
+	return _stage.STAND + Vector3(0.0, maxf(_stage.creature_top() * 0.72, 1.35), 0.0)
 
 
 ## Chest height rather than the feet, so the bolts land on the animal and not the floor.
 func _bolt_target() -> Vector3:
 	var stand: Vector3 = _stage.STAND
 	var local := stand - _stage.array.position
-	return local + Vector3(randf_range(-0.35, 0.35), randf_range(0.45, 1.1),
+	# Spread over the animal's own height, so bolts land on a horse's back rather than
+	# somewhere around its knees.
+	var reach: float = maxf(_stage.creature_top() - stand.y, 0.6)
+	return local + Vector3(randf_range(-0.35, 0.35), randf_range(reach * 0.35, reach * 0.9),
 		randf_range(-0.35, 0.35))
 
 
