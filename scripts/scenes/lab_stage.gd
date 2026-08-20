@@ -24,12 +24,12 @@ var _aim_to := Vector3.ZERO
 
 
 func _ready() -> void:
-	add_child(StageKit.environment(Color("#0c1524"), Color("#1b3050"), 0.35))
+	add_child(StageKit.environment(Color("#050a12"), Color("#0e1d32"), 0.35))
 	add_child(StageKit.key_light(Vector3(-50, -26, 0), 1.5))
 	add_child(StageKit.fill_light(UiKit.ACCENT, Vector3(-3.6, 4.2, 5.2), 2.4, 16.0))
 	add_child(StageKit.fill_light(UiKit.GOLD, Vector3(5.0, 2.4, 4.5), 1.8, 12.0))
 
-	var floor_disc := StageKit.ground(30.0, Color("#0f1726"))
+	var floor_disc := StageKit.ground(30.0, Color("#070b13"))
 	add_child(floor_disc)
 
 	var platform := StageKit.platform(2.0, Color("#1d2a42"), UiKit.ACCENT)

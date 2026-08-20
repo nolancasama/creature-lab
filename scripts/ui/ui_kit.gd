@@ -6,7 +6,9 @@ extends RefCounted
 ## and the animal grid are all generated from content files - so a code-built theme keeps
 ## one source of truth instead of a .tres theme that half the widgets ignore.
 
-const BG := Color("#0e1622")
+## Deep backdrop for every 2D screen outside the zoo. Keeping it below the panel palette
+## makes controls, and the creature stages they lead into, carry the visual focus.
+const BG := Color("#070c14")
 const PANEL := Color("#16233a")
 const PANEL_HI := Color("#1e3050")
 const LINE := Color("#2c4468")

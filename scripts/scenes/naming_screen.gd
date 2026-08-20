@@ -6,12 +6,13 @@ extends Node3D
 ## grammar is about; standing them side by side while the three sentences are on screen
 ## is the moment the lesson lands.
 
-const BEFORE_POS := Vector3(-2.55, 0.0, 0.0)
-const NOW_POS := Vector3(2.55, 0.0, 0.0)
+const BEFORE_POS := Vector3(-4.6, 0.0, 0.0)
+const NOW_POS := Vector3(4.6, 0.0, 0.0)
 
 var _candidates := PackedStringArray()
 var _index := 0
 var _entry: LineEdit = null
+var _before_root: Node3D = null
 var _creature_root: Node3D = null
 
 
@@ -28,15 +29,17 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	if _before_root != null:
+		_before_root.rotation.y += delta * 0.35
 	if _creature_root != null:
 		_creature_root.rotation.y += delta * 0.35
 
 
 func _build_stage() -> void:
-	add_child(StageKit.environment(Color("#152238"), Color("#31527d"), 0.55))
+	add_child(StageKit.environment(Color("#08101d"), Color("#172d4a"), 0.55))
 	add_child(StageKit.key_light(Vector3(-50, -30, 0), 1.0))
 	add_child(StageKit.fill_light(Color("#fff2d0"), Vector3(2.4, 3.4, 3.4), 0.9, 14.0))
-	add_child(StageKit.ground(11.0, Color("#111a2a")))
+	add_child(StageKit.ground(11.0, Color("#080d16")))
 
 	var before_platform := StageKit.platform(1.55, Color("#1b2438"), UiKit.MUTED)
 	before_platform.position = BEFORE_POS
@@ -63,6 +66,7 @@ func _build_stage() -> void:
 		ghost.position = BEFORE_POS + Vector3(0, 0.28, 0)
 		ghost.rotation.y = -0.7
 		ghost.scale = Vector3.ONE * fit
+		_before_root = ghost
 		add_child(ghost)
 
 	_creature_root = Node3D.new()
@@ -87,9 +91,9 @@ func _build_ui() -> void:
 	root.add_child(_build_captions())
 
 	var panel := UiKit.panel(Color(0.05, 0.09, 0.15, 0.94), 18, 2, UiKit.PANEL_HI)
-	panel.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
-	panel.offset_left = 120
-	panel.offset_right = -120
+	panel.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	panel.offset_left = -220
+	panel.offset_right = 220
 	panel.offset_top = -354
 	panel.offset_bottom = -28
 	root.add_child(panel)
@@ -127,8 +131,8 @@ func _build_captions() -> Control:
 	bar.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
 	bar.offset_top = 22
 	bar.offset_bottom = 70
-	bar.offset_left = 60
-	bar.offset_right = -60
+	bar.offset_left = 0
+	bar.offset_right = 0
 
 	var before := UiKit.title("Before", UiKit.H2, UiKit.MUTED)
 	before.size_flags_horizontal = Control.SIZE_EXPAND_FILL

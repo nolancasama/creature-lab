@@ -1,6 +1,5 @@
 extends Node3D
-## The reward. Every creature here was built out of three sentences a student spoke, and
-## clicking one shows exactly which three - the zoo is the score.
+## The reward. Every creature here gets a quiet close-up when selected.
 
 ## Half-extents of the yard, X by Z. A rectangle rather than a disc: a zoo enclosure is a
 ## fenced field, and a round one with no corners read as an arena.
@@ -10,15 +9,20 @@ const POST_SPACING := 1.7
 const RAIL_HEIGHTS := [0.42, 0.82]
 const ORBIT_SPEED := 0.006
 const ZOOM_LIMITS := Vector2(9.0, 26.0)
+const FOCUS_DISTANCE := 8.0
+const YARD_CAMERA_TARGET := Vector3(0.0, 1.2, 0.0)
 
 var _camera: Camera3D = null
 var _yaw := 0.4
 var _pitch := 0.42
 var _distance := 24.0 ## Far enough back that the whole rectangle is in frame at rest.
+var _camera_target := YARD_CAMERA_TARGET
 var _dragging := false
 var _info: PanelContainer = null
 var _info_body: VBoxContainer = null
 var _creatures: Node3D = null
+var _focused_brain: CreatureBrain = null
+var _distance_before_focus := 24.0
 
 
 func _ready() -> void:
@@ -138,10 +142,10 @@ func _build_ui() -> void:
 	root.add_child(again)
 
 	_info = UiKit.panel(Color(0.05, 0.09, 0.15, 0.95), 16, 2, UiKit.GOLD)
-	_info.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
-	_info.offset_left = 28
-	_info.offset_right = 520
-	_info.offset_top = -300
+	_info.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	_info.offset_left = -230
+	_info.offset_right = 230
+	_info.offset_top = -150
 	_info.offset_bottom = -28
 	_info.visible = false
 	root.add_child(_info)
@@ -184,42 +188,47 @@ func _info_body_reset() -> void:
 
 func _show_info(brain: CreatureBrain) -> void:
 	var state := brain.state_data
-	var def := Content.animal(state.animal_id)
+	if _focused_brain == brain:
+		return
 	Audio.play("pop")
+	if _focused_brain == null:
+		_distance_before_focus = _distance
+	else:
+		_focused_brain.dismiss_focus()
+	_focused_brain = brain
+	_camera_target = brain.global_position + Vector3(0.0, 1.0, 0.0)
+	_distance = FOCUS_DISTANCE
+	_update_camera()
+	brain.focus_on(_camera)
 	_info_body_reset()
 
 	var head := UiKit.hbox(8)
+	head.alignment = BoxContainer.ALIGNMENT_CENTER
 	head.add_child(UiKit.label(state.display_name(), UiKit.H2, UiKit.GOLD))
-	head.add_child(UiKit.expander())
-	var close := UiKit.button("x", UiKit.SMALL)
-	close.pressed.connect(func() -> void: _info.visible = false)
+	var close := UiKit.button("×", UiKit.SMALL)
+	close.custom_minimum_size = Vector2(44, 44)
+	close.pressed.connect(_dismiss_info)
 	head.add_child(close)
 	_info_body.add_child(head)
-
-	_info_body.add_child(UiKit.label(
-		"Made from a %s" % (def.display_name.to_lower() if def != null else state.animal_id),
-		UiKit.BODY, UiKit.MUTED))
-	_info_body.add_child(UiKit.spacer(4))
-
-	for sentence in state.sentences():
-		var chip := UiKit.panel(Color("#101a2b"), 10)
-		chip.add_child(UiKit.label(sentence, UiKit.BODY, UiKit.TEXT))
-		_info_body.add_child(chip)
-
-	if state.needed_help():
-		_info_body.add_child(UiKit.label("A teacher accepted one of these.", UiKit.SMALL, UiKit.GOLD))
-
-	if Tts.available():
-		var listen := UiKit.button("Listen to my sentences", UiKit.SMALL)
-		listen.pressed.connect(func() -> void: Tts.speak(" ".join(state.sentences())))
-		_info_body.add_child(listen)
-
 	_info.visible = true
+
+
+func _dismiss_info() -> void:
+	Audio.play("click")
+	if _focused_brain != null:
+		_focused_brain.dismiss_focus()
+	_focused_brain = null
+	_camera_target = YARD_CAMERA_TARGET
+	_distance = _distance_before_focus
+	_update_camera()
+	_info.visible = false
 
 
 # --- Camera ------------------------------------------------------------------
 
 func _unhandled_input(event: InputEvent) -> void:
+	if _focused_brain != null:
+		return
 	if event is InputEventMouseButton:
 		var button: InputEventMouseButton = event
 		if button.button_index == MOUSE_BUTTON_LEFT:
@@ -243,5 +252,6 @@ func _update_camera() -> void:
 		sin(_pitch),
 		cos(_pitch) * cos(_yaw)
 	) * _distance
-	_camera.position = offset + Vector3(0, 0.8, 0)
-	_camera.look_at(Vector3(0, 1.2, 0), Vector3.UP)
+	var target_shift := _camera_target - YARD_CAMERA_TARGET
+	_camera.position = offset + Vector3(0, 0.8, 0) + target_shift
+	_camera.look_at(_camera_target, Vector3.UP)

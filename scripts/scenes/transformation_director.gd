@@ -202,11 +202,11 @@ func _spread() -> float:
 	return maxf(_stage.creature_top() / REFERENCE_TOP, 1.0)
 
 
-## Slightly off-axis and above standing height: head-on hides the body behind the head,
-## which is the same reason set_rig turns the creature three-quarters on. Scaled outward
-## for a tall animal so the machine above it stays in frame instead of being cropped.
+## Centered directly in front of the platform and above standing height for the final shot
+## before the ceiling machine descends. Scaled outward for a tall animal so the machine above
+## it stays in frame instead of being cropped.
 func _hero_eye() -> Vector3:
-	return _stage.STAND + Vector3(2.2, 1.4, 5.6) * _spread()
+	return _stage.STAND + Vector3(0.0, 1.4, 5.6) * _spread()
 
 
 ## Between the animal's back and the machine's prongs. Aimed at the animal alone, the

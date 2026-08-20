@@ -154,10 +154,12 @@ func _unhandled_input(event: InputEvent) -> void:
 # --- Stage ---------------------------------------------------------------------
 
 func _build_stage() -> void:
-	add_child(StageKit.environment(Color("#16243c"), Color("#2b4a72"), 0.5))
+	# The platform and directly lit animal are the subject; a mid-blue sky and gray floor
+	# competed with both. Lights stay unchanged so only the surrounding stage falls back.
+	add_child(StageKit.environment(Color("#09111f"), Color("#152a45"), 0.5))
 	add_child(StageKit.key_light())
 	add_child(StageKit.fill_light(Color("#cfe6ff"), Vector3(-3.0, 3.2, 3.2), 1.1, 14.0))
-	add_child(StageKit.ground(9.0, Color("#141d2c")))
+	add_child(StageKit.ground(9.0, Color("#080d16")))
 
 	_platform = StageKit.platform(1.8, Color("#22304a"), UiKit.ACCENT)
 	_platform.position = PLATFORM_POS

@@ -25,6 +25,7 @@ var _hover := 0.0
 var _rng := RandomNumberGenerator.new()
 var _action_word := ""
 var _area: Area3D = null
+var _focused := false
 
 
 static func create(state: CreatureState, spawn: Vector3) -> CreatureBrain:
@@ -69,8 +70,33 @@ func _build_click_target(def: AnimalDefinition) -> void:
 
 
 func _on_area_input(_camera: Node, event: InputEvent, _pos: Vector3, _normal: Vector3, _idx: int) -> void:
-	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+	# Annotated, not inferred: `pressed` on a base InputEvent has no static type, so `:=`
+	# cannot work out that these are booleans and the script fails to compile - which on
+	# this screen means a grey zoo rather than an error anyone would see.
+	var tapped: bool = event is InputEventScreenTouch and event.pressed
+	var clicked_mouse: bool = event is InputEventMouseButton and event.pressed \
+		and event.button_index == MOUSE_BUTTON_LEFT
+	if tapped or clicked_mouse:
 		clicked.emit(self)
+
+
+## Hold the resident still while the zoo camera presents it. The yaw is calculated after the
+## camera has moved, so the animal faces the actual camera rather than the old yard view.
+func focus_on(camera: Camera3D) -> void:
+	_focused = true
+	_state = State.IDLE
+	_timer = INF
+	if rig != null:
+		rig.moving = false
+	var direction := camera.global_position - global_position
+	direction.y = 0.0
+	if direction.length_squared() > 0.0001:
+		rotation.y = atan2(-direction.x, -direction.z)
+
+
+func dismiss_focus() -> void:
+	_focused = false
+	_enter(State.IDLE)
 
 
 func _trait_speed_scale() -> float:
@@ -91,6 +117,8 @@ func _pick_action_word() -> String:
 
 
 func _physics_process(delta: float) -> void:
+	if _focused:
+		return
 	_timer -= delta
 	match _state:
 		State.WALK:
