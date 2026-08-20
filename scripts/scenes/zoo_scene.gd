@@ -234,12 +234,16 @@ func _unhandled_input(event: InputEvent) -> void:
 	if _focused_brain != null:
 		return
 	if event is InputEventScreenTouch:
+		if event.pressed:
+			_pick_creature_at(event.position)
 		_handle_screen_touch(event)
 	elif event is InputEventScreenDrag:
 		_handle_screen_drag(event)
 	elif event is InputEventMouseButton:
 		var button: InputEventMouseButton = event
 		if button.button_index == MOUSE_BUTTON_LEFT:
+			if button.pressed:
+				_pick_creature_at(button.position)
 			_dragging = button.pressed
 		elif button.button_index == MOUSE_BUTTON_WHEEL_UP and button.pressed:
 			_distance = clampf(_distance - 1.4, ZOOM_LIMITS.x, ZOOM_LIMITS.y)
@@ -252,6 +256,25 @@ func _unhandled_input(event: InputEvent) -> void:
 		_yaw -= motion.relative.x * ORBIT_SPEED
 		_pitch = clampf(_pitch - motion.relative.y * ORBIT_SPEED, 0.12, 1.25)
 		_update_camera()
+
+
+func _pick_creature_at(screen_position: Vector2) -> void:
+	if _camera == null or _creatures == null:
+		return
+	var origin := _camera.project_ray_origin(screen_position)
+	var endpoint := origin + _camera.project_ray_normal(screen_position) * 100.0
+	var query := PhysicsRayQueryParameters3D.create(origin, endpoint)
+	query.collide_with_areas = true
+	query.collide_with_bodies = false
+	var hit := get_world_3d().direct_space_state.intersect_ray(query)
+	if hit.is_empty():
+		return
+	var node: Node = hit.get("collider")
+	while node != null and node != _creatures:
+		if node is CreatureBrain:
+			_show_info(node)
+			return
+		node = node.get_parent()
 
 
 func _handle_screen_touch(event: InputEventScreenTouch) -> void:

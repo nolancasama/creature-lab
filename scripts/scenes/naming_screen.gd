@@ -6,9 +6,8 @@ extends Node3D
 ## grammar is about; standing them side by side while the three sentences are on screen
 ## is the moment the lesson lands.
 
-const BEFORE_POS := Vector3(-4.6, 0.0, 0.0)
-const NOW_POS := Vector3(4.6, 0.0, 0.0)
-const DISPLAY_PLATFORM_TILT := -0.275
+const BEFORE_POS := Vector3(-4.9, 0.0, 0.0)
+const NOW_POS := Vector3(4.9, 0.0, 0.0)
 
 var _candidates := PackedStringArray()
 var _index := 0
@@ -40,16 +39,14 @@ func _build_stage() -> void:
 	add_child(StageKit.environment(Color("#08101d"), Color("#172d4a"), 0.55))
 	add_child(StageKit.key_light(Vector3(-50, -30, 0), 1.0))
 	add_child(StageKit.fill_light(Color("#fff2d0"), Vector3(2.4, 3.4, 3.4), 0.9, 14.0))
-	add_child(StageKit.ground(11.0, Color("#080d16")))
+	add_child(_comparison_floor())
 
 	var before_platform := StageKit.platform(1.55, Color("#1b2438"), UiKit.MUTED)
 	before_platform.position = BEFORE_POS
-	before_platform.rotation.x = DISPLAY_PLATFORM_TILT
 	add_child(before_platform)
 
 	var now_platform := StageKit.platform(1.9, Color("#243352"), UiKit.GOLD)
 	now_platform.position = NOW_POS
-	now_platform.rotation.x = DISPLAY_PLATFORM_TILT
 	add_child(now_platform)
 
 	var ghost := CreatureFactory.build_before_ghost(Game.current)
@@ -80,6 +77,24 @@ func _build_stage() -> void:
 		_creature_root.add_child(creature)
 
 	add_child(StageKit.camera(Vector3(0.0, 3.5, 11.4), Vector3(0.0, 0.8, 0.0), 50.0))
+
+
+func _comparison_floor() -> Node3D:
+	var root := Node3D.new()
+	root.name = "ComparisonFloor"
+	var floor := MeshInstance3D.new()
+	var mesh := BoxMesh.new()
+	# The rear edge sits just behind the display platforms, producing a straight horizon
+	# through their centre line instead of the curved edge of a circular stage disc.
+	mesh.size = Vector3(30.0, 0.2, 23.0)
+	floor.mesh = mesh
+	floor.position = Vector3(0.0, -0.1, 11.15)
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color("#080d16")
+	material.roughness = 0.95
+	floor.material_override = material
+	root.add_child(floor)
+	return root
 
 
 func _build_ui() -> void:

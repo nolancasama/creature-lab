@@ -153,6 +153,7 @@ static func _add_spectacles(rig: CreatureRig, def: AnimalDefinition, a: Dictiona
 static func _add_beard(rig: CreatureRig, def: AnimalDefinition, a: Dictionary) -> void:
 	var depth := float(a["depth"])
 	var chin: Vector3 = a["chin"]
+	var snout_tip: Vector3 = a["snout_tip"]
 	var size := def.old_value("beard", "size", 0.48) * depth
 	var length := def.old_value("beard", "length", 1.0)
 	var down := def.old_value("beard", "down", 0.0) * depth
@@ -162,9 +163,11 @@ static func _add_beard(rig: CreatureRig, def: AnimalDefinition, a: Dictionary) -
 
 	var beard := Node3D.new()
 	beard.name = "OldBeard"
-	# The outline's top is +0.10, so this offset joins that edge to the measured chin.
+	# The outline's top is +0.10, so this offset joins that edge to the measured chin. Use the
+	# measured snout/beak tip for depth: the whole-head front can be the crown on a penguin,
+	# which leaves a beard floating beside the actual beak.
 	var at := Vector3(0.0, chin.y - size * 0.10 - down,
-		float(a["front"]) + depth * 0.10 + forward)
+		snout_tip.z + depth * 0.03 + forward)
 	beard.scale = Vector3.ONE * size
 
 	var front := MeshInstance3D.new()
