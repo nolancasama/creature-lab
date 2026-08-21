@@ -273,7 +273,7 @@ func _slot_category(slot) -> String:
 func _slot_title(slot) -> String:
 	if slot is Dictionary:
 		return str((slot as Dictionary).get("word", "")).to_upper()
-	return "いろ"
+	return "COLORS"
 
 
 ## The card that was tapped IS the direction: tapping "big" says the animal was big and
