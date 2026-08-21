@@ -676,6 +676,39 @@ static func _report_profile(id: String, samples: Array[Dictionary], speed: float
 		print("[gaittest] %-8s %-12s%s" % [id, leg_id, line])
 
 
+## Every character the UI prints has to exist in the bundled font.
+##
+## This cannot be checked by looking at the game on this machine. Godot fills in glyphs its
+## font lacks from an OS font, so on Windows the Japanese text and the tick marks render
+## perfectly whether or not anything is bundled - and a browser has no OS fonts to borrow,
+## so the web build drew blanks. The desktop is the misleading case, which is exactly why
+## this is asserted against the font file rather than trusted to the eye.
+##
+## The sample is every non-ASCII character that appears inside a quoted string anywhere in
+## the project, regenerated whenever this check is updated. Comments are excluded: a kanji
+## in a comment is never drawn.
+const UI_CHARACTERS := "×…✓、。「」あいうえおかがきぎくぐけげこさしじすずせぜそただちっつてでとどなにのはひびふぶへべぼまみめもやよらりるれろわをんァアィイウェエオカガキクグゲコゴサザジスセタダチッデトドニネハバビフプベペボマムメモャヤュユラリルレロンー一上下中了人今代伝体使保停備元先入全判利前力効化半単厳去古合同名向回在地場塔境声変夕夜大天太失妻存学安完定密少山岩嵐巨常度形影後怪扱承押指文新方明星春晶期木果根桜楽欄次止正残毛水氷河法流海準火灼炎焼熱牙珠現環生用由画番異疾目真短確示稲空立粉紅終組綿羽習老者聞自色花苔若英草葉蛇表見言設話認語説読識豆象送進過量鉄鋼長陽難雪雲霜霧青非面音順風鹿！（）－："
+
+
+static func _font_checks(failures: Array[String]) -> void:
+	var path := str(ProjectSettings.get_setting("gui/theme/custom_font", ""))
+	_check(failures, not path.is_empty(),
+		"no font is bundled, so the web build will draw blanks for anything outside ASCII")
+	if path.is_empty():
+		return
+	var font: Font = load(path)
+	_check(failures, font != null, "bundled font %s failed to load" % path)
+	if font == null:
+		return
+	var missing := ""
+	for i in UI_CHARACTERS.length():
+		var ch := UI_CHARACTERS[i]
+		if not font.has_char(ch.unicode_at(0)):
+			missing += ch
+	_check(failures, missing.is_empty(),
+		"bundled font is missing %d glyph(s) the UI prints: %s" % [missing.length(), missing])
+
+
 static func _bones(main: Node) -> void:
 	for def in Content.animals:
 		var rig := CreatureFactory.build_plain(def.id)
@@ -1342,6 +1375,7 @@ static func _selftest(main: Node) -> void:
 			_check(failures, rig != null, "%s/%s failed to apply" % [pair.category, word])
 			rig.free()
 
+	_font_checks(failures)
 	_speed_checks(failures)
 	await _carousel_checks(failures, main)
 	_voice_checks(failures)

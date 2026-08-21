@@ -30,6 +30,15 @@ window/size/viewport_height=900
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
 
+[gui]
+
+; Bundled rather than relying on the system: Godot falls back to an OS font for glyphs its
+; built-in font lacks, which covers Japanese on Windows and covers nothing in a browser -
+; the web build simply drew blanks where the UI text and the tick marks should have been.
+; Subset of Noto Sans JP (SIL Open Font License), carrying ASCII, every kana, the kanji this
+; project actually uses, and the tick. See ui/noto_sans_jp_subset_ATTRIBUTION.txt.
+theme/custom_font="res://ui/noto_sans_jp_subset.ttf"
+
 [rendering]
 
 anti_aliasing/quality/msaa_3d=2

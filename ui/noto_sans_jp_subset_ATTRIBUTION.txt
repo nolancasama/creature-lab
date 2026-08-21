@@ -1,0 +1,18 @@
+noto_sans_jp_subset.ttf
+
+A subset of Noto Sans JP, pinned to Regular (wght 400) and cut down to the
+characters this project uses: ASCII, the full hiragana and katakana blocks, CJK
+punctuation and fullwidth forms, the kanji that appear in the UI strings, and a
+handful of symbols including the tick (U+2713).
+
+Full kana are kept rather than only the kana in use, because creature names are
+generated at runtime and may combine syllables that appear nowhere in the source.
+
+Source: https://github.com/notofonts/noto-cjk (Sans/Variable/TTF/Subset/NotoSansJP-VF.ttf)
+Licence: SIL Open Font License 1.1. The licence text is retained in the font
+file's own name table (name ID 13/14).
+
+Why it is bundled at all: Godot fills in glyphs its built-in font lacks from an
+OS font. That works on Windows and does not work in a browser, so the web export
+drew nothing for Japanese text or for the tick. See the [gui] block in
+project.godot.
