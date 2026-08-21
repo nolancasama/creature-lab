@@ -1195,8 +1195,28 @@ static func _carousel_checks(failures: Array[String], main: Node) -> void:
 	_check(failures, not car._colour_prev.disabled and not car._colour_swatch.disabled
 		and not car._colour_next.disabled,
 		"carousel: not every visible colour card is selectable")
-	_check(failures, car._colour_swatch.custom_minimum_size == DescriptorCarousel.SWATCH_SIZE,
-		"carousel: centre colour card changed size")
+	# Uniformity, both decks: a card must not look different for sitting in the middle. The
+	# centre swatch was twice the area of its neighbours and the centre word card was
+	# enlarged and ringed, which both read as "this one is the selection" on a row where
+	# every visible card is pressable.
+	for deck in [[car._colour_prev, car._colour_swatch, car._colour_next],
+			[car._prev_card, car._word_cards[0], car._next_card]]:
+		var reference: Vector2 = (deck[1] as Control).custom_minimum_size
+		var size_var: Control = (deck[0] as Control)
+		var uniform_size: bool = size_var.custom_minimum_size == reference \
+			and (deck[2] as Control).custom_minimum_size == reference
+		_check(failures, uniform_size, "carousel: cards in a deck are not the same size")
+		for card in deck:
+			var button := card as Button
+			_check(failures, button != null,
+				"carousel: a visible card is not a Button, so it cannot answer a press")
+			if button == null:
+				continue
+			_check(failures, button.modulate.a >= 0.999,
+				"carousel: a visible card is faded")
+			_check(failures, button.get_theme_font_size("font_size")
+				== (deck[1] as Button).get_theme_font_size("font_size"),
+				"carousel: a visible card uses a different text size")
 	car._step_colour(1)
 	_check(failures, previews.is_empty(),
 		"carousel: BEFORE browsing recoloured the live animal preview")

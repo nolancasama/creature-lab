@@ -33,15 +33,13 @@ enum ColourStep { BEFORE, AFTER }
 ## arrow + side + main + side + arrow plus four gaps. Keep the total within the fixed
 ## selection console or the far arrow lands outside it, which is exactly how the first
 ## build shipped its right arrow off the edge.
-## One card per adjective, side by side, so the pair still reads as a pair. Two of these
-## plus the gap has to come in under what CARD_SIZE used to occupy or the row stops fitting.
-## Every card in the deck is this size, middle one included. A larger centre card says
+## One card per adjective. Every card in the deck is this size, middle one included - there
+## is no separate side-card size, because there is no separate side card. A larger centre card says
 ## "this is the selection" - but any visible word can be tapped, so there is no selection
 ## to point at, and the odd one out only made the row read as a scroller.
 const WORD_CARD_SIZE := Vector2(112, 78)
 const WORD_TEXT_SIZE := UiKit.BODY ## Uniform across the deck, and big enough to read.
 const WORD_GAP := 8
-const SIDE_CARD_SIZE := Vector2(112, 78)
 const ARROW_SIZE := 55 ## 25% larger than the former 44px chevron controls.
 const CATEGORY_ARROW_FONT := 38 ## 25% larger than the former 30px glyphs.
 const COLOUR_ARROW_FONT := 28 ## 25% larger than the former 22px glyphs.
@@ -49,8 +47,12 @@ const CAROUSEL_GAP := 8
 const CAROUSEL_ARROW_GAP := 24 ## Three times the word-to-word gap, only beside the chevrons.
 const COLOUR_CARD_GAP := 10
 const COLOUR_ARROW_GAP := 30 ## Triple the card gap so the chevrons read as navigation.
-const SWATCH_SIZE := Vector2(220, 94)
-const COLOUR_SIDE_SIZE := Vector2(96, 68)
+## One size for every visible colour card, centre included, for the same reason the word
+## deck has one: all three can be tapped, so a bigger middle swatch pointed at a selection
+## that does not exist. Sized to keep the whole row inside the console - three of these
+## plus the gaps and chevrons comes to less than the old big-centre row did.
+const COLOUR_CARD_SIZE := Vector2(136, 86)
+const COLOUR_TEXT_SIZE := UiKit.H3 ## Uniform across the colour deck.
 const ACTION_SIZE := Vector2(148, 46)
 const SLIDE_TIME := 0.16 ## Long enough to see which way the deck moved, short enough to spam.
 const COLOUR_CONFIRM_TIME := 0.32
@@ -68,11 +70,11 @@ var _now_index := 0
 var _colour_step := ColourStep.BEFORE
 
 var _views := {} ## View -> Control
-var _prev_card: PanelContainer = null
+var _prev_card: Button = null
 var _main_host: Control = null ## Fixed layout cell; only its child slides.
 var _main_card: HBoxContainer = null
 var _word_cards: Array[Button] = []
-var _next_card: PanelContainer = null
+var _next_card: Button = null
 var _left_arrow: Button = null
 var _right_arrow: Button = null
 var _status: Label = null
@@ -211,27 +213,16 @@ func _carousel_gap(width: float) -> Control:
 	return gap
 
 
-func _side_card(direction: int) -> PanelContainer:
-	var card := UiKit.panel(Color("#16233a"), 12, 2, UiKit.PANEL_HI, 8)
-	card.custom_minimum_size = SIDE_CARD_SIZE
+## A Button, exactly like the middle one. It used to be a panel wrapping a label, which
+## looked close enough at rest but behaved differently the moment a finger or a cursor
+## touched it: no hover, no press, no held state. Every visible word is equally pressable,
+## so every visible word is the same control, painted by the same function.
+func _side_card(direction: int) -> Button:
+	var card := Button.new()
+	card.custom_minimum_size = WORD_CARD_SIZE
+	card.focus_mode = Control.FOCUS_NONE
 	card.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	card.modulate = Color.WHITE ## A choice, not a preview of one - see _side().
-	card.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	card.gui_input.connect(func(event: InputEvent) -> void:
-		if event is InputEventMouseButton and event.pressed \
-				and event.button_index == MOUSE_BUTTON_LEFT:
-			_select_visible_word(direction)
-			card.accept_event()
-		elif event is InputEventScreenTouch and event.pressed:
-			_select_visible_word(direction)
-			card.accept_event())
-	var label := UiKit.label("", WORD_TEXT_SIZE, UiKit.TEXT)
-	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	card.add_child(label)
+	card.pressed.connect(func() -> void: _select_visible_word(direction))
 	return card
 
 
@@ -331,18 +322,17 @@ func _build_colour_view(page: VBoxContainer) -> void:
 	row.add_child(left)
 	row.add_child(_colour_gap(COLOUR_ARROW_GAP))
 
-	_colour_prev = _colour_card(COLOUR_SIDE_SIZE, 0.48, true)
+	_colour_prev = _colour_card()
 	_colour_prev.pressed.connect(func() -> void: _select_visible_colour(-1))
 	row.add_child(_colour_prev)
 	row.add_child(_colour_gap(COLOUR_CARD_GAP))
 
-	_colour_swatch = _colour_card(SWATCH_SIZE, 1.0, true)
-	_colour_swatch.add_theme_font_size_override("font_size", UiKit.H2)
+	_colour_swatch = _colour_card()
 	_colour_swatch.pressed.connect(_confirm_colour)
 	row.add_child(_colour_swatch)
 	row.add_child(_colour_gap(COLOUR_CARD_GAP))
 
-	_colour_next = _colour_card(COLOUR_SIDE_SIZE, 0.48, true)
+	_colour_next = _colour_card()
 	_colour_next.pressed.connect(func() -> void: _select_visible_colour(1))
 	row.add_child(_colour_next)
 	row.add_child(_colour_gap(COLOUR_ARROW_GAP))
@@ -377,15 +367,17 @@ func _colour_gap(width: float) -> Control:
 	return gap
 
 
-func _colour_card(size: Vector2, alpha: float, selectable := false) -> Button:
+## No size or alpha argument: there is one kind of colour card. The centre used to be more
+## than twice the area of its neighbours and the neighbours were half faded, which said
+## "browse to the middle to pick" - but all three are pressable, and the two outer ones are
+## the fastest way to choose.
+func _colour_card() -> Button:
 	var card := Button.new()
-	card.custom_minimum_size = size
+	card.custom_minimum_size = COLOUR_CARD_SIZE
 	card.focus_mode = Control.FOCUS_NONE
-	card.disabled = not selectable
-	if selectable:
-		card.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	card.modulate.a = alpha
-	card.add_theme_font_size_override("font_size", UiKit.H3)
+	card.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	card.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	card.add_theme_font_size_override("font_size", COLOUR_TEXT_SIZE)
 	return card
 
 
@@ -464,9 +456,15 @@ func _paint(swatch: Button, colour: ColorDefinition) -> void:
 		return
 	var shade := Content.color_of(colour.word, Color.WHITE)
 	swatch.text = colour.word
-	var box := UiKit.stylebox(shade, 12, 2, shade.lightened(0.25), 6)
-	for state in ["normal", "hover", "pressed", "disabled"]:
-		swatch.add_theme_stylebox_override(state, box)
+	for state in ["normal", "disabled"]:
+		swatch.add_theme_stylebox_override(state,
+			UiKit.stylebox(shade, 12, 2, shade.lightened(0.25), 6))
+	# The press feedback the word deck has, on all three cards rather than none of them:
+	# tapping a side swatch chooses it, so it has to answer the finger.
+	swatch.add_theme_stylebox_override("hover",
+		UiKit.stylebox(shade.lightened(0.14), 12, 2, UiKit.ACCENT, 6))
+	swatch.add_theme_stylebox_override("pressed",
+		UiKit.stylebox(shade.darkened(0.18), 12, 2, UiKit.ACCENT, 6))
 	# Dark text on pale colours, pale text on dark ones, so "yellow" and "black" both read.
 	var ink := Color("#08111c") if shade.get_luminance() > 0.45 else UiKit.TEXT
 	for state in ["font_color", "font_disabled_color", "font_hover_color"]:
@@ -650,26 +648,9 @@ func _refresh() -> void:
 	var done: bool = _used.has(category)
 	var blocked := _blocked(category)
 
-	var face := UiKit.OK.darkened(0.55) if done else Color("#16233a")
-	# No accent ring on the middle card either: it is not a selection, it is just the one in
-	# the middle. The tick colour stays, because "already used" is real information.
-	var edge := UiKit.OK if done else UiKit.PANEL_HI
 	for card in _word_cards:
 		card.visible = true
-		card.text = _slot_title(slot)
-		# The same size as the words either side of it. Every visible word can be tapped, so
-		# enlarging the middle one implied it was the only one that could be - and made the
-		# deck read as a thing to scroll rather than a row of choices.
-		card.add_theme_font_size_override("font_size", WORD_TEXT_SIZE)
-		card.disabled = blocked
-		for state in ["normal", "disabled"]:
-			card.add_theme_stylebox_override(state, UiKit.stylebox(face, 14, 2, edge, 10))
-		card.add_theme_stylebox_override("hover",
-			UiKit.stylebox(face.lightened(0.14), 14, 2, UiKit.ACCENT, 10))
-		card.add_theme_stylebox_override("pressed",
-			UiKit.stylebox(face.darkened(0.18), 14, 2, UiKit.ACCENT, 10))
-		card.add_theme_color_override("font_color", UiKit.TEXT)
-		card.add_theme_color_override("font_disabled_color", UiKit.MUTED)
+		_paint_word_card(card, slot)
 
 	_side(_prev_card, wrapi(_index - 1, 0, _slots.size()))
 	_side(_next_card, wrapi(_index + 1, 0, _slots.size()))
@@ -688,21 +669,40 @@ func _refresh() -> void:
 			_status.text = ""
 
 
-func _side(card: PanelContainer, index: int) -> void:
-	if card == null or card.get_child_count() == 0:
+func _side(card: Button, index: int) -> void:
+	if card == null:
 		return
-	var label: Label = card.get_child(0)
 	if _slots.size() < 2:
 		card.visible = false
 		return
 	card.visible = true
-	var slot = _slots[index]
-	label.text = _slot_title(slot)
-	var blocked := _blocked(_slot_category(slot))
-	# Full strength unless the category is spent. These are tappable choices, and dimming
-	# them said "preview" - a student cannot tell a faded word from an unavailable one.
-	# Fading now means exactly one thing: already used on this creature.
-	card.modulate = Color(1, 1, 1, 0.35) if blocked else Color.WHITE
-	var label_colour: Color = UiKit.MUTED if blocked else UiKit.TEXT
-	label.add_theme_color_override("font_color", label_colour)
-	card.mouse_default_cursor_shape = Control.CURSOR_ARROW if blocked else Control.CURSOR_POINTING_HAND
+	_paint_word_card(card, _slots[index])
+
+
+## The whole look of a word card, wherever it sits in the row. Position is not a state: a
+## card carries the same face, ring, text size, hover and press whether it is in the middle
+## or beside it, and the only things that change it are what the word IS - already used on
+## this creature, or not available for it.
+func _paint_word_card(card: Button, slot) -> void:
+	var category := _slot_category(slot)
+	var done: bool = _used.has(category)
+	var blocked := _blocked(category)
+	# The tick colour stays, because "already used" is real information. Nothing else tells
+	# one card from another - no accent ring on the middle one, because it is not a
+	# selection, it is just the one in the middle.
+	var face := UiKit.OK.darkened(0.55) if done else Color("#16233a")
+	var edge := UiKit.OK if done else UiKit.PANEL_HI
+	card.text = _slot_title(slot)
+	card.add_theme_font_size_override("font_size", WORD_TEXT_SIZE)
+	card.disabled = blocked
+	card.modulate = Color.WHITE ## Never dimmed for sitting off centre.
+	card.mouse_default_cursor_shape = \
+		Control.CURSOR_ARROW if blocked else Control.CURSOR_POINTING_HAND
+	for state in ["normal", "disabled"]:
+		card.add_theme_stylebox_override(state, UiKit.stylebox(face, 14, 2, edge, 10))
+	card.add_theme_stylebox_override("hover",
+		UiKit.stylebox(face.lightened(0.14), 14, 2, UiKit.ACCENT, 10))
+	card.add_theme_stylebox_override("pressed",
+		UiKit.stylebox(face.darkened(0.18), 14, 2, UiKit.ACCENT, 10))
+	card.add_theme_color_override("font_color", UiKit.TEXT)
+	card.add_theme_color_override("font_disabled_color", UiKit.MUTED)

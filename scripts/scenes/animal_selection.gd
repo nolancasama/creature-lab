@@ -49,7 +49,7 @@ const PANEL_TOP := HUD_TOP + GEAR_BUTTON_SIZE + HUD_GAP ## Clears the gear, now 
 const PANEL_BOTTOM := -24 ## Tighter than the top margin: the height lost to the HUD row
                           ## above comes back here, so the Word Lab still shows every card.
 const PANEL_WIDTH := -PANEL_LEFT + PANEL_RIGHT ## 648 - the rect's actual width.
-const PICKING_PANEL_SHIFT := PANEL_WIDTH * 0.20 ## Move left by one fifth of its own width.
+const PICKING_PANEL_SHIFT := PANEL_WIDTH * 0.25 ## Move left by a quarter of its own width.
 const PICKING_PANEL_LEFT := PANEL_LEFT - PICKING_PANEL_SHIFT
 const PICKING_PANEL_RIGHT := PANEL_RIGHT - PICKING_PANEL_SHIFT
 ## The centred present-tense panel. Tall enough on its own that SpeechPanel's internal
@@ -276,7 +276,10 @@ func _build_picking_panel() -> void:
 	_root.add_child(panel)
 	_picking_panel = panel
 
-	var column := UiKit.vbox(14)
+	# Double the usual gap, and the only gap in this column: Start is the one irreversible
+	# control on the screen, and sitting a normal row apart from Chicken it read as an
+	# eighth animal.
+	var column := UiKit.vbox(28)
 	panel.add_child(column)
 
 	var grid := GridContainer.new()
