@@ -7,6 +7,7 @@ extends RefCounted
 ##   godot --path . -- --shot=lab          jump there, save user://shot_lab.png, quit
 ##   godot --path . -- --shot=select       redesigned animal picker and thumbnail strip
 ##   godot --path . -- --shot=select-side  select a side card without recentering the deck
+##   godot --path . -- --shot=walk-dog     freeze a quadruped at peak wrist-flex in its gait
 ##   godot --path . -- --shot=say          the recording screen with a card chosen
 ##   godot --path . -- --backtest          abandon a half-finished round, then restart it
 ##   godot --path . -- --splittest         the SAY_SPLIT present-tense pass, end to end
@@ -477,10 +478,25 @@ static func _screenshot(main: Node, phase: String) -> void:
 	# seen from --shot=lab, which only ever shows the idle screen.
 	if phase == "present":
 		Settings.say_mode = Settings.SAY_SPLIT
-	var routed_phase := "select" if phase == "select-side" else phase
+	var routed_phase := "select" if phase == "select-side" or phase.begins_with("walk-") else phase
 	_goto("lab" if routed_phase in ["say", "present", "carousel", "color-before", "color-after", "color-say"] else routed_phase)
 	await main.get_tree().create_timer(SHOT_DELAY).timeout
-	if phase == "select-side":
+	if phase.begins_with("walk-"):
+		var selection_scene := Router.current_scene
+		var animal_id := phase.trim_prefix("walk-")
+		if selection_scene != null and selection_scene.has_method("_preview"):
+			selection_scene._preview(animal_id)
+			await main.get_tree().create_timer(0.25).timeout
+			var preview_root: Node3D = selection_scene.get("_preview_root")
+			var rig: CreatureRig = selection_scene.get("_rig")
+			if preview_root != null:
+				preview_root.rotation.y = -PI * 0.5
+			if rig != null:
+				rig.set_process(false)
+				rig.moving = true
+				rig._clock = PI / 10.0 ## sin(clock * 5) = 1: peak airborne flex.
+				rig._process(0.0)
+	elif phase == "select-side":
 		var selection_scene := Router.current_scene
 		var cards: Array = selection_scene.get("_animal_cards") if selection_scene != null else []
 		if cards.size() >= 4:
@@ -638,6 +654,33 @@ static func _selftest(main: Node) -> void:
 			for bone in all_bones:
 				_check(failures, rig.skeleton.find_bone(bone) != -1,
 					"%s: bone '%s' not in model" % [def.id, bone])
+
+		# At peak stride, every quadruped wrist/ankle must leave its rest angle. The two
+		# planted joints use subtle toe-off while the airborne diagonal pair folds deeply.
+		# Stopping must restore the authored stance exactly, or the gait will accumulate.
+		if rig.skeleton != null and def.legs.size() >= 4:
+			rig._swing_legs(0.5)
+			var flexed_joints := 0
+			var checked_joints: Array[int] = []
+			for leg in def.legs:
+				var gait_chain: PackedStringArray = leg.get("bones", PackedStringArray())
+				if gait_chain.size() < 2:
+					continue
+				var joint := rig.skeleton.find_bone(str(gait_chain[1]))
+				if joint == -1:
+					continue
+				checked_joints.append(joint)
+				var rest_rotation := rig.skeleton.get_bone_rest(joint).basis.get_rotation_quaternion()
+				if not rig.skeleton.get_bone_pose_rotation(joint).is_equal_approx(rest_rotation):
+					flexed_joints += 1
+			_check(failures, flexed_joints == 4,
+				"%s: walk cycle flexed %d of 4 wrists/ankles" % [def.id, flexed_joints])
+			rig._swing_legs(0.0)
+			for joint in checked_joints:
+				var rest_rotation := rig.skeleton.get_bone_rest(joint).basis.get_rotation_quaternion()
+				_check(failures,
+					rig.skeleton.get_bone_pose_rotation(joint).is_equal_approx(rest_rotation),
+					"%s: wrist/ankle gait did not return to rest" % def.id)
 
 		# Every profile must visibly move and return exactly to its starting transform. This
 		# catches a zeroed data row and the more damaging carousel drift caused by an

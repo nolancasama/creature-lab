@@ -1322,8 +1322,10 @@ func solve_idle_grounding_immediately() -> void:
 	_apply_grounding(1.0, true)
 
 
-## No walk cycles ship with these models, so the legs are posed procedurally: opposite
-## legs swing out of phase around the bone's rest pose.
+## No walk cycles ship with these models, so the legs are posed procedurally. Quadrupeds
+## use a three-joint diagonal gait: shoulder/hip swings the stride, shin flexes during the
+## airborne half, and wrist/ankle counter-rotates so the paw or hoof folds instead of
+## remaining a rigid continuation of the leg. Birds retain their simpler two-leg swing.
 ## Ears, tails and wings hang loose on a soft animal and lock up on a hard one. Rotation
 ## is this class's component to write, which is why the floppiness lives here rather than
 ## in FeelDeformer.
@@ -1350,6 +1352,9 @@ func _sway_appendages(motion: float) -> void:
 func _swing_legs(amount: float) -> void:
 	if skeleton == null or definition.leg_bones.is_empty():
 		return
+	if definition.legs.size() >= 4:
+		_swing_quadruped_legs(amount)
+		return
 	var index := 0
 	for bone in definition.leg_bones:
 		var idx := skeleton.find_bone(bone)
@@ -1360,6 +1365,43 @@ func _swing_legs(amount: float) -> void:
 		var rest := skeleton.get_bone_rest(idx).basis.get_rotation_quaternion()
 		skeleton.set_bone_pose_rotation(idx, rest * Quaternion(Vector3.RIGHT, amount * phase))
 		_posed_bones[idx] = true
+
+
+func _swing_quadruped_legs(amount: float) -> void:
+	for leg in definition.legs:
+		var leg_id := str(leg.get("id", ""))
+		var is_front := leg_id.begins_with("front")
+		var is_left := leg_id.ends_with("left")
+		# Diagonal partners move together: front-left with rear-right, then the opposite
+		# pair. This keeps the torso supported rather than making both legs on one side lift.
+		var phase := 1.0 if is_front == is_left else -1.0
+		var swing := amount * phase
+		var airborne := maxf(swing, 0.0)
+		var planted := maxf(-swing, 0.0)
+		var side_suffix := ".L" if is_left else ".R"
+		var upper_name := ("front_thigh" if is_front else "thigh") + side_suffix
+		var chain: PackedStringArray = leg.get("bones", PackedStringArray())
+
+		_pose_walk_bone(upper_name, swing)
+		if chain.size() >= 1:
+			# Front knees and rear hocks are authored with opposite bends, so their added
+			# flex uses opposite signs while retaining the same visible lift.
+			_pose_walk_bone(str(chain[0]), airborne * (-1.15 if is_front else 1.25))
+		if chain.size() >= 2:
+			# Counter-flex the wrist/ankle through the swing, then add a small toe-off while
+			# planted. Both are proportional to stride, so HARD/SLOW still damp the gait.
+			var joint_flex := airborne * (1.35 if is_front else -1.45) \
+				+ planted * (-0.18 if is_front else 0.18)
+			_pose_walk_bone(str(chain[1]), joint_flex)
+
+
+func _pose_walk_bone(bone_name: String, angle: float) -> void:
+	var idx := skeleton.find_bone(bone_name)
+	if idx == -1:
+		return
+	var rest := skeleton.get_bone_rest(idx).basis.get_rotation_quaternion()
+	skeleton.set_bone_pose_rotation(idx, rest * Quaternion(Vector3.RIGHT, angle))
+	_posed_bones[idx] = true
 
 
 # --- Fantasy add-on parts (still primitives) ---------------------------------
