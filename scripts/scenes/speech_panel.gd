@@ -26,6 +26,7 @@ var _sentence_label: RichTextLabel = null
 var _feedback: Label = null
 var _mic_button: Button = null
 var _entry: LineEdit = null
+var _input_shell: Control = null
 var _submit_button: Button = null
 var _listen_button: Button = null
 var _listen_timer: Timer = null
@@ -88,22 +89,30 @@ func _build() -> void:
 
 	column.add_child(UiKit.expander())
 
-	var input_row := UiKit.hbox(10)
-	column.add_child(input_row)
+	_input_shell = Control.new()
+	_input_shell.custom_minimum_size = Vector2(0, 64)
+	_input_shell.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	column.add_child(_input_shell)
 	_entry = UiKit.line_edit("英語の文を入力")
-	_entry.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_entry.custom_minimum_size.y = 56
+	_entry.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_style_entry_for_embedded_submit()
 	_entry.text_submitted.connect(func(text: String) -> void: _submit_typed(text))
 	_entry.text_changed.connect(func(text: String) -> void:
 		if _submit_button != null:
 			_submit_button.disabled = not _armed or text.strip_edges().is_empty())
-	input_row.add_child(_entry)
-	_submit_button = UiKit.button("確認", UiKit.H3)
+	_input_shell.add_child(_entry)
+	_submit_button = UiKit.button("✓", UiKit.H3)
 	_submit_button.name = "TypedSubmit"
-	_submit_button.custom_minimum_size = Vector2(120, 56)
-	UiKit.style_primary(_submit_button)
+	_submit_button.tooltip_text = "確認"
+	_submit_button.set_anchors_preset(Control.PRESET_CENTER_RIGHT)
+	_submit_button.offset_left = -58
+	_submit_button.offset_right = -6
+	_submit_button.offset_top = -26
+	_submit_button.offset_bottom = 26
+	_submit_button.custom_minimum_size = Vector2(52, 52)
+	_style_embedded_submit()
 	_submit_button.pressed.connect(func() -> void: _submit_typed(_entry.text))
-	input_row.add_child(_submit_button)
+	_input_shell.add_child(_submit_button)
 
 	_feedback = UiKit.label("", UiKit.BODY, UiKit.MUTED)
 	_feedback.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -157,11 +166,42 @@ func _build() -> void:
 	_sync_input_mode()
 
 
+func _style_entry_for_embedded_submit() -> void:
+	# Reserve the right side of the field for the check button so typed text and the caret
+	# can never run underneath it.
+	var normal := UiKit.stylebox(Color("#0b1220"), 10, 2, UiKit.PANEL_HI, 12)
+	normal.content_margin_right = 72
+	var focus := UiKit.stylebox(Color("#0b1220"), 10, 3, UiKit.GOLD, 12)
+	focus.content_margin_right = 72
+	var read_only := UiKit.stylebox(Color("#0b1220").darkened(0.16), 10, 2,
+		UiKit.LINE, 12)
+	read_only.content_margin_right = 72
+	_entry.add_theme_stylebox_override("normal", normal)
+	_entry.add_theme_stylebox_override("focus", focus)
+	_entry.add_theme_stylebox_override("read_only", read_only)
+
+
+func _style_embedded_submit() -> void:
+	# Radius equals half the touch target: every state remains a true circle.
+	_submit_button.add_theme_stylebox_override("normal",
+		UiKit.stylebox(UiKit.CTA, 26))
+	_submit_button.add_theme_stylebox_override("hover",
+		UiKit.stylebox(UiKit.CTA.lightened(0.12), 26))
+	_submit_button.add_theme_stylebox_override("pressed",
+		UiKit.stylebox(UiKit.CTA.darkened(0.16), 26))
+	_submit_button.add_theme_stylebox_override("focus",
+		UiKit.stylebox(UiKit.CTA, 26, 3, UiKit.GOLD))
+	_submit_button.add_theme_stylebox_override("disabled",
+		UiKit.stylebox(UiKit.CTA.darkened(0.45), 26))
+	for state in ["font_color", "font_hover_color", "font_pressed_color"]:
+		_submit_button.add_theme_color_override(state, UiKit.INK)
+	_submit_button.add_theme_color_override("font_disabled_color", UiKit.MUTED.darkened(0.3))
+
+
 func _sync_input_mode() -> void:
 	var mic := Speech.uses_microphone()
 	_mic_button.visible = mic
-	_entry.visible = not mic
-	_submit_button.visible = not mic
+	_input_shell.visible = not mic
 
 
 # --- Public API --------------------------------------------------------------
