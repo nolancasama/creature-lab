@@ -12,11 +12,15 @@ extends Node3D
 const BEFORE_POS := Vector3(-3.7, 0.0, 0.0)
 const NOW_POS := Vector3(3.7, 0.0, 0.0)
 const FRONT_FACING := PI
+const CAPTION_WIDTH := 300.0
 
 var _candidates := PackedStringArray()
 var _entry: LineEdit = null
 var _before_root: Node3D = null
 var _creature_root: Node3D = null
+var _camera: Camera3D = null
+var _before_caption: Label = null
+var _now_caption: Label = null
 
 
 func _ready() -> void:
@@ -94,7 +98,8 @@ func _build_stage() -> void:
 	# its own side - the further apart they are, the more each one is turned away. Pulling
 	# back and narrowing flattens that out until both read as square to the camera. Level,
 	# too: aiming at a point below the lens tipped the whole comparison forward.
-	add_child(StageKit.camera(Vector3(0.0, 1.30, 13.2), Vector3(0.0, 1.30, 0.0), 34.0))
+	_camera = StageKit.camera(Vector3(0.0, 1.30, 13.2), Vector3(0.0, 1.30, 0.0), 34.0)
+	add_child(_camera)
 
 
 func _comparison_floor() -> Node3D:
@@ -158,21 +163,39 @@ func _build_ui() -> void:
 
 ## Labels the two platforms with the before/now comparison.
 func _build_captions() -> Control:
-	var bar := UiKit.hbox(0)
+	var bar := Control.new()
 	bar.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
 	bar.offset_top = 22
 	bar.offset_bottom = 70
 	bar.offset_left = 0
 	bar.offset_right = 0
+	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
-	var before := UiKit.title("Before", UiKit.H2, UiKit.MUTED)
-	before.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	bar.add_child(before)
+	_before_caption = UiKit.title("Before", UiKit.H2, UiKit.MUTED)
+	bar.add_child(_before_caption)
 
-	var now := UiKit.title("Now", UiKit.H2, UiKit.GOLD)
-	now.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	bar.add_child(now)
+	_now_caption = UiKit.title("Now", UiKit.H2, UiKit.GOLD)
+	bar.add_child(_now_caption)
+	_position_captions()
+	get_viewport().size_changed.connect(_position_captions)
 	return bar
+
+
+## The platforms are perspective-projected, so their centres are not exactly at the
+## quarter points of the viewport. Project their real 3D origins and use those pixels as
+## the caption centres; repeat after a resize so the alignment remains exact.
+func _position_captions() -> void:
+	if _camera == null or _before_caption == null or _now_caption == null:
+		return
+	_position_caption(_before_caption, _camera.unproject_position(BEFORE_POS).x)
+	_position_caption(_now_caption, _camera.unproject_position(NOW_POS).x)
+
+
+func _position_caption(caption: Label, center_x: float) -> void:
+	caption.offset_left = center_x - CAPTION_WIDTH * 0.5
+	caption.offset_right = center_x + CAPTION_WIDTH * 0.5
+	caption.offset_top = 0.0
+	caption.offset_bottom = 48.0
 
 
 func _current_name() -> String:
