@@ -24,6 +24,7 @@ extends PanelContainer
 
 signal pair_selected(category: String, before: String, after: String)
 signal before_colour_previewed(word: String)
+signal before_colour_selected(word: String)
 signal colour_selection_cancelled()
 
 enum View { CATEGORY, COLOUR }
@@ -48,10 +49,9 @@ const CAROUSEL_ARROW_GAP := 24 ## Three times the word-to-word gap, only beside 
 const COLOUR_CARD_GAP := 10
 const COLOUR_ARROW_GAP := 30 ## Triple the card gap so the chevrons read as navigation.
 ## One size for every visible colour card, centre included, for the same reason the word
-## deck has one: all three can be tapped, so a bigger middle swatch pointed at a selection
-## that does not exist. Sized to keep the whole row inside the console - three of these
-## plus the gaps and chevrons comes to less than the old big-centre row did.
-const COLOUR_CARD_SIZE := Vector2(136, 86)
+## deck has one: all five can be tapped, so a bigger middle swatch pointed at a selection
+## that does not exist. Five cards, their gaps and the chevrons fit the fixed console.
+const COLOUR_CARD_SIZE := Vector2(108, 86)
 const COLOUR_TEXT_SIZE := UiKit.H3 ## Uniform across the colour deck.
 const ACTION_SIZE := Vector2(148, 46)
 const SLIDE_TIME := 0.16 ## Long enough to see which way the deck moved, short enough to spam.
@@ -70,18 +70,23 @@ var _now_index := 0
 var _colour_step := ColourStep.BEFORE
 
 var _views := {} ## View -> Control
+var _far_prev_card: Button = null
 var _prev_card: Button = null
 var _main_host: Control = null ## Fixed layout cell; only its child slides.
 var _main_card: HBoxContainer = null
 var _word_cards: Array[Button] = []
 var _next_card: Button = null
+var _far_next_card: Button = null
 var _left_arrow: Button = null
 var _right_arrow: Button = null
 var _status: Label = null
 var _colour_heading: Label = null
+var _colour_picker: VBoxContainer = null
+var _colour_far_prev: Button = null
 var _colour_prev: Button = null
 var _colour_swatch: Button = null
 var _colour_next: Button = null
+var _colour_far_next: Button = null
 var _colour_feedback: Label = null
 var _colour_cancel: Button = null
 var _colour_committing := false
@@ -144,6 +149,10 @@ func _build_category_view(page: VBoxContainer) -> void:
 	row.add_child(_left_arrow)
 	row.add_child(_carousel_gap(CAROUSEL_ARROW_GAP))
 
+	_far_prev_card = _side_card(-2)
+	row.add_child(_far_prev_card)
+	row.add_child(_carousel_gap(CAROUSEL_GAP))
+
 	_prev_card = _side_card(-1)
 	row.add_child(_prev_card)
 	row.add_child(_carousel_gap(CAROUSEL_GAP))
@@ -178,6 +187,10 @@ func _build_category_view(page: VBoxContainer) -> void:
 
 	_next_card = _side_card(1)
 	row.add_child(_next_card)
+	row.add_child(_carousel_gap(CAROUSEL_GAP))
+
+	_far_next_card = _side_card(2)
+	row.add_child(_far_next_card)
 	row.add_child(_carousel_gap(CAROUSEL_ARROW_GAP))
 
 	_right_arrow = _arrow(">", 1)
@@ -305,13 +318,17 @@ func _select_visible_word(direction: int) -> void:
 # --- Colours -----------------------------------------------------------------
 
 func _build_colour_view(page: VBoxContainer) -> void:
+	_colour_picker = UiKit.vbox(10)
+	_colour_picker.alignment = BoxContainer.ALIGNMENT_CENTER
+	page.add_child(_colour_picker)
+
 	_colour_heading = UiKit.label("", UiKit.H3, UiKit.GOLD)
 	_colour_heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	page.add_child(_colour_heading)
+	_colour_picker.add_child(_colour_heading)
 
 	var row := UiKit.hbox(0)
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	page.add_child(row)
+	_colour_picker.add_child(row)
 
 	var left := UiKit.button("<", COLOUR_ARROW_FONT)
 	left.custom_minimum_size = Vector2(ARROW_SIZE, ARROW_SIZE)
@@ -321,6 +338,11 @@ func _build_colour_view(page: VBoxContainer) -> void:
 	left.pressed.connect(func() -> void: _step_colour(-1))
 	row.add_child(left)
 	row.add_child(_colour_gap(COLOUR_ARROW_GAP))
+
+	_colour_far_prev = _colour_card()
+	_colour_far_prev.pressed.connect(func() -> void: _select_visible_colour(-2))
+	row.add_child(_colour_far_prev)
+	row.add_child(_colour_gap(COLOUR_CARD_GAP))
 
 	_colour_prev = _colour_card()
 	_colour_prev.pressed.connect(func() -> void: _select_visible_colour(-1))
@@ -335,6 +357,11 @@ func _build_colour_view(page: VBoxContainer) -> void:
 	_colour_next = _colour_card()
 	_colour_next.pressed.connect(func() -> void: _select_visible_colour(1))
 	row.add_child(_colour_next)
+	row.add_child(_colour_gap(COLOUR_CARD_GAP))
+
+	_colour_far_next = _colour_card()
+	_colour_far_next.pressed.connect(func() -> void: _select_visible_colour(2))
+	row.add_child(_colour_far_next)
 	row.add_child(_colour_gap(COLOUR_ARROW_GAP))
 
 	var right := UiKit.button(">", COLOUR_ARROW_FONT)
@@ -347,11 +374,11 @@ func _build_colour_view(page: VBoxContainer) -> void:
 
 	_colour_feedback = UiKit.label("", UiKit.SMALL, UiKit.MUTED)
 	_colour_feedback.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	page.add_child(_colour_feedback)
+	_colour_picker.add_child(_colour_feedback)
 
 	var actions := UiKit.vbox(8)
 	actions.alignment = BoxContainer.ALIGNMENT_CENTER
-	page.add_child(actions)
+	_colour_picker.add_child(actions)
 	_colour_cancel = UiKit.button("Cancel", UiKit.BODY)
 	_colour_cancel.custom_minimum_size = ACTION_SIZE
 	_colour_cancel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
@@ -359,7 +386,6 @@ func _build_colour_view(page: VBoxContainer) -> void:
 	UiKit.style_button(_colour_cancel, UiKit.PANEL_HI)
 	_colour_cancel.pressed.connect(_cancel_colour)
 	actions.add_child(_colour_cancel)
-
 
 func _colour_gap(width: float) -> Control:
 	var gap := Control.new()
@@ -369,7 +395,7 @@ func _colour_gap(width: float) -> Control:
 
 ## No size or alpha argument: there is one kind of colour card. The centre used to be more
 ## than twice the area of its neighbours and the neighbours were half faded, which said
-## "browse to the middle to pick" - but all three are pressable, and the two outer ones are
+## "browse to the middle to pick" - but all five are pressable, and the outer ones are
 ## the fastest way to choose.
 func _colour_card() -> Button:
 	var card := Button.new()
@@ -407,7 +433,7 @@ func _select_visible_colour(direction: int) -> void:
 		return
 	var active_index := _was_index if _colour_step == ColourStep.BEFORE else _now_index
 	var skip_before := _colour_step == ColourStep.AFTER
-	var selected_index := _next_colour_index(active_index, direction, skip_before)
+	var selected_index := _colour_offset_index(active_index, direction, skip_before)
 	if _colour_step == ColourStep.BEFORE:
 		_was_index = selected_index
 	else:
@@ -428,6 +454,14 @@ func _next_colour_index(from: int, direction: int, skip_before: bool) -> int:
 	return from
 
 
+func _colour_offset_index(from: int, offset: int, skip_before: bool) -> int:
+	var result := from
+	var direction := signi(offset)
+	for _step in absi(offset):
+		result = _next_colour_index(result, direction, skip_before)
+	return result
+
+
 func _sync_colour() -> void:
 	var colours := Content.enabled_colors()
 	if colours.is_empty():
@@ -438,15 +472,21 @@ func _sync_colour() -> void:
 		_now_index = _next_colour_index(_now_index, 1, true)
 	var active_index := _was_index if _colour_step == ColourStep.BEFORE else _now_index
 	var skip_before := _colour_step == ColourStep.AFTER
-	var previous := _next_colour_index(active_index, -1, skip_before)
-	var following := _next_colour_index(active_index, 1, skip_before)
+	var far_previous := _colour_offset_index(active_index, -2, skip_before)
+	var previous := _colour_offset_index(active_index, -1, skip_before)
+	var following := _colour_offset_index(active_index, 1, skip_before)
+	var far_following := _colour_offset_index(active_index, 2, skip_before)
+	_paint(_colour_far_prev, colours[far_previous])
 	_paint(_colour_prev, colours[previous])
 	_paint(_colour_swatch, colours[active_index])
 	_paint(_colour_next, colours[following])
+	_paint(_colour_far_next, colours[far_following])
 	_colour_heading.text = "Before" if _colour_step == ColourStep.BEFORE else "Now"
-	_colour_feedback.text = "Tap any visible colour to choose it."
+	_colour_feedback.text = ""
+	_colour_feedback.visible = false
 	_colour_feedback.add_theme_color_override("font_color", UiKit.MUTED)
 	_colour_cancel.text = "Cancel"
+	_colour_picker.visible = true
 
 
 ## The swatch wears the colour it names, so the word and the thing agree even for a
@@ -459,7 +499,7 @@ func _paint(swatch: Button, colour: ColorDefinition) -> void:
 	for state in ["normal", "disabled"]:
 		swatch.add_theme_stylebox_override(state,
 			UiKit.stylebox(shade, 12, 2, shade.lightened(0.25), 6))
-	# The press feedback the word deck has, on all three cards rather than none of them:
+	# The press feedback the word deck has, on all five cards rather than none of them:
 	# tapping a side swatch chooses it, so it has to answer the finger.
 	swatch.add_theme_stylebox_override("hover",
 		UiKit.stylebox(shade.lightened(0.14), 12, 2, UiKit.ACCENT, 6))
@@ -481,6 +521,7 @@ func _emit_before_preview() -> void:
 
 func _show_colour_confirmation(colour: ColorDefinition, step_name: String) -> void:
 	_colour_feedback.text = "%s selected for %s." % [colour.word.capitalize(), step_name]
+	_colour_feedback.visible = true
 	_colour_feedback.add_theme_color_override("font_color", UiKit.OK)
 	var shade := Content.color_of(colour.word, Color.WHITE)
 	var box := UiKit.stylebox(shade, 12, 4, UiKit.OK, 6)
@@ -505,19 +546,8 @@ func _confirm_colour() -> void:
 		var selected_before: ColorDefinition = colours[_was_index]
 		_audio_confirm_selection(selected_before.word)
 		_emit_before_preview()
-		_show_colour_confirmation(selected_before, "Before")
-		await get_tree().create_timer(COLOUR_CONFIRM_TIME).timeout
-		# The panel can be torn down while this pause is running - the round ends, the
-		# screen rebuilds, the scene is left. Everything below writes to nodes that no
-		# longer exist by then, which is a handful of errors per shot and a real crash the
-		# moment one of those writes matters.
-		if not is_instance_valid(self) or not is_inside_tree():
-			return
 		_colour_committing = false
-		_colour_step = ColourStep.AFTER
-		if _now_index == _was_index:
-			_now_index = _next_colour_index(_was_index, 1, true)
-		_sync_colour()
+		before_colour_selected.emit(selected_before.word)
 		return
 	var was: ColorDefinition = colours[_was_index]
 	var now: ColorDefinition = colours[_now_index]
@@ -532,6 +562,16 @@ func _confirm_colour() -> void:
 	_show_view(View.CATEGORY)
 
 
+## Called after the learner has completed the real "It was ..." input panel. The colour
+## picker stays on BEFORE until then, so it cannot reveal or accept the Now colour early.
+func continue_colour_after_past() -> void:
+	_colour_step = ColourStep.AFTER
+	if _now_index == _was_index:
+		_now_index = _next_colour_index(_was_index, 1, true)
+	_sync_colour()
+	_show_view(View.COLOUR)
+
+
 func _cancel_colour() -> void:
 	if _colour_committing:
 		return
@@ -541,6 +581,7 @@ func _cancel_colour() -> void:
 		# confirmed BEFORE choice that is still painted on the animal.
 		_colour_step = ColourStep.BEFORE
 		_sync_colour()
+		colour_selection_cancelled.emit()
 		return
 	colour_selection_cancelled.emit()
 	_show_view(View.CATEGORY)
@@ -654,6 +695,8 @@ func _refresh() -> void:
 
 	_side(_prev_card, wrapi(_index - 1, 0, _slots.size()))
 	_side(_next_card, wrapi(_index + 1, 0, _slots.size()))
+	_side(_far_prev_card, wrapi(_index - 2, 0, _slots.size()))
+	_side(_far_next_card, wrapi(_index + 2, 0, _slots.size()))
 	var single := _slots.size() < 2
 	_left_arrow.disabled = _locked or single or not _restriction.is_empty()
 	_right_arrow.disabled = _left_arrow.disabled

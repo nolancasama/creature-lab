@@ -184,14 +184,21 @@ func _metal(color: Color) -> StandardMaterial3D:
 ## Comes down under its own weight and settles, rather than easing politely into place -
 ## it should land like something heavy arriving.
 func descend(to_y := WORK_HEIGHT, duration := 1.7) -> void:
+	var tween := begin_descent(to_y, duration)
+	await tween.finished
+
+
+## Starts the physical drop and returns its tween so the director can let the machine enter
+## the familiar Before frame before beginning any cinematic camera movement.
+func begin_descent(to_y := WORK_HEIGHT, duration := 1.7) -> Tween:
 	visible = true
 	position.y = maxf(to_y, PARK_HEIGHT)
 	Audio.play("charge", 0.7)
 	var tween := create_tween()
 	tween.tween_property(self, "position:y", to_y, duration) \
 		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	await tween.finished
-	Audio.play("thud", 0.9)
+	tween.finished.connect(func() -> void: Audio.play("thud", 0.9), CONNECT_ONE_SHOT)
+	return tween
 
 
 ## Moves to a new working height from wherever it currently is, without the park-and-drop

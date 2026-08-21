@@ -60,17 +60,25 @@ func run(state: CreatureState) -> void:
 		return
 	_stage.lock_creature_movement()
 	_banner_text = _banner.text
-	_show_banner()
 
 	if _skip:
+		_show_banner()
 		_stage.array.park(_work_height())
 	else:
-		# The loaded chamber begins on the exact final Before framing. Ease its camera,
-		# lens and animal orientation into the chamber view while the machine descends,
-		# making the scene boundary one continuous move rather than a new opening shot.
-		if _stage.has_before_view():
+		# Shot 1 is the exact final Before frame. The machine visibly enters that familiar
+		# composition first; only after its descent is legible do the lens, camera and animal
+		# orientation begin easing toward the chamber shot.
+		var from_before := _stage.has_before_view()
+		var descent := _stage.array.begin_descent(_work_height())
+		if from_before:
+			await _wait(0.35)
+			if not _alive():
+				return
+			_show_banner()
 			_stage.transition_from_before()
-		await _stage.array.descend(_work_height())
+		else:
+			_show_banner()
+		await descent.finished
 
 	# Each sentence: the lab says it, the machine answers it. Keep the before state as the
 	# starting point and add exactly one after-trait after each sentence's zap.

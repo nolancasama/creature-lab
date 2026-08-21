@@ -35,7 +35,9 @@ func _ready() -> void:
 	var floor_disc := StageKit.ground(30.0, Color("#070b13"))
 	add_child(floor_disc)
 
-	var platform := StageKit.platform(2.0, Color("#1d2a42"), UiKit.ACCENT)
+	# Pixel-for-pixel continuation of Animal Selection's Before platform. The room lighting
+	# may become cinematic after the seamless swap; the surface under the animal must not.
+	var platform := StageKit.platform(1.8, Color("#22304a"), UiKit.ACCENT)
 	platform.position = PLATFORM_POS
 	add_child(platform)
 

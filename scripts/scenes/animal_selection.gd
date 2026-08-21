@@ -10,10 +10,12 @@ extends Node3D
 ##   RECORDING - animal and platform are centred; the descriptor carousel and Say It swap
 ##               inside one fixed console beneath them.
 
-const PREVIEW_SPIN := 0.45
+const PREVIEW_SPIN := 0.18 ## Slow enough that the animal remains readable as a profile.
 const RECORDING_FACING := -PI * 0.5 ## Godot forward (-Z) turned toward screen-right.
 const DRAG_TURN_SPEED := 0.012
 const SUCCESS_PAUSE := 1.1
+const PRE_TRANSFORM_PAUSE := 0.28
+const UI_EXIT_TIME := 0.72
 
 const PLATFORM_POS := Vector3(-0.5, 0.0, 0.6)
 
@@ -24,16 +26,10 @@ const PLATFORM_POS := Vector3(-0.5, 0.0, 0.6)
 ## on screen: distance and fov are traded against each other, not chosen independently.
 const CAMERA_FOV := 22.0
 const CAMERA_POS := Vector3(1.791, 4.271, 14.888)
-const CAMERA_AIM := Vector3(-0.5, 0.95, 0.0)
-## Looks lower than the picking camera, moving the animal/platform upward on screen and
-## leaving a stable console region below without shrinking the animal.
+## Shared picker/Before aim: leaves a stable console region below without shrinking the animal.
 const RECORDING_CAMERA_AIM := Vector3(-0.5, 0.22, 0.0)
 const CAMERA_MOVE_TIME := 0.55 ## Long enough to read as a move, short enough not to wait.
 
-## Picking and recording are overlays on one screen, so they share one panel rect: the
-## Word Lab / Say It stack lands exactly where the animal grid was, and nothing resizes
-## or jumps underneath the player at the moment of confirming.
-const PANEL_LEFT := -680
 const PANEL_RIGHT := -32
 const HUD_TOP := 24 ## Top edge of the floating buttons, above the panel on both sub-states.
 const PROGRESS_FONT := UiKit.SMALL * 3 ## Readable from the back of a classroom.
@@ -48,10 +44,6 @@ const PANEL_TOP := HUD_TOP + GEAR_BUTTON_SIZE + HUD_GAP ## Clears the gear, now 
                                                         ## of the two HUD buttons.
 const PANEL_BOTTOM := -24 ## Tighter than the top margin: the height lost to the HUD row
                           ## above comes back here, so the Word Lab still shows every card.
-const PANEL_WIDTH := -PANEL_LEFT + PANEL_RIGHT ## 648 - the rect's actual width.
-const PICKING_PANEL_SHIFT := PANEL_WIDTH * 0.25 ## Move left by a quarter of its own width.
-const PICKING_PANEL_LEFT := PANEL_LEFT - PICKING_PANEL_SHIFT
-const PICKING_PANEL_RIGHT := PANEL_RIGHT - PICKING_PANEL_SHIFT
 ## The centred present-tense panel. Tall enough on its own that SpeechPanel's internal
 ## centring expanders (see its _build()) already have real slack to work with here without
 ## any extra tuning.
@@ -60,21 +52,20 @@ const CONSOLE_SIZE := Vector2(760, 300) ## Same footprint for words, colours and
 const CONSOLE_BOTTOM_MARGIN := 10
 const SAY_IT_WIDTH := 620
 
-## Content-hugging rather than the tall shared rect: three animal-button rows plus Start,
-## no more. Hand-summed from the picking panel's own children (10 top pad + 3 rows of 62 +
-## 2 row gaps of 10 + 14 vbox gap + 58 Start + 10 bottom pad) and checked against a render
-## rather than trusted blind, since nothing here is a container that reports its own
-## natural size back to the anchor math that positions it.
-const PICKING_PANEL_HEIGHT := 298
-const PROGRESS_WIDTH := 420 ## Wide enough for "Before" at PROGRESS_FONT with room to spare.
+## Keep the full adjective instruction inside a fixed, symmetric box.  The former 420 px
+## width only fit the old one-word "Before" label; the longer instruction then expanded
+## the VBox toward the right and no longer shared the platform's centreline.
+const PROGRESS_WIDTH := 760
 const PROGRESS_HEIGHT := 64 ## The single "Before" heading.
 
-## The animal sits centred in the gap beside the panel, which is always half the panel's
-## span left of screen centre, whatever the window is doing. Applied as a lens shift - see
-## _lens_shift() for why it is not simply a camera move.
-const CAMERA_SHIFT := -PICKING_PANEL_LEFT / 2.0
+const CAMERA_SHIFT := 0.0 ## The picker has no side panel; the animal owns the screen centre.
+const ANIMAL_CARD_SIZE := Vector2(112, 78)
+const ANIMAL_CARD_GAP := 8
+const ANIMAL_ARROW_GAP := 24
+const SELECT_BUTTON_SIZE := Vector2(280, 58)
 
-enum Mode { PICKING, RECORDING, PRESENT }
+enum Mode { PICKING, RECORDING, PRESENT, PRE_TRANSFORMATION }
+enum ColourSpeechStage { NONE, PAST, PRESENT }
 
 var _mode: Mode = Mode.PICKING
 
@@ -83,18 +74,19 @@ var _preview_root: Node3D = null
 var _rig: CreatureRig = null
 var _platform: Node3D = null
 var _camera: Camera3D = null
-var _camera_aim := CAMERA_AIM ## look_at keeps no record of its target; the tween needs one.
+var _camera_aim := RECORDING_CAMERA_AIM ## Shared by picker and Before screen.
 var _camera_shift := CAMERA_SHIFT
 
 # Picking UI
 var _picking_panel: Control = null
-var _buttons := {}
+var _animal_cards: Array[Button] = []
 var _selected := ""
 var _rig_animal := "" ## Which animal the live rig was built for.
 
 # Recording UI
 var _root: Control = null
 var _progress: Label = null
+var _progress_group: Control = null
 var _word_lab: DescriptorCarousel = null
 var _speech: SpeechPanel = null
 var _console: Control = null
@@ -104,6 +96,11 @@ var _pending := {}
 var _attempts := 0
 var _busy := false
 var _dragging_view := false
+var _colour_speech_stage := ColourSpeechStage.NONE
+var _colour_past_accepted := false
+var _colour_past_assisted := false
+var _pre_transforming := false
+var _confirmation_serial := 0 ## Cancels a pending confirm if browsing changes the animal.
 
 # Present-tense pass (Settings.SAY_SPLIT)
 var _present_index := 0
@@ -133,6 +130,7 @@ func _ready() -> void:
 
 func _exit_tree() -> void:
 	Speech.stop()
+	Audio.stop_animal_call()
 
 
 func _process(delta: float) -> void:
@@ -170,24 +168,23 @@ func _build_stage() -> void:
 	_preview_root = Node3D.new()
 	_preview_root.name = "PreviewRoot"
 	_preview_root.position = PLATFORM_POS + Vector3(0, 0.28, 0)
-	_preview_root.rotation.y = -0.7 ## Starting pose for the very first animal shown. Picking
+	_preview_root.rotation.y = -1.0 ## Starting pose for the very first animal shown. Picking
 	## a different one later must not repeat this - see _preview(), which deliberately
 	## leaves rotation alone so the turntable keeps spinning through a switch instead of
 	## snapping back to this angle every time.
 	add_child(_preview_root)
 
-	_camera = StageKit.camera(CAMERA_POS, CAMERA_AIM, CAMERA_FOV)
+	_camera = StageKit.camera(CAMERA_POS, RECORDING_CAMERA_AIM, CAMERA_FOV)
 	add_child(_camera)
 	_lens_shift(_camera, CAMERA_SHIFT)
 
 
-## Picking reserves the right side for animal buttons. Recording removes that split and
-## uses the optical centre for the animal/platform group. The world objects never move,
-## so switching words, colours and speech cannot introduce geometry jumps.
+## Both picker and recorder use the optical centre for the animal/platform group. The
+## world objects never move, so confirming a choice cannot introduce a geometry jump.
 func _set_recording_composition(recording: bool, animate := false) -> void:
 	if _camera == null:
 		return
-	var target_aim := RECORDING_CAMERA_AIM if recording else CAMERA_AIM
+	var target_aim := RECORDING_CAMERA_AIM
 	var target_shift := 0.0 if recording else CAMERA_SHIFT
 	if not animate or not is_inside_tree():
 		_compose(target_aim, target_shift)
@@ -232,20 +229,13 @@ func _lens_shift(cam: Camera3D, pixels: float) -> void:
 ## past card by card and gathers the present tense afterwards, so the answer depends on
 ## the sub-state as much as on the setting.
 func _clause() -> int:
+	if _colour_speech_stage == ColourSpeechStage.PAST:
+		return GrammarValidator.CLAUSE_PAST
+	if _colour_speech_stage == ColourSpeechStage.PRESENT:
+		return GrammarValidator.CLAUSE_PRESENT
 	if _mode == Mode.PRESENT:
 		return GrammarValidator.CLAUSE_PRESENT
 	return GrammarValidator.CLAUSE_PAST if Settings.past_only() else GrammarValidator.CLAUSE_BOTH
-
-
-## Left edge (in pixels from the screen's left edge) that centres a `width`-wide element
-## within the free-space region beside the panel - the same region the camera centres the
-## animal in. Reads the actual viewport rather than assuming a fixed window size, the same
-## way _lens_shift() does, so the platform, the progress line, and the Say It dock all
-## agree on where "centred above the platform" is regardless of how the window is sized.
-func _center_left(width: float) -> float:
-	var view_width := get_viewport().get_visible_rect().size.x
-	var free_width: float = view_width + PICKING_PANEL_LEFT
-	return maxf(0.0, (free_width - width) * 0.5)
 
 
 func _build_root() -> void:
@@ -260,56 +250,127 @@ func _build_root() -> void:
 # --- Picking sub-state -----------------------------------------------------------
 
 func _build_picking_panel() -> void:
-	var panel := UiKit.panel(Color(0.06, 0.1, 0.16, 0.92), 18, 2, UiKit.PANEL_HI)
-	# Vertically centred and sized to its own content (PICKING_PANEL_HEIGHT), not stretched
-	# to the shared PANEL_TOP/PANEL_BOTTOM rect the way Word Lab is - a grid of seven
-	# buttons plus one Start does not need the picking screen to be as tall as the recording
-	# screen's card board.
-	panel.anchor_left = 1.0
-	panel.anchor_right = 1.0
-	panel.anchor_top = 0.5
-	panel.anchor_bottom = 0.5
-	panel.offset_left = PICKING_PANEL_LEFT
-	panel.offset_right = PICKING_PANEL_RIGHT
-	panel.offset_top = -PICKING_PANEL_HEIGHT * 0.5
-	panel.offset_bottom = PICKING_PANEL_HEIGHT * 0.5
-	_root.add_child(panel)
-	_picking_panel = panel
+	# No menu wall: this full-screen, transparent owner only positions controls around the
+	# live animal. The platform and creature remain the largest objects on the screen.
+	var picker := Control.new()
+	picker.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	picker.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_root.add_child(picker)
+	_picking_panel = picker
+	var heading := UiKit.label("Choose your animal", PROGRESS_FONT, UiKit.GOLD)
+	heading.name = "AnimalSelectionHeading"
+	heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	heading.anchor_left = 0.5
+	heading.anchor_right = 0.5
+	heading.offset_left = -360
+	heading.offset_right = 360
+	heading.offset_top = 24
+	heading.offset_bottom = 24 + PROGRESS_HEIGHT
+	picker.add_child(heading)
 
-	# Double the usual gap, and the only gap in this column: Start is the one irreversible
-	# control on the screen, and sitting a normal row apart from Chicken it read as an
-	# eighth animal.
-	var column := UiKit.vbox(28)
-	panel.add_child(column)
+	# Exact footprint used by the adjective carousel on the Before screen. Five English
+	# names stay readable at their normal card size; browsing merely changes which five
+	# data-backed animals occupy the window.
+	var selection_console := Control.new()
+	selection_console.name = "AnimalSelectionConsole"
+	selection_console.anchor_left = 0.5
+	selection_console.anchor_right = 0.5
+	selection_console.anchor_top = 1.0
+	selection_console.anchor_bottom = 1.0
+	selection_console.offset_left = -CONSOLE_SIZE.x * 0.5
+	selection_console.offset_right = CONSOLE_SIZE.x * 0.5
+	selection_console.offset_top = -(CONSOLE_SIZE.y + CONSOLE_BOTTOM_MARGIN)
+	selection_console.offset_bottom = -CONSOLE_BOTTOM_MARGIN
+	picker.add_child(selection_console)
 
-	var grid := GridContainer.new()
-	grid.columns = 3
-	grid.add_theme_constant_override("h_separation", 10)
-	grid.add_theme_constant_override("v_separation", 10)
-	column.add_child(grid)
+	var column := UiKit.vbox(26)
+	column.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	column.alignment = BoxContainer.ALIGNMENT_CENTER
+	selection_console.add_child(column)
+	var carousel := UiKit.hbox(0)
+	carousel.alignment = BoxContainer.ALIGNMENT_CENTER
+	column.add_child(carousel)
+	carousel.add_child(_animal_carousel_arrow("<", -1))
+	carousel.add_child(UiKit.spacer(ANIMAL_ARROW_GAP))
+	for slot in 5:
+		if slot > 0:
+			carousel.add_child(UiKit.spacer(ANIMAL_CARD_GAP))
+		var card := _animal_name_card()
+		carousel.add_child(card)
+		_animal_cards.append(card)
+	carousel.add_child(UiKit.spacer(ANIMAL_ARROW_GAP))
+	carousel.add_child(_animal_carousel_arrow(">", 1))
 
-	for def in Content.animals:
-		var b := UiKit.button(def.display_name, UiKit.H3)
-		b.custom_minimum_size = Vector2(196, 62)
-		b.pressed.connect(_preview.bind(def.id))
-		grid.add_child(b)
-		_buttons[def.id] = b
-
-	# No expander: Start sits directly below the grid - below Chicken, the last animal -
-	# rather than pinned to the foot of a much taller panel.
-	#
-	# One full-width action and nothing beside it: the selected animal is already named on
-	# its own button and standing on the platform, so a separate name label repeated it,
-	# and Back led to a title screen that no longer exists.
-	var go := UiKit.button("Start", UiKit.H3, true)
-	UiKit.style_button(go, UiKit.CTA, true) ## The one action that starts the round gets
-	## the palette's call-to-action colour, not the ambient ACCENT every header already uses.
-	go.custom_minimum_size = Vector2(0, 58)
-	go.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	go.pressed.connect(_confirm)
-	column.add_child(go)
+	var choose := UiKit.button("SELECT", UiKit.H3, true)
+	UiKit.style_button(choose, UiKit.CTA, true)
+	choose.name = "SelectAnimal"
+	choose.custom_minimum_size = SELECT_BUTTON_SIZE
+	choose.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	choose.pressed.connect(_confirm)
+	column.add_child(choose)
 
 	_add_gear_button()
+
+
+func _browse_animal(direction: int) -> void:
+	var ids := Content.animal_ids()
+	if ids.is_empty():
+		return
+	var index := ids.find(_selected)
+	if index < 0:
+		index = 0
+	_preview(ids[wrapi(index + direction, 0, ids.size())])
+
+
+func _animal_carousel_arrow(glyph: String, direction: int) -> Button:
+	var arrow := UiKit.button(glyph, 38)
+	arrow.custom_minimum_size = Vector2(55, 55)
+	arrow.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	arrow.pressed.connect(_browse_animal.bind(direction))
+	return arrow
+
+
+func _animal_name_card() -> Button:
+	var card := Button.new()
+	card.custom_minimum_size = ANIMAL_CARD_SIZE
+	card.focus_mode = Control.FOCUS_NONE
+	card.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	card.add_theme_font_size_override("font_size", UiKit.BODY)
+	card.pressed.connect(func() -> void:
+		var animal_id := str(card.get_meta("animal_id", ""))
+		if not animal_id.is_empty():
+			_preview(animal_id))
+	_style_animal_card(card, false)
+	return card
+
+
+func _style_animal_card(card: Button, selected: bool) -> void:
+	var face := Color("#173047") if selected else Color("#101a2b")
+	var edge := UiKit.ACCENT if selected else UiKit.LINE
+	var width := 3 if selected else 1
+	card.add_theme_stylebox_override("normal", UiKit.stylebox(face, 12, width, edge, 5))
+	card.add_theme_stylebox_override("hover",
+		UiKit.stylebox(face.lightened(0.12), 12, maxi(width, 2), UiKit.ACCENT, 5))
+	card.add_theme_stylebox_override("pressed",
+		UiKit.stylebox(face.darkened(0.16), 12, maxi(width, 2), UiKit.ACCENT, 5))
+	card.add_theme_color_override("font_color", UiKit.GOLD if selected else UiKit.TEXT)
+	card.add_theme_color_override("font_hover_color", UiKit.GOLD if selected else UiKit.TEXT)
+
+
+func _refresh_animal_cards() -> void:
+	var ids := Content.animal_ids()
+	if ids.is_empty() or _animal_cards.is_empty():
+		return
+	var selected_index := maxi(0, ids.find(_selected))
+	for slot in _animal_cards.size():
+		var offset := slot - 2
+		var animal_id := str(ids[wrapi(selected_index + offset, 0, ids.size())])
+		var def := Content.animal(animal_id)
+		var card := _animal_cards[slot]
+		card.visible = true
+		card.text = def.display_name if def != null else animal_id.capitalize()
+		card.set_meta("animal_id", animal_id)
+		_style_animal_card(card, offset == 0)
 
 
 ## Each sub-state owns the whole of _root, so entering either clears all of it instead of
@@ -323,7 +384,8 @@ func _clear_overlays() -> void:
 	_speech = null
 	_console = null
 	_progress = null
-	_buttons.clear() ## Freed with the panel; _preview() would otherwise iterate corpses.
+	_progress_group = null
+	_animal_cards.clear()
 
 
 ## Teacher Settings has to be reachable from both sub-states, and from the same corner in
@@ -339,6 +401,7 @@ func _add_gear_button() -> void:
 	# the desktop editor silently did - so the glyph arrived as a tofu box of hex digits.
 	# Same trap the pair separator hit; see the note in word_lab.gd.
 	var gear := UiKit.icon_button("", GEAR_BUTTON_SIZE)
+	gear.name = "SettingsGear"
 	gear.icon = GEAR_ICON
 	gear.expand_icon = true
 	# The gear alone, with no plate behind it. icon_button's panel-coloured box is right for
@@ -362,23 +425,43 @@ func _add_gear_button() -> void:
 func _preview(animal_id: String) -> void:
 	if animal_id == _selected:
 		return
+	_confirmation_serial += 1
 	_selected = animal_id
-	Audio.play("select")
 
 	_build_rig(animal_id)
 	# No rotation reset here: _preview_root is one persistent node the whole time the
 	# picking grid is up, only the rig child underneath it gets swapped, so the turntable
 	# is already exactly where it needs to be to continue uninterrupted.
-	for id in _buttons:
-		var b: Button = _buttons[id]
-		UiKit.style_button(b, UiKit.ACCENT if id == animal_id else UiKit.PANEL_HI, id == animal_id)
+	_refresh_animal_cards()
+	var def := Content.animal(animal_id)
+	if def != null and _rig != null:
+		_rig.play_selection_reaction(def.selection_reaction_animation)
+		Audio.play_animal_call(def.selection_reaction_sound, def.voice_pitch)
 
 
 func _confirm() -> void:
 	if _selected.is_empty() or _mode != Mode.PICKING:
 		return
-	Audio.play("charge")
-	Game.begin_creature(_selected)
+	# Confirmation is a flourish, not a modal: arrows, name cards, settings, and Select all
+	# remain live while this awaits. Browsing increments the serial and safely abandons the
+	# old confirmation instead of carrying the wrong animal into the adjective phase.
+	_confirmation_serial += 1
+	var serial := _confirmation_serial
+	var chosen := _selected
+	var def := Content.animal(chosen)
+	var duration := 0.0
+	if def != null and _rig != null:
+		duration = _rig.play_selection_reaction(def.confirm_selection_animation)
+		Audio.play_animal_call(def.confirm_selection_sound, def.voice_pitch)
+		Fx.burst(_preview_root, Vector3(0, 0.38, 0), "sparkle", UiKit.GOLD, 1.25)
+	else:
+		Audio.play("charge")
+	if duration > 0.0:
+		await get_tree().create_timer(duration).timeout
+	if not is_inside_tree() or _mode != Mode.PICKING \
+			or serial != _confirmation_serial or chosen != _selected:
+		return
+	Game.begin_creature(chosen)
 	_enter_recording()
 
 
@@ -397,6 +480,9 @@ func _enter_picking() -> void:
 	_pending = {}
 	_attempts = 0
 	_busy = false
+	_colour_speech_stage = ColourSpeechStage.NONE
+	_colour_past_accepted = false
+	_colour_past_assisted = false
 
 	_clear_overlays()
 	_build_picking_panel()
@@ -433,15 +519,20 @@ func _enter_present() -> void:
 	_attempts = 0
 	_busy = false
 	_pending = {}
+	_colour_speech_stage = ColourSpeechStage.NONE
+	_colour_past_accepted = false
+	_colour_past_assisted = false
 	_clear_overlays()
 
 	var dim := ColorRect.new()
+	dim.name = "PresentDim"
 	dim.color = Color(0, 0, 0, 0.55)
 	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	dim.mouse_filter = Control.MOUSE_FILTER_STOP ## Swallows taps meant for the panel behind.
 	_root.add_child(dim)
 
 	var panel := UiKit.panel(Color(0.06, 0.1, 0.16, 0.98), 18, 2, UiKit.ACCENT)
+	panel.name = "PresentPanel"
 	panel.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 	panel.offset_left = -PRESENT_SIZE.x * 0.5
 	panel.offset_right = PRESENT_SIZE.x * 0.5
@@ -455,10 +546,18 @@ func _enter_present() -> void:
 	_speech = SpeechPanel.new()
 	_speech.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_speech.accepted_by_teacher.connect(func() -> void: _present_advance())
+	_speech.change_requested.connect(_cancel_present)
 	column.add_child(_speech)
 
 	_add_gear_button() ## A teacher must still be able to reach the settings mid-pass.
 	_present_step()
+
+
+func _cancel_present() -> void:
+	if _busy:
+		return
+	Game.abandon_creature()
+	_enter_picking()
 
 
 func _present_step() -> void:
@@ -487,13 +586,14 @@ func _present_advance() -> void:
 	Voice.keep_present_for(_present_index)
 	_speech.show_success()
 	Audio.play("success")
-	await get_tree().create_timer(SUCCESS_PAUSE).timeout
+	var is_last := Game.current == null or _present_index + 1 >= Game.current.entries.size()
+	await get_tree().create_timer(PRE_TRANSFORM_PAUSE if is_last else SUCCESS_PAUSE).timeout
 	if not is_inside_tree():
 		return
 	_busy = false
 	_present_index += 1
 	if Game.current == null or _present_index >= Game.current.entries.size():
-		_handoff_to_transformation()
+		await _begin_pre_transformation()
 		return
 	_present_step()
 
@@ -507,6 +607,9 @@ func _enter_recording() -> void:
 	_set_recording_composition(true, true)
 	_dragging_view = false
 	_colour_preview = ""
+	_colour_speech_stage = ColourSpeechStage.NONE
+	_colour_past_accepted = false
+	_colour_past_assisted = false
 	if _preview_root != null:
 		_preview_root.rotation.y = RECORDING_FACING
 	_clear_overlays()
@@ -541,6 +644,7 @@ func _build_recording_ui() -> void:
 	_word_lab.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_word_lab.pair_selected.connect(_on_pair_selected)
 	_word_lab.before_colour_previewed.connect(_on_before_colour_previewed)
+	_word_lab.before_colour_selected.connect(_on_before_colour_selected)
 	_word_lab.colour_selection_cancelled.connect(_on_colour_selection_cancelled)
 	_console.add_child(_word_lab)
 	var animal := Content.animal(Game.current.animal_id) if Game.current != null else null
@@ -573,6 +677,7 @@ func _build_recording_ui() -> void:
 ## platform, rather than the old free-space centre left of a descriptor panel.
 func _build_progress_display() -> void:
 	var box := UiKit.vbox(2)
+	box.name = "BeforeHeadingGroup"
 	box.anchor_left = 0.5
 	box.anchor_right = 0.5
 	box.anchor_top = 0.0
@@ -582,6 +687,7 @@ func _build_progress_display() -> void:
 	box.offset_top = 24
 	box.offset_bottom = 24 + PROGRESS_HEIGHT
 	_root.add_child(box)
+	_progress_group = box
 
 	_progress = UiKit.label("", UiKit.BODY, UiKit.GOLD)
 	_progress.add_theme_font_size_override("font_size", PROGRESS_FONT)
@@ -612,7 +718,7 @@ func _sync_ui() -> void:
 		return
 	var assigned := _assigned_category()
 	if _progress != null:
-		_progress.text = "Before"
+		_progress.text = "Choose its appearance before"
 
 	_word_lab.set_used(Game.current.used_categories())
 	_word_lab.set_restriction(assigned)
@@ -692,6 +798,18 @@ func _on_pair_selected(category: String, before: String, after: String) -> void:
 	_colour_preview = ""
 	_pending = {"category": category, "before": before, "after": after}
 	_attempts = 0
+	# A colour's past clause was already accepted before the Now wheel appeared. Full
+	# sentence mode still needs the present clause here; the split/past modes either gather
+	# it in their normal later pass or intentionally ask for past only.
+	if category == Content.COLOR_CATEGORY and _colour_past_accepted:
+		_word_lab.set_locked(true)
+		_word_lab.visible = false
+		if Settings.say_mode == Settings.SAY_FULL:
+			_colour_speech_stage = ColourSpeechStage.PRESENT
+			_speech.show_target(before, after, GrammarValidator.CLAUSE_PRESENT)
+		else:
+			_complete_colour_without_present()
+		return
 	_apply_traits(true)
 	# Body and leg changes stage their own cartoon transition; a scale punch on top
 	# would just fight it.
@@ -700,6 +818,23 @@ func _on_pair_selected(category: String, before: String, after: String) -> void:
 	_word_lab.set_locked(true)
 	_word_lab.visible = false
 	_speech.show_target(before, after, _clause())
+
+
+## Choosing a Before colour has enough information for the past clause, but not enough to
+## create the transformation entry. Ask for "It was ..." now, then retain that accepted
+## half while the student chooses Now.
+func _on_before_colour_selected(word: String) -> void:
+	if _busy or not _pending.is_empty() or Game.current == null:
+		return
+	_colour_preview = word
+	_colour_speech_stage = ColourSpeechStage.PAST
+	_colour_past_accepted = false
+	_colour_past_assisted = false
+	_pending = {"category": Content.COLOR_CATEGORY, "before": word, "after": ""}
+	_attempts = 0
+	_word_lab.set_locked(true)
+	_word_lab.visible = false
+	_speech.show_target(word, "", GrammarValidator.CLAUSE_PAST)
 
 
 ## Before-colour browsing is visual only. It deliberately bypasses `_pending`, because a
@@ -716,19 +851,30 @@ func _on_colour_selection_cancelled() -> void:
 	if _busy or not _pending.is_empty():
 		return
 	_colour_preview = ""
+	_colour_speech_stage = ColourSpeechStage.NONE
+	_colour_past_accepted = false
+	_colour_past_assisted = false
 	_apply_traits(true)
 
 
 func _cancel_pending() -> void:
 	if _busy or _pending.is_empty():
 		return
+	var cancelled_stage := _colour_speech_stage
 	_pending = {}
-	_colour_preview = ""
 	_attempts = 0
-	_apply_traits(true)
+	_colour_speech_stage = ColourSpeechStage.NONE
 	_word_lab.set_locked(false)
 	_word_lab.visible = true
 	_speech.show_idle()
+	if cancelled_stage == ColourSpeechStage.PRESENT:
+		# The past answer is still valid; return to Now so only the present colour is changed.
+		_word_lab.continue_colour_after_past()
+		return
+	_colour_preview = ""
+	_colour_past_accepted = false
+	_colour_past_assisted = false
+	_apply_traits(true)
 
 
 func _on_heard(alternatives: PackedStringArray, is_final: bool) -> void:
@@ -777,17 +923,27 @@ static func _score(result: Dictionary) -> int:
 func _commit(assisted: bool) -> void:
 	if _pending.is_empty() or _busy:
 		return
+	if _colour_speech_stage == ColourSpeechStage.PAST:
+		_accept_colour_past(assisted)
+		return
 	_busy = true
 	var category := str(_pending["category"])
 	var before := str(_pending["before"])
 	var after := str(_pending["after"])
+	var completing_colour_present := _colour_speech_stage == ColourSpeechStage.PRESENT
 	_pending = {}
 	_colour_preview = ""
 
-	Game.record_sentence(category, before, after, assisted)
+	Game.record_sentence(category, before, after, assisted or _colour_past_assisted)
 	# Keep the take that was actually accepted, indexed by the slot it filled, so the
 	# transformation can play the three sentences back in the order they were said.
-	Voice.keep_for(Game.current.slots_filled() - 1)
+	if completing_colour_present:
+		Voice.keep_present_for(Game.current.slots_filled() - 1)
+	else:
+		Voice.keep_for(Game.current.slots_filled() - 1)
+	_colour_speech_stage = ColourSpeechStage.NONE
+	_colour_past_accepted = false
+	_colour_past_assisted = false
 	Audio.play("success")
 	Fx.burst(_preview_root, Vector3(0, 0.4, 0), "sparkle", UiKit.OK, 1.6)
 	_speech.show_success()
@@ -796,8 +952,50 @@ func _commit(assisted: bool) -> void:
 	_finish_sentence()
 
 
-func _finish_sentence() -> void:
+func _accept_colour_past(assisted: bool) -> void:
+	_busy = true
+	_colour_past_assisted = assisted
+	_colour_past_accepted = true
+	# The eventual colour entry will occupy the current empty slot.
+	Voice.keep_for(Game.current.slots_filled())
+	_pending = {}
+	Audio.play("success")
+	Fx.burst(_preview_root, Vector3(0, 0.4, 0), "sparkle", UiKit.OK, 1.6)
+	_speech.show_success()
 	await get_tree().create_timer(SUCCESS_PAUSE).timeout
+	if not is_inside_tree() or Game.current == null:
+		return
+	_busy = false
+	_colour_speech_stage = ColourSpeechStage.NONE
+	_word_lab.set_locked(false)
+	_word_lab.continue_colour_after_past()
+	_word_lab.visible = true
+	_speech.show_idle()
+
+
+func _complete_colour_without_present() -> void:
+	if _pending.is_empty() or Game.current == null:
+		return
+	_busy = true
+	var before := str(_pending["before"])
+	var after := str(_pending["after"])
+	_pending = {}
+	_colour_preview = ""
+	Game.record_sentence(Content.COLOR_CATEGORY, before, after, _colour_past_assisted)
+	_colour_speech_stage = ColourSpeechStage.NONE
+	_colour_past_accepted = false
+	_colour_past_assisted = false
+	Audio.play("success")
+	Fx.burst(_preview_root, Vector3(0, 0.4, 0), "sparkle", UiKit.OK, 1.6)
+	_speech.show_idle()
+	_finish_sentence()
+
+
+func _finish_sentence() -> void:
+	var ready_for_cinematic := Game.current != null and Game.current.is_complete() \
+		and not Settings.needs_present_pass(Speech.uses_microphone())
+	await get_tree().create_timer(
+		PRE_TRANSFORM_PAUSE if ready_for_cinematic else SUCCESS_PAUSE).timeout
 	if not is_inside_tree():
 		return
 	_busy = false
@@ -805,12 +1003,63 @@ func _finish_sentence() -> void:
 		if Settings.needs_present_pass(Speech.uses_microphone()):
 			_enter_present()
 		else:
-			_handoff_to_transformation()
+			await _begin_pre_transformation()
 	else:
 		_word_lab.set_locked(false)
 		_word_lab.visible = true
 		_speech.show_idle("Choose your next card.")
 		_sync_ui()
+
+
+## A dedicated bridge between gameplay and cinema. It owns input lockout and every UI
+## exit, while deliberately touching no camera, animal, platform or trait transform.
+func _begin_pre_transformation() -> void:
+	if _pre_transforming or Game.current == null:
+		return
+	_pre_transforming = true
+	_mode = Mode.PRE_TRANSFORMATION
+	_busy = true
+	_dragging_view = false
+	Speech.stop()
+	Audio.play("whoosh", 0.82)
+	var blocker := Control.new()
+	blocker.name = "PreTransformationInputBlocker"
+	blocker.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	blocker.mouse_filter = Control.MOUSE_FILTER_STOP
+	_root.add_child(blocker)
+
+	var view := get_viewport().get_visible_rect().size
+	var tween := create_tween().set_parallel(true)
+	var back := _root.get_node_or_null("BackToPicking") as Control
+	var gear := _root.get_node_or_null("SettingsGear") as Control
+	var present_panel := _root.get_node_or_null("PresentPanel") as Control
+	var present_dim := _root.get_node_or_null("PresentDim") as Control
+	if back != null:
+		tween.tween_property(back, "position:x", -back.size.x - 28.0, UI_EXIT_TIME) \
+			.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
+		tween.tween_property(back, "modulate:a", 0.0, UI_EXIT_TIME)
+	if gear != null:
+		tween.tween_property(gear, "position:x", view.x + 28.0, UI_EXIT_TIME) \
+			.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
+		tween.tween_property(gear, "modulate:a", 0.0, UI_EXIT_TIME)
+	if _progress_group != null:
+		tween.tween_property(_progress_group, "position:y", -_progress_group.size.y - 28.0,
+			UI_EXIT_TIME).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
+		tween.tween_property(_progress_group, "modulate:a", 0.0, UI_EXIT_TIME)
+	if _console != null:
+		tween.tween_property(_console, "position:y", view.y + 20.0, UI_EXIT_TIME) \
+			.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
+		tween.tween_property(_console, "modulate:a", 0.0, UI_EXIT_TIME)
+	if present_panel != null:
+		tween.tween_property(present_panel, "position:y", view.y + 20.0, UI_EXIT_TIME) \
+			.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
+		tween.tween_property(present_panel, "modulate:a", 0.0, UI_EXIT_TIME)
+	if present_dim != null:
+		tween.tween_property(present_dim, "modulate:a", 0.0, UI_EXIT_TIME)
+	await tween.finished
+	if not is_inside_tree() or Game.current == null:
+		return
+	_handoff_to_transformation()
 
 
 ## Preserve the view the learner has been watching. Offsets are relative to the animal's
@@ -824,6 +1073,7 @@ func _handoff_to_transformation() -> void:
 			_camera_aim - stand,
 			_camera.fov,
 			_preview_root.global_rotation.y)
+	Router.request_seamless_next_swap()
 	Game.set_phase(Game.Phase.CREATURE_LAB)
 
 

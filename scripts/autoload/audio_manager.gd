@@ -9,6 +9,7 @@ var _library := {}
 var _players: Array[AudioStreamPlayer] = []
 var _next := 0
 var _ambience: AudioStreamPlayer = null
+var _animal_player: AudioStreamPlayer = null ## Exclusive: rapid browsing never layers calls.
 
 
 func _ready() -> void:
@@ -20,6 +21,9 @@ func _ready() -> void:
 	_ambience = AudioStreamPlayer.new()
 	_ambience.bus = "Master"
 	add_child(_ambience)
+	_animal_player = AudioStreamPlayer.new()
+	_animal_player.bus = "Master"
+	add_child(_animal_player)
 	_build_library()
 
 
@@ -33,6 +37,30 @@ func play(sound: String, pitch := 1.0) -> void:
 	player.pitch_scale = pitch
 	player.volume_db = linear_to_db(clampf(Settings.sfx_volume, 0.0, 1.0))
 	player.play()
+
+
+## Animal previews share one dedicated voice. A new focused animal always replaces the
+## old call, so spinning through the carousel cannot build a wall of overlapping sounds.
+func play_animal_call(sound: String, pitch := 1.0) -> void:
+	if _animal_player == null:
+		return
+	_animal_player.stop()
+	var stream: AudioStream = _library.get(sound, null)
+	if stream == null or Settings.sfx_volume <= 0.001:
+		return
+	_animal_player.stream = stream
+	_animal_player.pitch_scale = pitch
+	_animal_player.volume_db = linear_to_db(clampf(Settings.sfx_volume, 0.0, 1.0))
+	_animal_player.play()
+
+
+func stop_animal_call() -> void:
+	if _animal_player != null:
+		_animal_player.stop()
+
+
+func has_sound(sound: String) -> bool:
+	return _library.has(sound)
 
 
 ## The old laboratory drone read as a persistent hum, so ambience is deliberately silent.
@@ -70,6 +98,49 @@ func _build_library() -> void:
 	_library["whoosh"] = _noise_sweep(0.28)
 	_library["baby"] = _coo()
 	_library["elder"] = _chuckle()
+
+	# Friendly, deliberately stylised animal voices. They are short vocal gestures rather
+	# than realistic field recordings, which keeps the picker playful and classroom-safe.
+	_library["dog_call"] = _animal_voice([
+		{"from": 330.0, "to": 190.0, "seconds": 0.18, "gap": 0.03}], 0.34, 0.20)
+	_library["dog_confirm"] = _animal_voice([
+		{"from": 350.0, "to": 185.0, "seconds": 0.19, "gap": 0.07},
+		{"from": 390.0, "to": 220.0, "seconds": 0.16, "gap": 0.02}], 0.37, 0.20)
+	_library["cat_call"] = _animal_voice([
+		{"from": 520.0, "to": 760.0, "seconds": 0.20, "gap": 0.0},
+		{"from": 760.0, "to": 430.0, "seconds": 0.27, "gap": 0.02}], 0.27, 0.04)
+	_library["cat_confirm"] = _animal_voice([
+		{"from": 480.0, "to": 820.0, "seconds": 0.24, "gap": 0.0},
+		{"from": 820.0, "to": 390.0, "seconds": 0.34, "gap": 0.02}], 0.30, 0.04)
+	_library["tiger_call"] = _animal_voice([
+		{"from": 155.0, "to": 94.0, "seconds": 0.56, "gap": 0.02}], 0.30, 0.34)
+	_library["tiger_confirm"] = _animal_voice([
+		{"from": 170.0, "to": 82.0, "seconds": 0.78, "gap": 0.03}], 0.35, 0.38)
+	_library["horse_call"] = _animal_voice([
+		{"from": 360.0, "to": 710.0, "seconds": 0.25, "gap": 0.0},
+		{"from": 700.0, "to": 330.0, "seconds": 0.28, "gap": 0.02}], 0.29, 0.11)
+	_library["horse_confirm"] = _animal_voice([
+		{"from": 330.0, "to": 790.0, "seconds": 0.31, "gap": 0.0},
+		{"from": 780.0, "to": 300.0, "seconds": 0.38, "gap": 0.02}], 0.32, 0.12)
+	_library["deer_call"] = _animal_voice([
+		{"from": 510.0, "to": 680.0, "seconds": 0.17, "gap": 0.02}], 0.18, 0.03)
+	_library["deer_confirm"] = _animal_voice([
+		{"from": 500.0, "to": 710.0, "seconds": 0.19, "gap": 0.06},
+		{"from": 620.0, "to": 760.0, "seconds": 0.14, "gap": 0.02}], 0.20, 0.03)
+	_library["penguin_call"] = _animal_voice([
+		{"from": 720.0, "to": 980.0, "seconds": 0.12, "gap": 0.04},
+		{"from": 850.0, "to": 1080.0, "seconds": 0.11, "gap": 0.02}], 0.24, 0.05)
+	_library["penguin_confirm"] = _animal_voice([
+		{"from": 690.0, "to": 1030.0, "seconds": 0.13, "gap": 0.04},
+		{"from": 780.0, "to": 1160.0, "seconds": 0.13, "gap": 0.04},
+		{"from": 900.0, "to": 1080.0, "seconds": 0.11, "gap": 0.02}], 0.27, 0.05)
+	_library["chicken_call"] = _animal_voice([
+		{"from": 520.0, "to": 310.0, "seconds": 0.10, "gap": 0.05},
+		{"from": 480.0, "to": 280.0, "seconds": 0.10, "gap": 0.02}], 0.25, 0.14)
+	_library["chicken_confirm"] = _animal_voice([
+		{"from": 560.0, "to": 300.0, "seconds": 0.11, "gap": 0.045},
+		{"from": 520.0, "to": 270.0, "seconds": 0.11, "gap": 0.045},
+		{"from": 600.0, "to": 330.0, "seconds": 0.13, "gap": 0.02}], 0.29, 0.15)
 
 
 ## A decaying sine that glides from one pitch to another - the workhorse UI sound.
@@ -117,6 +188,40 @@ func _noise_sweep(seconds: float) -> AudioStreamWAV:
 		filtered = lerpf(filtered, rng.randf_range(-1.0, 1.0), 0.25)
 		var envelope: float = sin(PI * t)
 		samples[i] = (sin(phase) * 0.55 + filtered * 0.45) * envelope * 0.5
+	return _to_wav(samples)
+
+
+## Build a compact voiced call from pitch gestures. A small filtered-noise component
+## distinguishes a bark/roar/cluck from the clean musical UI blips, while rounded syllable
+## envelopes and conservative gain keep every call friendly rather than startling.
+func _animal_voice(syllables: Array, gain: float, roughness: float) -> AudioStreamWAV:
+	var total := 0
+	for syllable in syllables:
+		total += int(MIX_RATE * (float(syllable.get("seconds", 0.1))
+			+ float(syllable.get("gap", 0.0))))
+	var samples := PackedFloat32Array()
+	samples.resize(maxi(total, 1))
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 20260821 + syllables.size() * 97 + int(gain * 1000.0)
+	var index := 0
+	var filtered_noise := 0.0
+	for syllable in syllables:
+		var count := maxi(int(MIX_RATE * float(syllable.get("seconds", 0.1))), 1)
+		var phase := 0.0
+		for i in count:
+			var t := float(i) / float(count)
+			var hz := lerpf(float(syllable.get("from", 440.0)),
+				float(syllable.get("to", 440.0)), smoothstep(0.0, 1.0, t))
+			hz *= 1.0 + sin(TAU * 7.0 * t) * 0.018
+			phase += TAU * hz / float(MIX_RATE)
+			filtered_noise = lerpf(filtered_noise, rng.randf_range(-1.0, 1.0), 0.22)
+			var voiced := sin(phase) * 0.72 + sin(phase * 2.0) * 0.20 \
+				+ sin(phase * 3.0) * 0.08
+			var envelope := pow(sin(PI * t), 0.72)
+			samples[index] = (voiced * (1.0 - roughness)
+				+ filtered_noise * roughness) * envelope * gain
+			index += 1
+		index += int(MIX_RATE * float(syllable.get("gap", 0.0)))
 	return _to_wav(samples)
 
 

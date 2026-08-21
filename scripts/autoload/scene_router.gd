@@ -17,6 +17,7 @@ var _fade: ColorRect = null
 var _current_path := ""
 var _target_path := ""
 var _swapping := false
+var _seamless_next := false
 
 
 func _ready() -> void:
@@ -39,7 +40,15 @@ func attach(container: Node, fade: ColorRect) -> void:
 
 
 func _on_phase_changed(next: int, _previous: int) -> void:
-	_swap(str(scenes.get(next, "")), true)
+	var animate := not _seamless_next
+	_seamless_next = false
+	_swap(str(scenes.get(next, "")), animate)
+
+
+## The outgoing scene has already cleared its UI and supplied a pixel-matched camera
+## handoff, so a black router fade would reintroduce the very cut that transition removed.
+func request_seamless_next_swap() -> void:
+	_seamless_next = true
 
 
 ## A swap takes two fades to finish, and phases can change during them (the debug jump

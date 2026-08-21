@@ -21,11 +21,9 @@ const SPEAKER_ICON := preload("res://ui/speaker.svg")
 const MIC_IDLE := "Tap to speak  (Space)"
 const MIC_LISTENING := "Listening...  tap to stop"
 const LISTEN_TIMEOUT := 10.0 ## Seconds before an unanswered microphone closes itself.
-const HEADER_HEIGHT := 34
 
 var _sentence_label: RichTextLabel = null
 var _feedback: Label = null
-var _title: Label = null
 var _mic_button: Button = null
 var _entry: LineEdit = null
 var _listen_button: Button = null
@@ -51,22 +49,8 @@ func _build() -> void:
 	var column := UiKit.vbox(8)
 	add_child(column)
 
-	# Keep the title on the panel's centre line. The sentence speaker lives beside the
-	# sentence below, so it never changes the title's position.
-	var header := Control.new()
-	header.custom_minimum_size = Vector2(0, HEADER_HEIGHT)
-	column.add_child(header)
-
-	_title = UiKit.label("SAY IT", UiKit.H3, UiKit.ACCENT)
-	_title.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	header.add_child(_title)
-
-	# Two expanders, not a fixed spacer, so the sentence centres between the header and the
-	# entry/mic block below however much slack the panel actually has - SAY_IT_HEIGHT
-	# carries a deliberate margin above the tight-content minimum for exactly this, and the
-	# present-tense pass's taller modal has plenty of its own regardless.
+	# Two expanders, not a fixed spacer, so the sentence and input block remain centred
+	# however much slack the panel actually has.
 	column.add_child(UiKit.expander())
 
 	var sentence_row := UiKit.hbox(8)
@@ -166,7 +150,6 @@ func _build() -> void:
 
 func _sync_input_mode() -> void:
 	var mic := Speech.uses_microphone()
-	_title.text = "SAY IT" if mic else "TYPE IT"
 	_mic_button.visible = mic
 	_entry.visible = not mic
 
@@ -203,9 +186,7 @@ func show_target(before: String, after: String, clause := GrammarValidator.CLAUS
 	_feedback.add_theme_color_override("font_color", UiKit.MUTED)
 	_override_button.visible = false
 	_listen_button.visible = Tts.available() and Settings.prompt_mode != Settings.PROMPT_HIDDEN
-	# The present-tense pass has nothing to cancel back to: the pairing was fixed during
-	# the past pass that came before it, not a fresh choice made here.
-	_cancel_label.visible = clause != GrammarValidator.CLAUSE_PRESENT
+	_cancel_label.visible = true
 	_set_input_enabled(true)
 	if not Speech.uses_microphone():
 		_entry.grab_focus()

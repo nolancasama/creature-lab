@@ -64,6 +64,15 @@ extends Resource
 @export var voice_pitch: float = 1.0
 @export var hover: float = 0.0 ## 1.0 for animals that swim instead of walk.
 
+## Short, non-blocking reactions used by the animal picker.  The animation dictionaries
+## are interpreted by SelectionReaction, so adding another species is still a data edit:
+## root motion and any number of named bone tracks can be composed without adding a new
+## branch to the selection screen.
+@export var selection_reaction_animation: Dictionary = {}
+@export var selection_reaction_sound: String = ""
+@export var confirm_selection_animation: Dictionary = {}
+@export var confirm_selection_sound: String = ""
+
 ## YOUNG tuning. Everything here has a default derived from this animal's own stand height
 ## and face socket, so a new animal reads as a baby without authoring any of it - the
 ## entries exist to correct species whose muzzle is unusually long or whose head sits at an
@@ -133,6 +142,14 @@ static func from_dict(d: Dictionary) -> AnimalDefinition:
 	a.walk_speed = float(d.get("walk_speed", 1.2))
 	a.voice_pitch = float(d.get("voice_pitch", 1.0))
 	a.hover = float(d.get("hover", 0.0))
+	var selection_animation = d.get("selection_reaction_animation", {})
+	if selection_animation is Dictionary:
+		a.selection_reaction_animation = (selection_animation as Dictionary).duplicate(true)
+	a.selection_reaction_sound = str(d.get("selection_reaction_sound", ""))
+	var confirm_animation = d.get("confirm_selection_animation", {})
+	if confirm_animation is Dictionary:
+		a.confirm_selection_animation = (confirm_animation as Dictionary).duplicate(true)
+	a.confirm_selection_sound = str(d.get("confirm_selection_sound", ""))
 	var young_cfg = d.get("young", {})
 	if young_cfg is Dictionary:
 		a.young = (young_cfg as Dictionary).duplicate(true)

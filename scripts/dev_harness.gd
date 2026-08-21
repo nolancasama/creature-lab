@@ -5,6 +5,7 @@ extends RefCounted
 ##   godot --path . -- --selftest          content, assembly and grammar checks, then quit
 ##   godot --path . -- --phase=lab         jump straight to a screen
 ##   godot --path . -- --shot=lab          jump there, save user://shot_lab.png, quit
+##   godot --path . -- --shot=select       redesigned animal picker and thumbnail strip
 ##   godot --path . -- --shot=say          the recording screen with a card chosen
 ##   godot --path . -- --backtest          abandon a half-finished round, then restart it
 ##   godot --path . -- --splittest         the SAY_SPLIT present-tense pass, end to end
@@ -171,9 +172,9 @@ static func _backtest(main: Node) -> void:
 	print("[backtest] back returned to picking")
 
 	# The regression itself: start over and check a card still registers.
-	var go := _find_button(Router.current_scene, "Start")
+	var go := Router.current_scene.find_child("SelectAnimal", true, false) as Button
 	if go == null:
-		printerr("[backtest] FAIL: no Start button after backing out")
+		printerr("[backtest] FAIL: no SELECT button after backing out")
 		tree.quit(1)
 		return
 	go.pressed.emit()
@@ -448,10 +449,25 @@ static func _screenshot(main: Node, phase: String) -> void:
 			colour_carousel._step_colour(1)
 			if phase in ["color-after", "color-say"]:
 				await colour_carousel._confirm_colour()
+			if phase == "color-after":
+				var selection_scene := Router.current_scene
+				if selection_scene != null and selection_scene.has_method("_commit"):
+					selection_scene._commit(true)
+					await main.get_tree().create_timer(1.3).timeout
 				colour_carousel._step_colour(1)
-			if phase == "color-say":
-				await colour_carousel._confirm_colour()
 		await main.get_tree().create_timer(0.6).timeout
+	if phase == "select":
+		var sel := Router.current_scene
+		for child in sel._picking_panel.get_children():
+			var c := child as Control
+			print("[probe] %s vis=%s rect=%s mod=%s" % [c.name, c.is_visible_in_tree(),
+				c.get_global_rect(), c.modulate])
+			for sub in c.get_children():
+				var sc := sub as Control
+				if sc != null:
+					print("[probe]    %s vis=%s rect=%s text=%s" % [sc.name,
+						sc.is_visible_in_tree(), sc.get_global_rect(),
+						sc.get("text")])
 	await RenderingServer.frame_post_draw
 	var image := main.get_viewport().get_texture().get_image()
 	var path := "user://shot_%s.png" % phase
@@ -489,6 +505,14 @@ static func _selftest(main: Node) -> void:
 		_check(failures, rig.skeleton != null, "%s: no skeleton in model '%s'" % [def.id, def.model])
 		_check(failures, rig.mesh_instance != null, "%s: no mesh in model '%s'" % [def.id, def.model])
 		_check(failures, not def.body_bones.is_empty(), "%s has no LONG/SHORT body bones" % def.id)
+		_check(failures, not def.selection_reaction_animation.is_empty(),
+			"%s has no browse selection reaction" % def.id)
+		_check(failures, not def.confirm_selection_animation.is_empty(),
+			"%s has no confirmed selection reaction" % def.id)
+		_check(failures, Audio.has_sound(def.selection_reaction_sound),
+			"%s browse sound '%s' is missing" % [def.id, def.selection_reaction_sound])
+		_check(failures, Audio.has_sound(def.confirm_selection_sound),
+			"%s confirm sound '%s' is missing" % [def.id, def.confirm_selection_sound])
 		for group in MuscleDeformer.GROUPS:
 			_check(failures, not def.bulk_bones_for(group).is_empty(),
 				"%s has no bones for muscle group '%s'" % [def.id, group])
@@ -520,9 +544,24 @@ static func _selftest(main: Node) -> void:
 				all_bones.append_array(Array(leg["bones"] as PackedStringArray))
 			for socket in def.sockets:
 				all_bones.append(def.socket_bone(str(socket)))
+			for profile in [def.selection_reaction_animation, def.confirm_selection_animation]:
+				for track in profile.get("bones", []):
+					all_bones.append(str(track.get("bone", "")))
 			for bone in all_bones:
 				_check(failures, rig.skeleton.find_bone(bone) != -1,
 					"%s: bone '%s' not in model" % [def.id, bone])
+
+		# Every profile must visibly move and return exactly to its starting transform. This
+		# catches a zeroed data row and the more damaging carousel drift caused by an
+		# interrupted reaction capturing the previous flourish as its new baseline.
+		var reaction_start := rig.transform
+		var reaction_duration := rig.play_selection_reaction(def.selection_reaction_animation)
+		rig.advance_selection_reaction(reaction_duration * 0.5)
+		_check(failures, not rig.transform.is_equal_approx(reaction_start),
+			"%s browse reaction has no visible root motion" % def.id)
+		rig.advance_selection_reaction(reaction_duration)
+		_check(failures, rig.transform.is_equal_approx(reaction_start),
+			"%s browse reaction did not restore its root pose" % def.id)
 
 		for socket in ["head_top", "back", "rear", "face"]:
 			_check(failures, def.sockets.has(socket), "%s: socket '%s' missing" % [def.id, socket])
@@ -1180,9 +1219,11 @@ static func _carousel_checks(failures: Array[String], main: Node) -> void:
 	# confirmed colour.
 	var colours := Content.enabled_colors()
 	var previews: Array[String] = []
+	var past_choices: Array[String] = []
 	var selections: Array[PackedStringArray] = []
 	var cancellations := [0]
 	car.before_colour_previewed.connect(func(word: String) -> void: previews.append(word))
+	car.before_colour_selected.connect(func(word: String) -> void: past_choices.append(word))
 	car.pair_selected.connect(func(category: String, before: String, after: String) -> void:
 		if category == Content.COLOR_CATEGORY:
 			selections.append(PackedStringArray([before, after])))
@@ -1192,19 +1233,22 @@ static func _carousel_checks(failures: Array[String], main: Node) -> void:
 	car._now_index = 1
 	car._show_view(DescriptorCarousel.View.COLOUR)
 	car._sync_colour()
-	_check(failures, not car._colour_prev.disabled and not car._colour_swatch.disabled
-		and not car._colour_next.disabled,
+	_check(failures, not car._colour_far_prev.disabled and not car._colour_prev.disabled
+		and not car._colour_swatch.disabled and not car._colour_next.disabled
+		and not car._colour_far_next.disabled,
 		"carousel: not every visible colour card is selectable")
 	# Uniformity, both decks: a card must not look different for sitting in the middle. The
 	# centre swatch was twice the area of its neighbours and the centre word card was
 	# enlarged and ringed, which both read as "this one is the selection" on a row where
 	# every visible card is pressable.
-	for deck in [[car._colour_prev, car._colour_swatch, car._colour_next],
-			[car._prev_card, car._word_cards[0], car._next_card]]:
-		var reference: Vector2 = (deck[1] as Control).custom_minimum_size
-		var size_var: Control = (deck[0] as Control)
-		var uniform_size: bool = size_var.custom_minimum_size == reference \
-			and (deck[2] as Control).custom_minimum_size == reference
+	for deck in [[car._colour_far_prev, car._colour_prev, car._colour_swatch,
+			car._colour_next, car._colour_far_next],
+			[car._far_prev_card, car._prev_card, car._word_cards[0],
+			car._next_card, car._far_next_card]]:
+		var reference: Vector2 = (deck[2] as Control).custom_minimum_size
+		var uniform_size := true
+		for card in deck:
+			uniform_size = uniform_size and (card as Control).custom_minimum_size == reference
 		_check(failures, uniform_size, "carousel: cards in a deck are not the same size")
 		for card in deck:
 			var button := card as Button
@@ -1215,18 +1259,25 @@ static func _carousel_checks(failures: Array[String], main: Node) -> void:
 			_check(failures, button.modulate.a >= 0.999,
 				"carousel: a visible card is faded")
 			_check(failures, button.get_theme_font_size("font_size")
-				== (deck[1] as Button).get_theme_font_size("font_size"),
+				== (deck[2] as Button).get_theme_font_size("font_size"),
 				"carousel: a visible card uses a different text size")
+	_check(failures, car._colour_feedback.text.is_empty() and not car._colour_feedback.visible,
+		"carousel: obsolete colour instruction is still visible")
 	car._step_colour(1)
 	_check(failures, previews.is_empty(),
 		"carousel: BEFORE browsing recoloured the live animal preview")
 	var confirmed_before := car._was_index
 	await car._confirm_colour()
-	_check(failures, car._colour_step == DescriptorCarousel.ColourStep.AFTER
-		and car._was_index == confirmed_before
+	_check(failures, car._colour_step == DescriptorCarousel.ColourStep.BEFORE
+		and car._colour_picker.visible and car._was_index == confirmed_before
 		and previews.size() == 1
-		and previews[-1] == (colours[confirmed_before] as ColorDefinition).word,
-		"carousel: confirming BEFORE did not preview the pressed colour")
+		and past_choices.size() == 1
+		and previews[-1] == (colours[confirmed_before] as ColorDefinition).word
+		and past_choices[-1] == previews[-1],
+		"carousel: confirming BEFORE did not hand the colour to the past-tense panel")
+	car.continue_colour_after_past()
+	_check(failures, car._colour_step == DescriptorCarousel.ColourStep.AFTER,
+		"carousel: completing the past clause did not reveal the Now colours")
 	var previews_after_confirm := previews.size()
 	for i in colours.size() * 2:
 		car._step_colour(1)
@@ -1243,13 +1294,14 @@ static func _carousel_checks(failures: Array[String], main: Node) -> void:
 		and car._was_index == confirmed_before,
 		"carousel: cancelling AFTER did not return to the confirmed BEFORE choice")
 	await car._confirm_colour()
+	car.continue_colour_after_past()
 	await car._confirm_colour()
 	_check(failures, selections.size() == 1 and selections[0][0] != selections[0][1],
 		"carousel: final colour confirmation did not emit a different pair")
 	car._colour_step = DescriptorCarousel.ColourStep.BEFORE
 	car._show_view(DescriptorCarousel.View.COLOUR)
 	car._cancel_colour()
-	_check(failures, cancellations[0] == 1 and car._view == DescriptorCarousel.View.CATEGORY,
+	_check(failures, cancellations[0] == 2 and car._view == DescriptorCarousel.View.CATEGORY,
 		"carousel: cancelling BEFORE did not restore the main word carousel")
 
 	var first := Content.enabled_pairs()[0]

@@ -19,6 +19,22 @@
       "model": "dog_0012",
       "skin": "#c9ced6",
       "stand_height": 1.55,
+      "selection_reaction_animation": {
+        "duration": 0.9, "lift": 0.12, "bounces": 2, "pitch_deg": -4, "scale": 0.035,
+        "bones": [
+          {"bone": "scull", "axis": [1, 0, 0], "angle_deg": -7},
+          {"bone": "spine.003", "axis": [0, 1, 0], "angle_deg": 25, "cycles": 3}
+        ]
+      },
+      "selection_reaction_sound": "dog_call",
+      "confirm_selection_animation": {
+        "duration": 1.15, "lift": 0.19, "bounces": 2, "pitch_deg": -7, "scale": 0.06,
+        "bones": [
+          {"bone": "scull", "axis": [1, 0, 0], "angle_deg": -11},
+          {"bone": "spine.003", "axis": [0, 1, 0], "angle_deg": 35, "cycles": 4}
+        ]
+      },
+      "confirm_selection_sound": "dog_confirm",
       "ribs": {
         "center": [
           0.5,
@@ -234,6 +250,24 @@
       "model": "kitty_0012",
       "skin": "#3a3a42",
       "stand_height": 1.25,
+      "selection_reaction_animation": {
+        "duration": 1.0, "lift": 0.025, "bounces": 1, "yaw_deg": -6, "roll_deg": 3,
+        "bones": [
+          {"bone": "scull", "axis": [1, 0, 0], "angle_deg": -5},
+          {"bone": "spine.004", "axis": [0, 1, 0], "angle_deg": 22, "cycles": 1.5},
+          {"bone": "front_thigh.L", "axis": [1, 0, 0], "angle_deg": -18}
+        ]
+      },
+      "selection_reaction_sound": "cat_call",
+      "confirm_selection_animation": {
+        "duration": 1.2, "lift": 0.045, "bounces": 1, "yaw_deg": -9, "roll_deg": 5, "scale": 0.025,
+        "bones": [
+          {"bone": "scull", "axis": [1, 0, 0], "angle_deg": -8},
+          {"bone": "spine.004", "axis": [0, 1, 0], "angle_deg": 30, "cycles": 2},
+          {"bone": "front_thigh.L", "axis": [1, 0, 0], "angle_deg": -28}
+        ]
+      },
+      "confirm_selection_sound": "cat_confirm",
       "ribs": {
         "center": [
           0.5,
@@ -448,6 +482,23 @@
       "model": "tiger",
       "skin": "#e08a3c",
       "stand_height": 1.85,
+      "selection_reaction_animation": {
+        "duration": 1.05, "forward": -0.055, "pitch_deg": -5, "scale": 0.045,
+        "bones": [
+          {"bone": "spine.012", "axis": [1, 0, 0], "angle_deg": -10},
+          {"bone": "jaw", "axis": [1, 0, 0], "angle_deg": 16}
+        ]
+      },
+      "selection_reaction_sound": "tiger_call",
+      "confirm_selection_animation": {
+        "duration": 1.35, "forward": -0.085, "pitch_deg": -8, "scale": 0.07,
+        "bones": [
+          {"bone": "spine.012", "axis": [1, 0, 0], "angle_deg": -14},
+          {"bone": "jaw", "axis": [1, 0, 0], "angle_deg": 24},
+          {"bone": "shoulder.L", "axis": [0, 0, 1], "angle_deg": 8}
+        ]
+      },
+      "confirm_selection_sound": "tiger_confirm",
       "ribs": {
         "center": [
           0.5,
@@ -677,6 +728,23 @@
       "model": "horse_0012",
       "skin": "#a9673f",
       "stand_height": 2.15,
+      "selection_reaction_animation": {
+        "duration": 0.95, "lift": 0.045, "bounces": 1, "pitch_deg": -4,
+        "bones": [
+          {"bone": "scull", "axis": [1, 0, 0], "angle_deg": -13},
+          {"bone": "front_thigh.L", "axis": [1, 0, 0], "angle_deg": -10, "cycles": 1}
+        ]
+      },
+      "selection_reaction_sound": "horse_call",
+      "confirm_selection_animation": {
+        "duration": 1.25, "lift": 0.12, "bounces": 1, "pitch_deg": -8, "roll_deg": 2, "scale": 0.025,
+        "bones": [
+          {"bone": "scull", "axis": [1, 0, 0], "angle_deg": -18},
+          {"bone": "front_thigh.L", "axis": [1, 0, 0], "angle_deg": -16},
+          {"bone": "front_thigh.R", "axis": [1, 0, 0], "angle_deg": -16}
+        ]
+      },
+      "confirm_selection_sound": "horse_confirm",
       "ribs": {
         "center": [
           0.5,
@@ -910,6 +978,24 @@
       "model": "deer",
       "skin": "#9a6b43",
       "stand_height": 2.0,
+      "selection_reaction_animation": {
+        "duration": 0.9, "lift": 0.045, "bounces": 1, "yaw_deg": 5,
+        "bones": [
+          {"bone": "scull", "axis": [1, 0, 0], "angle_deg": -10},
+          {"bone": "ear.L", "axis": [0, 0, 1], "angle_deg": 14, "cycles": 2},
+          {"bone": "ear.R", "axis": [0, 0, 1], "angle_deg": -14, "cycles": 2}
+        ]
+      },
+      "selection_reaction_sound": "deer_call",
+      "confirm_selection_animation": {
+        "duration": 1.15, "lift": 0.10, "bounces": 2, "yaw_deg": 7, "roll_deg": 3,
+        "bones": [
+          {"bone": "scull", "axis": [1, 0, 0], "angle_deg": -14},
+          {"bone": "ear.L", "axis": [0, 0, 1], "angle_deg": 19, "cycles": 2.5},
+          {"bone": "ear.R", "axis": [0, 0, 1], "angle_deg": -19, "cycles": 2.5}
+        ]
+      },
+      "confirm_selection_sound": "deer_confirm",
       "ribs": {
         "center": [
           0.5,
@@ -1145,6 +1231,22 @@
       "model": "pinguin_0012",
       "skin": "#34343c",
       "stand_height": 1.4,
+      "selection_reaction_animation": {
+        "duration": 0.9, "lift": 0.075, "bounces": 2, "roll_deg": 8, "rotation_cycles": 1.5,
+        "bones": [
+          {"bone": "fin.L", "axis": [1, 0, 0], "angle_deg": 25, "cycles": 2.5},
+          {"bone": "fin.R", "axis": [1, 0, 0], "angle_deg": -25, "cycles": 2.5}
+        ]
+      },
+      "selection_reaction_sound": "penguin_call",
+      "confirm_selection_animation": {
+        "duration": 1.15, "lift": 0.12, "bounces": 3, "roll_deg": 12, "rotation_cycles": 2,
+        "bones": [
+          {"bone": "fin.L", "axis": [1, 0, 0], "angle_deg": 34, "cycles": 3.5},
+          {"bone": "fin.R", "axis": [1, 0, 0], "angle_deg": -34, "cycles": 3.5}
+        ]
+      },
+      "confirm_selection_sound": "penguin_confirm",
       "ribs": {
         "center": [
           0.5,
@@ -1348,6 +1450,24 @@
       "model": "chicken_0012",
       "skin": "#a55f3a",
       "stand_height": 1.15,
+      "selection_reaction_animation": {
+        "duration": 0.82, "lift": 0.085, "bounces": 2, "pitch_deg": 4,
+        "bones": [
+          {"bone": "scull", "axis": [1, 0, 0], "angle_deg": 15, "cycles": 2},
+          {"bone": "Wing.L", "axis": [1, 0, 0], "angle_deg": 26, "cycles": 3},
+          {"bone": "Wing.R", "axis": [1, 0, 0], "angle_deg": -26, "cycles": 3}
+        ]
+      },
+      "selection_reaction_sound": "chicken_call",
+      "confirm_selection_animation": {
+        "duration": 1.05, "lift": 0.15, "bounces": 3, "pitch_deg": 6, "scale": 0.035,
+        "bones": [
+          {"bone": "scull", "axis": [1, 0, 0], "angle_deg": 20, "cycles": 2.5},
+          {"bone": "Wing.L", "axis": [1, 0, 0], "angle_deg": 36, "cycles": 4},
+          {"bone": "Wing.R", "axis": [1, 0, 0], "angle_deg": -36, "cycles": 4}
+        ]
+      },
+      "confirm_selection_sound": "chicken_confirm",
       "ribs": {
         "center": [
           0.5,

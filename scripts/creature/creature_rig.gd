@@ -80,6 +80,7 @@ var deformer: CreatureDeformer = null ## Body length and per-leg lengths.
 var muscle: MuscleDeformer = null ## STRONG/WEAK one-for-one forelimb morphs.
 var feel: FeelDeformer = null ## HARD/SOFT shine, puff, squash and jiggle.
 var pace: PaceDeformer = null ## FAST/SLOW dashes, twitches and drawn-out actions.
+var selection_reaction: SelectionReaction = null ## Short picker-only, data-driven flourish.
 
 var tempo := 1.0 ## Idle animation speed; the SPEED modifier drives this.
 var movement_locked := false ## Transformation presentation keeps FAST on the platform.
@@ -166,6 +167,7 @@ func _build(def: AnimalDefinition) -> void:
 	muscle = MuscleDeformer.new(self)
 	feel = FeelDeformer.new(self)
 	pace = PaceDeformer.new(self)
+	selection_reaction = SelectionReaction.new(self)
 
 
 ## Pull one animal out of the shared GLB and discard the other six. The PackedScene
@@ -1072,6 +1074,27 @@ func make_ghost(color: Color, alpha := 0.3) -> void:
 	clear_fx()
 
 
+## The picker supplies a profile from AnimalDefinition. Returning its duration lets the
+## confirmation flow continue precisely when the flourish has settled, without blocking
+## any input while it plays.
+func play_selection_reaction(profile: Dictionary) -> float:
+	if selection_reaction == null:
+		return 0.0
+	return selection_reaction.play(profile)
+
+
+func stop_selection_reaction() -> void:
+	if selection_reaction != null:
+		selection_reaction.cancel()
+
+
+## Public mainly for deterministic harness advancement; normal play advances from
+## _process() below.
+func advance_selection_reaction(delta: float) -> void:
+	if selection_reaction != null:
+		selection_reaction.tick(delta)
+
+
 # --- Idle life ---------------------------------------------------------------
 
 func _process(delta: float) -> void:
@@ -1127,6 +1150,9 @@ func _process(delta: float) -> void:
 	_sway_appendages(motion)
 	_apply_grounding(delta)
 	_sync_thermal_fx_to_body()
+	# Apply this last: grounding keeps the neutral stance correct, while an intentional
+	# selection hop is allowed to lift the whole already-grounded creature for a moment.
+	advance_selection_reaction(delta)
 
 
 ## Explicit sole/hoof points after skinning, adjective proportions and the base idle

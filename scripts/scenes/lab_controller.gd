@@ -9,6 +9,7 @@ var stage: LabStage = null
 
 var _banner: Label = null
 var _flash: ColorRect = null
+var _top_bar: Control = null
 var _director: TransformationDirector = null
 var _transformed := false
 
@@ -45,7 +46,11 @@ func _build_ui() -> void:
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	layer.add_child(root)
 
-	root.add_child(_build_top_bar())
+	_top_bar = _build_top_bar()
+	# The seamless handoff opens on a clean copy of the final Before frame. Cinematic
+	# controls return only after the machine has begun entering that frame.
+	_top_bar.visible = Game.phase != Game.Phase.CREATURE_LAB
+	root.add_child(_top_bar)
 
 	_banner = UiKit.label("D N A   C O M P L E T E", UiKit.H1, UiKit.ACCENT)
 	_banner.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
@@ -109,10 +114,22 @@ func _run_transformation() -> void:
 	if _transformed or Game.current == null or _director == null:
 		return
 	_transformed = true
+	_show_cinematic_controls_delayed()
 	await _director.run(Game.current)
 	# Leaving the lab mid-sequence is legal; only advance if we are still the live scene.
 	if is_inside_tree() and Game.phase == Game.Phase.TRANSFORMATION:
 		Game.set_phase(Game.Phase.NAMING)
+
+
+func _show_cinematic_controls_delayed() -> void:
+	if _top_bar == null or _top_bar.visible:
+		return
+	await get_tree().create_timer(1.9).timeout
+	if not is_inside_tree() or _top_bar == null:
+		return
+	_top_bar.visible = true
+	_top_bar.modulate.a = 0.0
+	create_tween().tween_property(_top_bar, "modulate:a", 1.0, 0.25)
 
 
 func _flash_screen(strength: float) -> void:
