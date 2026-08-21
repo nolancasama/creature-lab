@@ -87,6 +87,7 @@ var _camera_shift := CAMERA_SHIFT
 var _picking_panel: Control = null
 var _animal_cards: Array[Button] = []
 var _selected := ""
+var _animal_carousel_center := "" ## Moves only with chevrons, never when a card is tapped.
 var _rig_animal := "" ## Which animal the live rig was built for.
 
 # Recording UI
@@ -333,10 +334,14 @@ func _browse_animal(direction: int) -> void:
 	var ids := Content.animal_ids()
 	if ids.is_empty():
 		return
-	var index := ids.find(_selected)
+	var index := ids.find(_animal_carousel_center)
 	if index < 0:
-		index = 0
-	_preview(ids[wrapi(index + direction, 0, ids.size())])
+		index = maxi(0, ids.find(_selected))
+	_animal_carousel_center = ids[wrapi(index + direction, 0, ids.size())]
+	_preview(_animal_carousel_center)
+	# _preview() intentionally returns early when the centred animal was already selected,
+	# but the chevron must still be allowed to reposition the carousel.
+	_refresh_animal_cards()
 
 
 func _animal_carousel_arrow(glyph: String, direction: int) -> Button:
@@ -401,17 +406,19 @@ func _refresh_animal_cards() -> void:
 	var ids := Content.animal_ids()
 	if ids.is_empty() or _animal_cards.is_empty():
 		return
-	var selected_index := maxi(0, ids.find(_selected))
+	var center_index := ids.find(_animal_carousel_center)
+	if center_index < 0:
+		center_index = maxi(0, ids.find(_selected))
 	for slot in _animal_cards.size():
 		var offset := slot - 2
-		var animal_id := str(ids[wrapi(selected_index + offset, 0, ids.size())])
+		var animal_id := str(ids[wrapi(center_index + offset, 0, ids.size())])
 		var def := Content.animal(animal_id)
 		var card := _animal_cards[slot]
 		card.visible = true
 		var label := def.display_name if def != null else animal_id.capitalize()
 		card.text = label
 		card.set_meta("animal_id", animal_id)
-		_style_animal_card(card, offset == 0)
+		_style_animal_card(card, animal_id == _selected)
 
 
 ## Each sub-state owns the whole of _root, so entering either clears all of it instead of
@@ -478,6 +485,8 @@ func _preview(animal_id: String) -> void:
 	_facing_tween = null
 	Audio.stop_animal_call()
 	_selected = animal_id
+	if _animal_carousel_center.is_empty():
+		_animal_carousel_center = animal_id
 
 	_build_rig(animal_id)
 	# No rotation reset here: _preview_root is one persistent node the whole time the

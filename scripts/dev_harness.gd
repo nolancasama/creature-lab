@@ -6,6 +6,7 @@ extends RefCounted
 ##   godot --path . -- --phase=lab         jump straight to a screen
 ##   godot --path . -- --shot=lab          jump there, save user://shot_lab.png, quit
 ##   godot --path . -- --shot=select       redesigned animal picker and thumbnail strip
+##   godot --path . -- --shot=select-side  select a side card without recentering the deck
 ##   godot --path . -- --shot=say          the recording screen with a card chosen
 ##   godot --path . -- --backtest          abandon a half-finished round, then restart it
 ##   godot --path . -- --splittest         the SAY_SPLIT present-tense pass, end to end
@@ -476,9 +477,26 @@ static func _screenshot(main: Node, phase: String) -> void:
 	# seen from --shot=lab, which only ever shows the idle screen.
 	if phase == "present":
 		Settings.say_mode = Settings.SAY_SPLIT
-	_goto("lab" if phase in ["say", "present", "carousel", "color-before", "color-after", "color-say"] else phase)
+	var routed_phase := "select" if phase == "select-side" else phase
+	_goto("lab" if routed_phase in ["say", "present", "carousel", "color-before", "color-after", "color-say"] else routed_phase)
 	await main.get_tree().create_timer(SHOT_DELAY).timeout
-	if phase == "say":
+	if phase == "select-side":
+		var selection_scene := Router.current_scene
+		var cards: Array = selection_scene.get("_animal_cards") if selection_scene != null else []
+		if cards.size() >= 4:
+			var labels_before: Array[String] = []
+			for card in cards:
+				labels_before.append(str(card.text))
+			(cards[3] as Button).pressed.emit()
+			await main.get_tree().create_timer(0.6).timeout
+			var labels_after: Array[String] = []
+			for card in cards:
+				labels_after.append(str(card.text))
+			if labels_after != labels_before:
+				printerr("[shot] FAIL: tapping an animal card recentered the carousel")
+				main.get_tree().quit(1)
+				return
+	elif phase == "say":
 		var word_lab := _find_word_lab(Router.current_scene)
 		if word_lab != null:
 			word_lab.pair_selected.emit("HARDNESS", "soft", "hard")
