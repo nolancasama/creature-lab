@@ -16,6 +16,13 @@ const ACCENT := Color("#4fd1ff")
 const GOLD := Color("#ffd166")
 const OK := Color("#6ee7a0")
 const BAD := Color("#ff8080")
+## Neutral navigation is deliberately separate from the navy choice cards. Back, carousel
+## arrows and close/done controls should read as movement, never as lesson content.
+const NAV := Color("#3a4c63")
+const NAV_HOVER := Color("#52657a")
+const NAV_PRESSED := Color("#29384b")
+const NAV_DISABLED := Color("#263244")
+const NAV_EDGE := Color("#71839a")
 ## Reserved for the one or two actions that actually move the lesson forward (Start, the
 ## mic). Everything else in the palette is chrome - ACCENT included, which is already the
 ## standing colour of headers and the progress line - so a call-to-action needs a colour
@@ -23,12 +30,15 @@ const BAD := Color("#ff8080")
 const CTA := Color("#ff8c42")
 const TEXT := Color("#e8f0fa")
 const MUTED := Color("#93a6bf")
+const INK := Color("#08111c")
 
 const H1 := 46
 const H2 := 30
 const H3 := 22
 const BODY := 18
-const SMALL := 15
+const SMALL := 17
+const MIN_TOUCH := 52
+const LESSON_STEPS := 7
 
 
 static func stylebox(bg: Color, radius := 12, border := 0, border_color := Color.TRANSPARENT, padding := 0) -> StyleBoxFlat:
@@ -86,23 +96,73 @@ static func rich(text: String, size := BODY) -> RichTextLabel:
 static func button(text: String, size := BODY, accent := false) -> Button:
 	var b := Button.new()
 	b.text = text
-	b.focus_mode = Control.FOCUS_NONE
+	b.focus_mode = Control.FOCUS_ALL
+	b.custom_minimum_size.y = MIN_TOUCH
+	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	b.add_theme_font_size_override("font_size", size)
 	style_button(b, PANEL_HI if not accent else ACCENT, accent)
 	return b
 
 
 static func style_button(b: Button, base: Color, accent := false) -> void:
-	var text_color := Color("#08111c") if accent else TEXT
+	var text_color := INK if accent else TEXT
 	b.add_theme_stylebox_override("normal", stylebox(base, 10))
 	b.add_theme_stylebox_override("hover", stylebox(base.lightened(0.14), 10))
 	b.add_theme_stylebox_override("pressed", stylebox(base.darkened(0.16), 10))
-	b.add_theme_stylebox_override("focus", stylebox(Color.TRANSPARENT, 10))
+	b.add_theme_stylebox_override("focus", stylebox(base, 10, 3, GOLD))
 	b.add_theme_stylebox_override("disabled", stylebox(base.darkened(0.45), 10))
 	b.add_theme_color_override("font_color", text_color)
 	b.add_theme_color_override("font_hover_color", text_color)
 	b.add_theme_color_override("font_pressed_color", text_color)
 	b.add_theme_color_override("font_disabled_color", MUTED.darkened(0.3))
+
+
+static func style_primary(b: Button) -> void:
+	style_button(b, CTA, true)
+
+
+static func style_navigation(b: Button) -> void:
+	b.add_theme_stylebox_override("normal", stylebox(NAV, 10, 1, NAV_EDGE))
+	b.add_theme_stylebox_override("hover", stylebox(NAV_HOVER, 10, 2, TEXT))
+	b.add_theme_stylebox_override("pressed", stylebox(NAV_PRESSED, 10, 2, NAV_EDGE))
+	b.add_theme_stylebox_override("focus", stylebox(NAV, 10, 3, GOLD))
+	b.add_theme_stylebox_override("disabled", stylebox(NAV_DISABLED, 10, 1, LINE))
+	for state in ["font_color", "font_hover_color", "font_pressed_color"]:
+		b.add_theme_color_override(state, TEXT)
+	b.add_theme_color_override("font_disabled_color", MUTED.darkened(0.15))
+
+
+static func style_secondary(b: Button) -> void:
+	var face := Color("#101a2b")
+	b.add_theme_stylebox_override("normal", stylebox(face, 10, 2, NAV_EDGE))
+	b.add_theme_stylebox_override("hover", stylebox(NAV, 10, 2, TEXT))
+	b.add_theme_stylebox_override("pressed", stylebox(face.darkened(0.16), 10, 2, NAV_EDGE))
+	b.add_theme_stylebox_override("focus", stylebox(face, 10, 3, GOLD))
+	b.add_theme_stylebox_override("disabled", stylebox(face.darkened(0.3), 10, 2, LINE))
+	for state in ["font_color", "font_hover_color", "font_pressed_color"]:
+		b.add_theme_color_override(state, TEXT)
+	b.add_theme_color_override("font_disabled_color", MUTED.darkened(0.15))
+
+
+## A selected control keeps a dark choice-card face, gains a cyan ring, and also gains a
+## check icon. The icon means selection never depends on colour perception alone.
+static func style_choice(b: Button, selected: bool, base := PANEL_HI) -> void:
+	var face: Color = Color("#173047") if selected else base
+	var edge: Color = ACCENT if selected else LINE
+	var width := 3 if selected else 1
+	var original := str(b.get_meta("choice_text", b.text))
+	b.set_meta("choice_text", original)
+	b.text = ("[x] " if selected else "") + original
+	b.add_theme_stylebox_override("normal", stylebox(face, 10, width, edge))
+	b.add_theme_stylebox_override("hover", stylebox(face.lightened(0.12), 10,
+		maxi(width, 2), ACCENT))
+	b.add_theme_stylebox_override("pressed", stylebox(face.darkened(0.16), 10,
+		maxi(width, 2), ACCENT))
+	b.add_theme_stylebox_override("focus", stylebox(face, 10, 3, GOLD))
+	b.add_theme_stylebox_override("disabled", stylebox(face.darkened(0.35), 10, width, edge))
+	for state in ["font_color", "font_hover_color", "font_pressed_color"]:
+		b.add_theme_color_override(state, TEXT)
+	b.add_theme_color_override("font_disabled_color", MUTED)
 
 
 static func spacer(minimum := 8) -> Control:
@@ -133,9 +193,11 @@ static func hbox(separation := 10) -> HBoxContainer:
 static func line_edit(placeholder: String) -> LineEdit:
 	var e := LineEdit.new()
 	e.placeholder_text = placeholder
+	e.focus_mode = Control.FOCUS_ALL
+	e.custom_minimum_size.y = MIN_TOUCH
 	e.add_theme_font_size_override("font_size", BODY)
 	e.add_theme_stylebox_override("normal", stylebox(Color("#0b1220"), 10, 2, PANEL_HI))
-	e.add_theme_stylebox_override("focus", stylebox(Color("#0b1220"), 10, 2, ACCENT))
+	e.add_theme_stylebox_override("focus", stylebox(Color("#0b1220"), 10, 3, GOLD))
 	e.add_theme_color_override("font_color", TEXT)
 	return e
 
@@ -144,11 +206,55 @@ static func line_edit(placeholder: String) -> LineEdit:
 static func icon_button(icon: String, size := 48) -> Button:
 	var b := Button.new()
 	b.text = icon
-	b.focus_mode = Control.FOCUS_NONE
-	b.custom_minimum_size = Vector2(size, size)
+	b.focus_mode = Control.FOCUS_ALL
+	b.custom_minimum_size = Vector2(maxi(size, MIN_TOUCH), maxi(size, MIN_TOUCH))
+	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	b.add_theme_font_size_override("font_size", H2)
-	style_button(b, PANEL_HI, false)
+	style_navigation(b)
 	return b
+
+
+## Seven stable cells: animal selection, three past clauses and three present clauses.
+## Completed dots are filled, the current dot is a larger gold ring, and future dots are
+## small hollow rings, so progress is still readable without relying on hue.
+static func lesson_progress(completed := 0, active := 0) -> HBoxContainer:
+	var row := hbox(8)
+	row.name = "LessonProgress"
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	for i in LESSON_STEPS:
+		var cell := CenterContainer.new()
+		cell.custom_minimum_size = Vector2(22, 22)
+		var dot := PanelContainer.new()
+		dot.name = "Step%d" % (i + 1)
+		cell.add_child(dot)
+		row.add_child(cell)
+	set_lesson_progress(row, completed, active)
+	return row
+
+
+static func set_lesson_progress(row: HBoxContainer, completed: int, active: int) -> void:
+	if row == null:
+		return
+	var labels := ["どうぶつ", "過去形 1", "過去形 2", "過去形 3",
+		"現在形 1", "現在形 2", "現在形 3"]
+	for i in mini(row.get_child_count(), LESSON_STEPS):
+		var cell := row.get_child(i) as CenterContainer
+		if cell == null or cell.get_child_count() == 0:
+			continue
+		var dot := cell.get_child(0) as PanelContainer
+		if dot == null:
+			continue
+		dot.tooltip_text = str(labels[i])
+		if i < completed:
+			dot.custom_minimum_size = Vector2(14, 14)
+			dot.add_theme_stylebox_override("panel", stylebox(ACCENT, 7, 0,
+				Color.TRANSPARENT, 1))
+		elif i == active:
+			dot.custom_minimum_size = Vector2(18, 18)
+			dot.add_theme_stylebox_override("panel", stylebox(PANEL, 9, 3, GOLD, 1))
+		else:
+			dot.custom_minimum_size = Vector2(14, 14)
+			dot.add_theme_stylebox_override("panel", stylebox(PANEL, 7, 2, NAV_EDGE, 1))
 
 
 ## Full-screen background wash used by the 2D screens.

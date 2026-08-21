@@ -84,12 +84,14 @@ func _build_top_bar() -> Control:
 	row.add_child(UiKit.expander())
 
 	var skip := UiKit.button("スキップ", UiKit.SMALL)
+	UiKit.style_navigation(skip)
 	skip.pressed.connect(func() -> void:
 		if _director != null:
 			_director.request_skip())
 	row.add_child(skip)
 
 	var quit := UiKit.button("メニュー", UiKit.SMALL)
+	UiKit.style_navigation(quit)
 	quit.pressed.connect(func() -> void: Game.set_phase(Game.Phase.ANIMAL_SELECTION))
 	row.add_child(quit)
 

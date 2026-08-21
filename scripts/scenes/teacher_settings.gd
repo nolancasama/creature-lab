@@ -26,7 +26,8 @@ func _build() -> void:
 	header.add_child(UiKit.label("先生用設定", UiKit.H2, UiKit.ACCENT))
 	header.add_child(UiKit.expander())
 	var back := UiKit.button("完了", UiKit.H3, true)
-	back.custom_minimum_size = Vector2(180, 50)
+	UiKit.style_navigation(back)
+	back.custom_minimum_size = Vector2(180, 56)
 	back.pressed.connect(func() -> void:
 		Settings.save_settings()
 		Game.close_settings())
@@ -34,6 +35,7 @@ func _build() -> void:
 
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.get_v_scroll_bar().custom_minimum_size.x = 16
 	frame.add_child(scroll)
 
 	var column := UiKit.vbox(14)
@@ -100,7 +102,8 @@ func _choice_section(title: String, subtitle: String, options: Array, getter: Ca
 		var label := str(option[0])
 		var value := str(option[1])
 		var b := UiKit.button(label, UiKit.BODY)
-		b.custom_minimum_size = Vector2(220, 46)
+		b.custom_minimum_size = Vector2(220, 52)
+		b.set_meta("choice_label", label)
 		row.add_child(b)
 		buttons[value] = b
 		b.pressed.connect(func() -> void:
@@ -114,7 +117,7 @@ func _choice_section(title: String, subtitle: String, options: Array, getter: Ca
 func _paint_choice(buttons: Dictionary, active: String) -> void:
 	for value in buttons:
 		var b: Button = buttons[value]
-		UiKit.style_button(b, UiKit.ACCENT if str(value) == active else UiKit.PANEL_HI, str(value) == active)
+		UiKit.style_choice(b, str(value) == active)
 
 
 func _vocabulary_section() -> Control:
@@ -130,7 +133,7 @@ func _vocabulary_section() -> Control:
 		if not pair.selectable:
 			continue
 		var b := UiKit.button("%s / %s" % [pair.word_a, pair.word_b], UiKit.SMALL)
-		b.custom_minimum_size = Vector2(200, 40)
+		b.custom_minimum_size = Vector2(200, 52)
 		b.toggle_mode = true
 		b.button_pressed = Settings.is_pair_enabled(pair.id)
 		_paint_toggle(b)
@@ -146,7 +149,7 @@ func _vocabulary_section() -> Control:
 	column.add_child(colors)
 	for swatch in Content.colors:
 		var b := UiKit.button(swatch.word, UiKit.SMALL)
-		b.custom_minimum_size = Vector2(96, 40)
+		b.custom_minimum_size = Vector2(104, 52)
 		b.toggle_mode = true
 		b.button_pressed = Settings.is_color_enabled(swatch.word)
 		_paint_toggle(b)
@@ -159,7 +162,7 @@ func _vocabulary_section() -> Control:
 
 
 func _paint_toggle(b: Button) -> void:
-	UiKit.style_button(b, UiKit.OK.darkened(0.35) if b.button_pressed else UiKit.PANEL.darkened(0.2))
+	UiKit.style_choice(b, b.button_pressed, UiKit.PANEL.darkened(0.2))
 
 
 func _toggles_section() -> Control:
@@ -184,7 +187,7 @@ func _toggles_section() -> Control:
 
 func _switch(label: String, getter: Callable, setter: Callable) -> Button:
 	var b := UiKit.button(label, UiKit.SMALL)
-	b.custom_minimum_size = Vector2(210, 44)
+	b.custom_minimum_size = Vector2(210, 52)
 	b.toggle_mode = true
 	b.button_pressed = bool(getter.call())
 	_paint_toggle(b)
@@ -216,7 +219,7 @@ func _slider(label: String, value: float, setter: Callable) -> Control:
 	slider.max_value = 1.0
 	slider.step = 0.05
 	slider.value = value
-	slider.custom_minimum_size = Vector2(280, 24)
+	slider.custom_minimum_size = Vector2(280, 40)
 	slider.value_changed.connect(func(v: float) -> void: setter.call(v))
 	box.add_child(slider)
 	return box
@@ -230,7 +233,8 @@ func _zoo_section() -> Control:
 	row.add_child(_switch("次回もどうぶつえんを残す", func() -> bool: return Settings.persist_zoo,
 		func(on: bool) -> void: Settings.persist_zoo = on))
 	var reset := UiKit.button("どうぶつえんをリセット", UiKit.SMALL)
-	reset.custom_minimum_size = Vector2(200, 44)
+	reset.custom_minimum_size = Vector2(220, 52)
+	UiKit.style_button(reset, UiKit.BAD.darkened(0.52))
 	reset.pressed.connect(func() -> void:
 		Game.reset_zoo()
 		Audio.play("pop"))

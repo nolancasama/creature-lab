@@ -60,7 +60,7 @@ const SAY_IT_WIDTH := 620
 ## width only fit the old one-word "Before" label; the longer instruction then expanded
 ## the VBox toward the right and no longer shared the platform's centreline.
 const PROGRESS_WIDTH := 760
-const PROGRESS_HEIGHT := 64 ## The single "Before" heading.
+const PROGRESS_HEIGHT := 112 ## Heading, seven lesson dots and the one-time drag hint.
 const APPEARANCE_HEADING := "へんしん前の見た目をえらぼう"
 const NOW_COLOUR_HEADING := "今の色をえらぼう"
 
@@ -93,6 +93,8 @@ var _rig_animal := "" ## Which animal the live rig was built for.
 var _root: Control = null
 var _progress: Label = null
 var _progress_group: Control = null
+var _lesson_progress: HBoxContainer = null
+var _drag_hint: Label = null
 var _word_lab: DescriptorCarousel = null
 var _speech: SpeechPanel = null
 var _console: Control = null
@@ -157,6 +159,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if event is InputEventMouseMotion and _dragging_view:
 		_preview_root.rotation.y -= event.relative.x * DRAG_TURN_SPEED
+		if _drag_hint != null:
+			_drag_hint.visible = false
 		get_viewport().set_input_as_handled()
 
 
@@ -266,16 +270,20 @@ func _build_picking_panel() -> void:
 	picker.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_root.add_child(picker)
 	_picking_panel = picker
+	var heading_group := UiKit.vbox(6)
+	heading_group.anchor_left = 0.5
+	heading_group.anchor_right = 0.5
+	heading_group.offset_left = -360
+	heading_group.offset_right = 360
+	heading_group.offset_top = 24
+	heading_group.offset_bottom = 24 + PROGRESS_HEIGHT
+	picker.add_child(heading_group)
 	var heading := UiKit.label("どうぶつをえらぼう", PROGRESS_FONT, UiKit.GOLD)
 	heading.name = "AnimalSelectionHeading"
 	heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	heading.anchor_left = 0.5
-	heading.anchor_right = 0.5
-	heading.offset_left = -360
-	heading.offset_right = 360
-	heading.offset_top = 24
-	heading.offset_bottom = 24 + PROGRESS_HEIGHT
-	picker.add_child(heading)
+	heading_group.add_child(heading)
+	_lesson_progress = UiKit.lesson_progress(0, 0)
+	heading_group.add_child(_lesson_progress)
 
 	# Exact footprint used by the adjective carousel on the Before screen. Five English
 	# names stay readable at their normal card size; browsing merely changes which five
@@ -311,7 +319,7 @@ func _build_picking_panel() -> void:
 	carousel.add_child(_animal_carousel_arrow(">", 1))
 
 	var choose := UiKit.button("このどうぶつにする", UiKit.H3, true)
-	UiKit.style_button(choose, UiKit.CTA, true)
+	UiKit.style_primary(choose)
 	choose.name = "SelectAnimal"
 	choose.custom_minimum_size = SELECT_BUTTON_SIZE
 	choose.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
@@ -335,6 +343,7 @@ func _animal_carousel_arrow(glyph: String, direction: int) -> Button:
 	var arrow := UiKit.button(glyph, 38)
 	arrow.custom_minimum_size = Vector2(55, 55)
 	arrow.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	UiKit.style_navigation(arrow)
 	arrow.pressed.connect(_browse_animal.bind(direction))
 	return arrow
 
@@ -342,7 +351,7 @@ func _animal_carousel_arrow(glyph: String, direction: int) -> Button:
 func _animal_name_card() -> Button:
 	var card := Button.new()
 	card.custom_minimum_size = ANIMAL_CARD_SIZE
-	card.focus_mode = Control.FOCUS_NONE
+	card.focus_mode = Control.FOCUS_ALL
 	card.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	card.add_theme_font_size_override("font_size", UiKit.BODY)
 	card.pressed.connect(func() -> void:
@@ -362,6 +371,8 @@ func _style_animal_card(card: Button, selected: bool) -> void:
 		UiKit.stylebox(face.lightened(0.12), 12, maxi(width, 2), UiKit.ACCENT, 5))
 	card.add_theme_stylebox_override("pressed",
 		UiKit.stylebox(face.darkened(0.16), 12, maxi(width, 2), UiKit.ACCENT, 5))
+	card.add_theme_stylebox_override("focus",
+		UiKit.stylebox(face, 12, 3, UiKit.GOLD, 5))
 	card.add_theme_color_override("font_color", UiKit.GOLD if selected else UiKit.TEXT)
 	card.add_theme_color_override("font_hover_color", UiKit.GOLD if selected else UiKit.TEXT)
 
@@ -377,7 +388,8 @@ func _refresh_animal_cards() -> void:
 		var def := Content.animal(animal_id)
 		var card := _animal_cards[slot]
 		card.visible = true
-		card.text = def.display_name if def != null else animal_id.capitalize()
+		var label := def.display_name if def != null else animal_id.capitalize()
+		card.text = ("[x] " if offset == 0 else "") + label
 		card.set_meta("animal_id", animal_id)
 		_style_animal_card(card, offset == 0)
 
@@ -394,6 +406,8 @@ func _clear_overlays() -> void:
 	_console = null
 	_progress = null
 	_progress_group = null
+	_lesson_progress = null
+	_drag_hint = null
 	_animal_cards.clear()
 
 
@@ -417,8 +431,11 @@ func _add_gear_button() -> void:
 	# the back arrow, which sits on flat 2D chrome, but this one sits over the lit 3D stage
 	# and read as a floating tile there. Feedback moves onto the icon itself so it still
 	# answers a hover and a press without a box to draw them on.
-	for state in ["normal", "hover", "pressed", "focus", "disabled"]:
+	for state in ["normal", "hover", "pressed", "disabled"]:
 		gear.add_theme_stylebox_override(state, StyleBoxEmpty.new())
+	gear.add_theme_stylebox_override("focus",
+		UiKit.stylebox(Color.TRANSPARENT, 12, 3, UiKit.GOLD, 2))
+	gear.tooltip_text = "先生用設定"
 	gear.add_theme_color_override("icon_normal_color", UiKit.TEXT)
 	gear.add_theme_color_override("icon_hover_color", UiKit.ACCENT)
 	gear.add_theme_color_override("icon_pressed_color", UiKit.ACCENT)
@@ -585,11 +602,13 @@ func _enter_present() -> void:
 
 	var panel := UiKit.panel(Color(0.06, 0.1, 0.16, 0.98), 18, 2, UiKit.ACCENT)
 	panel.name = "PresentPanel"
-	panel.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	# Keep the transformed subject visible above the task instead of leaving only its ears
+	# peeking awkwardly from behind a centred modal.
+	panel.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
 	panel.offset_left = -PRESENT_SIZE.x * 0.5
 	panel.offset_right = PRESENT_SIZE.x * 0.5
-	panel.offset_top = -PRESENT_SIZE.y * 0.5
-	panel.offset_bottom = PRESENT_SIZE.y * 0.5
+	panel.offset_top = -(PRESENT_SIZE.y + 24.0)
+	panel.offset_bottom = -24.0
 	_root.add_child(panel)
 
 	var column := UiKit.vbox(10)
@@ -601,6 +620,7 @@ func _enter_present() -> void:
 	_speech.change_requested.connect(_cancel_present)
 	column.add_child(_speech)
 
+	_build_progress_display(false)
 	_add_gear_button() ## A teacher must still be able to reach the settings mid-pass.
 	_present_step()
 
@@ -622,6 +642,7 @@ func _present_step() -> void:
 		"after": str(entry["after"]),
 	}
 	_attempts = 0
+	_update_lesson_progress()
 	_speech.show_target(str(entry["before"]), str(entry["after"]), GrammarValidator.CLAUSE_PRESENT)
 
 
@@ -638,6 +659,7 @@ func _present_advance() -> void:
 	Voice.keep_present_for(_present_index)
 	_speech.show_success()
 	Audio.play("success")
+	_update_lesson_progress(5 + _present_index)
 	var is_last := Game.current == null or _present_index + 1 >= Game.current.entries.size()
 	await get_tree().create_timer(PRE_TRANSFORM_PAUSE if is_last else SUCCESS_PAUSE).timeout
 	if not is_inside_tree():
@@ -729,7 +751,7 @@ func _build_recording_ui() -> void:
 
 ## "Before" shares the actual screen centre with the optical centre of the animal and
 ## platform, rather than the old free-space centre left of a descriptor panel.
-func _build_progress_display() -> void:
+func _build_progress_display(show_heading := true) -> void:
 	var box := UiKit.vbox(2)
 	box.name = "BeforeHeadingGroup"
 	box.anchor_left = 0.5
@@ -739,14 +761,46 @@ func _build_progress_display() -> void:
 	box.offset_left = -PROGRESS_WIDTH * 0.5
 	box.offset_right = PROGRESS_WIDTH * 0.5
 	box.offset_top = 24
-	box.offset_bottom = 24 + PROGRESS_HEIGHT
+	box.offset_bottom = 24 + (PROGRESS_HEIGHT if show_heading else 30)
 	_root.add_child(box)
 	_progress_group = box
 
-	_progress = UiKit.label("", UiKit.BODY, UiKit.GOLD)
-	_progress.add_theme_font_size_override("font_size", PROGRESS_FONT)
-	_progress.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	box.add_child(_progress)
+	if show_heading:
+		_progress = UiKit.label("", UiKit.BODY, UiKit.GOLD)
+		_progress.add_theme_font_size_override("font_size", PROGRESS_FONT)
+		_progress.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		box.add_child(_progress)
+	_lesson_progress = UiKit.lesson_progress()
+	box.add_child(_lesson_progress)
+	if show_heading:
+		_drag_hint = UiKit.label("ドラッグでどうぶつの向きを変えられます", UiKit.SMALL, UiKit.MUTED)
+		_drag_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		box.add_child(_drag_hint)
+	_update_lesson_progress()
+
+
+func _update_lesson_progress(completed_override := -1) -> void:
+	if _lesson_progress == null:
+		return
+	var completed := 0
+	var active := 0
+	match _mode:
+		Mode.PICKING:
+			completed = 0
+			active = 0
+		Mode.RECORDING:
+			completed = 1 + (Game.current.slots_filled() if Game.current != null else 0)
+			active = mini(completed, 4)
+		Mode.PRESENT:
+			completed = 4 + _present_index
+			active = mini(completed, 6)
+		Mode.PRE_TRANSFORMATION:
+			completed = UiKit.LESSON_STEPS
+			active = -1
+	if completed_override >= 0:
+		completed = clampi(completed_override, 0, UiKit.LESSON_STEPS)
+		active = -1 if completed >= UiKit.LESSON_STEPS else mini(completed, 6)
+	UiKit.set_lesson_progress(_lesson_progress, completed, active)
 
 
 ## Say It replaces the carousel inside SelectionConsole instead of introducing another
@@ -773,6 +827,7 @@ func _sync_ui() -> void:
 	var assigned := _assigned_category()
 	if _progress != null:
 		_progress.text = NOW_COLOUR_HEADING if _choosing_now_colour else APPEARANCE_HEADING
+	_update_lesson_progress()
 
 	_word_lab.set_used(Game.current.used_categories())
 	_word_lab.set_restriction(assigned)
@@ -995,6 +1050,7 @@ func _commit(assisted: bool) -> void:
 	_colour_preview = ""
 
 	Game.record_sentence(category, before, after, assisted or _colour_past_assisted)
+	_update_lesson_progress()
 	# Keep the take that was actually accepted, indexed by the slot it filled, so the
 	# transformation can play the three sentences back in the order they were said.
 	if completing_colour_present:
@@ -1042,6 +1098,7 @@ func _complete_colour_without_present() -> void:
 	_pending = {}
 	_colour_preview = ""
 	Game.record_sentence(Content.COLOR_CATEGORY, before, after, _colour_past_assisted)
+	_update_lesson_progress()
 	_colour_speech_stage = ColourSpeechStage.NONE
 	_colour_past_accepted = false
 	_colour_past_assisted = false
@@ -1078,6 +1135,7 @@ func _begin_pre_transformation() -> void:
 		return
 	_pre_transforming = true
 	_mode = Mode.PRE_TRANSFORMATION
+	_update_lesson_progress()
 	_busy = true
 	_dragging_view = false
 	Speech.stop()

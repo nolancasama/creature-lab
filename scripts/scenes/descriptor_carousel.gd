@@ -54,7 +54,7 @@ const COLOUR_ARROW_GAP := 30 ## Triple the card gap so the chevrons read as navi
 ## that does not exist. Five cards, their gaps and the chevrons fit the fixed console.
 const COLOUR_CARD_SIZE := Vector2(108, 86)
 const COLOUR_TEXT_SIZE := UiKit.H3 ## Uniform across the colour deck.
-const ACTION_SIZE := Vector2(148, 46)
+const ACTION_SIZE := Vector2(160, 52)
 const SLIDE_TIME := 0.16 ## Long enough to see which way the deck moved, short enough to spam.
 const COLOUR_CONFIRM_TIME := 0.32
 
@@ -180,7 +180,8 @@ func _build_category_view(page: VBoxContainer) -> void:
 	_main_card.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var word_card := Button.new()
 	word_card.custom_minimum_size = WORD_CARD_SIZE
-	word_card.focus_mode = Control.FOCUS_NONE
+	word_card.focus_mode = Control.FOCUS_ALL
+	word_card.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	word_card.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	word_card.pressed.connect(_activate)
 	_main_card.add_child(word_card)
@@ -202,9 +203,9 @@ func _build_category_view(page: VBoxContainer) -> void:
 	page.add_child(_status)
 
 	var word_list := UiKit.button("単語リスト", UiKit.SMALL)
-	word_list.custom_minimum_size = Vector2(140, 38)
+	word_list.custom_minimum_size = Vector2(160, 52)
 	word_list.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	UiKit.style_button(word_list, UiKit.PANEL_HI)
+	UiKit.style_secondary(word_list)
 	word_list.pressed.connect(_open_reference)
 	page.add_child(word_list)
 
@@ -212,11 +213,11 @@ func _build_category_view(page: VBoxContainer) -> void:
 func _arrow(glyph: String, step: int) -> Button:
 	var b := UiKit.button(glyph, CATEGORY_ARROW_FONT)
 	b.custom_minimum_size = Vector2(ARROW_SIZE, ARROW_SIZE)
-	b.focus_mode = Control.FOCUS_NONE
+	b.focus_mode = Control.FOCUS_ALL
 	# Square, and centred against the cards. Left to fill, an HBox stretches it to the
 	# tallest thing in the row and the arrow becomes a full-height pill.
 	b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	UiKit.style_button(b, UiKit.PANEL_HI)
+	UiKit.style_navigation(b)
 	b.pressed.connect(func() -> void: _step(step))
 	return b
 
@@ -234,7 +235,8 @@ func _carousel_gap(width: float) -> Control:
 func _side_card(direction: int) -> Button:
 	var card := Button.new()
 	card.custom_minimum_size = WORD_CARD_SIZE
-	card.focus_mode = Control.FOCUS_NONE
+	card.focus_mode = Control.FOCUS_ALL
+	card.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	card.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	card.pressed.connect(func() -> void: _select_visible_word(direction))
 	return card
@@ -272,8 +274,8 @@ func _slot_category(slot) -> String:
 
 func _slot_title(slot) -> String:
 	if slot is Dictionary:
-		return str((slot as Dictionary).get("word", "")).to_upper()
-	return "COLORS"
+		return str((slot as Dictionary).get("word", "")).to_lower()
+	return "colors"
 
 
 ## The card that was tapped IS the direction: tapping "big" says the animal was big and
@@ -334,9 +336,9 @@ func _build_colour_view(page: VBoxContainer) -> void:
 
 	var left := UiKit.button("<", COLOUR_ARROW_FONT)
 	left.custom_minimum_size = Vector2(ARROW_SIZE, ARROW_SIZE)
-	left.focus_mode = Control.FOCUS_NONE
+	left.focus_mode = Control.FOCUS_ALL
 	left.size_flags_vertical = Control.SIZE_SHRINK_CENTER ## Square, not a full-height pill.
-	UiKit.style_button(left, UiKit.PANEL_HI)
+	UiKit.style_navigation(left)
 	left.pressed.connect(func() -> void: _step_colour(-1))
 	row.add_child(left)
 	row.add_child(_colour_gap(COLOUR_ARROW_GAP))
@@ -368,9 +370,9 @@ func _build_colour_view(page: VBoxContainer) -> void:
 
 	var right := UiKit.button(">", COLOUR_ARROW_FONT)
 	right.custom_minimum_size = Vector2(ARROW_SIZE, ARROW_SIZE)
-	right.focus_mode = Control.FOCUS_NONE
+	right.focus_mode = Control.FOCUS_ALL
 	right.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	UiKit.style_button(right, UiKit.PANEL_HI)
+	UiKit.style_navigation(right)
 	right.pressed.connect(func() -> void: _step_colour(1))
 	row.add_child(right)
 
@@ -384,8 +386,8 @@ func _build_colour_view(page: VBoxContainer) -> void:
 	_colour_cancel = UiKit.button("キャンセル", UiKit.H3)
 	_colour_cancel.custom_minimum_size = ACTION_SIZE
 	_colour_cancel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	_colour_cancel.focus_mode = Control.FOCUS_NONE
-	UiKit.style_button(_colour_cancel, UiKit.PANEL_HI)
+	_colour_cancel.focus_mode = Control.FOCUS_ALL
+	UiKit.style_secondary(_colour_cancel)
 	_colour_cancel.pressed.connect(_cancel_colour)
 	actions.add_child(_colour_cancel)
 
@@ -402,7 +404,7 @@ func _colour_gap(width: float) -> Control:
 func _colour_card() -> Button:
 	var card := Button.new()
 	card.custom_minimum_size = COLOUR_CARD_SIZE
-	card.focus_mode = Control.FOCUS_NONE
+	card.focus_mode = Control.FOCUS_ALL
 	card.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	card.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	card.add_theme_font_size_override("font_size", COLOUR_TEXT_SIZE)
@@ -507,6 +509,8 @@ func _paint(swatch: Button, colour: ColorDefinition) -> void:
 		UiKit.stylebox(shade.lightened(0.14), 12, 2, UiKit.ACCENT, 6))
 	swatch.add_theme_stylebox_override("pressed",
 		UiKit.stylebox(shade.darkened(0.18), 12, 2, UiKit.ACCENT, 6))
+	swatch.add_theme_stylebox_override("focus",
+		UiKit.stylebox(shade, 12, 4, UiKit.GOLD, 6))
 	# Dark text on pale colours, pale text on dark ones, so "yellow" and "black" both read.
 	var ink := Color("#08111c") if shade.get_luminance() > 0.45 else UiKit.TEXT
 	for state in ["font_color", "font_disabled_color", "font_hover_color"]:
@@ -597,10 +601,10 @@ func _cancel_colour() -> void:
 
 func _back_button() -> Button:
 	var b := UiKit.button("もどる", UiKit.SMALL)
-	b.custom_minimum_size = Vector2(120, 38)
+	b.custom_minimum_size = Vector2(140, 52)
 	b.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	b.focus_mode = Control.FOCUS_NONE
-	UiKit.style_button(b, UiKit.PANEL_HI)
+	b.focus_mode = Control.FOCUS_ALL
+	UiKit.style_navigation(b)
 	b.pressed.connect(func() -> void:
 		Audio.play("click")
 		_show_view(View.CATEGORY))
@@ -741,7 +745,7 @@ func _paint_word_card(card: Button, slot) -> void:
 	# selection, it is just the one in the middle.
 	var face := UiKit.OK.darkened(0.55) if done else Color("#16233a")
 	var edge := UiKit.OK if done else UiKit.PANEL_HI
-	card.text = _slot_title(slot)
+	card.text = ("[x] " if done else "") + _slot_title(slot)
 	card.add_theme_font_size_override("font_size", WORD_TEXT_SIZE)
 	card.disabled = blocked
 	card.modulate = Color.WHITE ## Never dimmed for sitting off centre.
@@ -753,5 +757,7 @@ func _paint_word_card(card: Button, slot) -> void:
 		UiKit.stylebox(face.lightened(0.14), 14, 2, UiKit.ACCENT, 10))
 	card.add_theme_stylebox_override("pressed",
 		UiKit.stylebox(face.darkened(0.18), 14, 2, UiKit.ACCENT, 10))
+	card.add_theme_stylebox_override("focus",
+		UiKit.stylebox(face, 14, 3, UiKit.GOLD, 10))
 	card.add_theme_color_override("font_color", UiKit.TEXT)
 	card.add_theme_color_override("font_disabled_color", UiKit.MUTED)

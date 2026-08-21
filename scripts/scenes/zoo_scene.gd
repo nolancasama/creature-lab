@@ -1,6 +1,6 @@
 extends Node3D
 
-const INFO_CLOSE_SIZE := 44.0
+const INFO_CLOSE_SIZE := 52.0
 const INFO_NAME_GAP := 16.0
 const INFO_MIN_HEAD_WIDTH := 220.0
 const INFO_PANEL_MARGIN := 28.0
@@ -27,6 +27,7 @@ var _camera_target := YARD_CAMERA_TARGET
 var _dragging := false
 var _info: PanelContainer = null
 var _info_body: VBoxContainer = null
+var _hint: Label = null
 var _creatures: Node3D = null
 var _focused_brain: CreatureBrain = null
 var _distance_before_focus := 24.0
@@ -147,7 +148,15 @@ func _build_ui() -> void:
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	root.add_child(title)
 
+	_hint = UiKit.label("どうぶつをタップすると名前が見られます", UiKit.SMALL, TITLE_COLOR)
+	_hint.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
+	_hint.offset_top = 84
+	_hint.offset_bottom = 112
+	_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	root.add_child(_hint)
+
 	var again := UiKit.button("もう一度つくる", UiKit.BODY, true)
+	UiKit.style_primary(again)
 	again.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
 	again.custom_minimum_size = Vector2(180, 52)
 	again.offset_left = -208
@@ -252,6 +261,8 @@ func _show_info(brain: CreatureBrain) -> void:
 	if _focused_brain == brain:
 		return
 	Audio.play("pop")
+	if _hint != null:
+		_hint.visible = false
 	if _focused_brain == null:
 		_distance_before_focus = _distance
 	else:
@@ -287,6 +298,7 @@ func _show_info(brain: CreatureBrain) -> void:
 	_info.offset_right = box_width * 0.5
 	_info.offset_top = -112
 	var close := UiKit.button("×", UiKit.SMALL)
+	UiKit.style_navigation(close)
 	close.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
 	close.offset_left = -INFO_CLOSE_SIZE
 	close.offset_right = 0

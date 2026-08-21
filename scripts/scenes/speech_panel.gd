@@ -26,6 +26,7 @@ var _sentence_label: RichTextLabel = null
 var _feedback: Label = null
 var _mic_button: Button = null
 var _entry: LineEdit = null
+var _submit_button: Button = null
 var _listen_button: Button = null
 var _listen_timer: Timer = null
 var _override_button: Button = null
@@ -76,7 +77,8 @@ func _build() -> void:
 	_listen_button = UiKit.button("", UiKit.SMALL)
 	_listen_button.icon = SPEAKER_ICON
 	_listen_button.tooltip_text = "文をきく"
-	_listen_button.custom_minimum_size = Vector2(44, 38)
+	_listen_button.custom_minimum_size = Vector2(52, 52)
+	UiKit.style_secondary(_listen_button)
 	_listen_button.size_flags_vertical = Control.SIZE_SHRINK_CENTER ## Never a full-height bar.
 	# A theme constant on Button, not a property - assigning it directly fails at runtime
 	# and leaves the icon at its full size.
@@ -86,10 +88,22 @@ func _build() -> void:
 
 	column.add_child(UiKit.expander())
 
-	_entry = UiKit.line_edit("英語の文を入力して Enter キーを押してください")
+	var input_row := UiKit.hbox(10)
+	column.add_child(input_row)
+	_entry = UiKit.line_edit("英語の文を入力")
 	_entry.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_entry.custom_minimum_size.y = 56
 	_entry.text_submitted.connect(func(text: String) -> void: _submit_typed(text))
-	column.add_child(_entry)
+	_entry.text_changed.connect(func(text: String) -> void:
+		if _submit_button != null:
+			_submit_button.disabled = not _armed or text.strip_edges().is_empty())
+	input_row.add_child(_entry)
+	_submit_button = UiKit.button("確認", UiKit.H3)
+	_submit_button.name = "TypedSubmit"
+	_submit_button.custom_minimum_size = Vector2(120, 56)
+	UiKit.style_primary(_submit_button)
+	_submit_button.pressed.connect(func() -> void: _submit_typed(_entry.text))
+	input_row.add_child(_submit_button)
 
 	_feedback = UiKit.label("", UiKit.BODY, UiKit.MUTED)
 	_feedback.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -97,7 +111,7 @@ func _build() -> void:
 	column.add_child(_feedback)
 
 	_mic_button = UiKit.button(MIC_IDLE, UiKit.H3, true)
-	UiKit.style_button(_mic_button, UiKit.CTA, true) ## The call-to-action colour, not the
+	UiKit.style_primary(_mic_button) ## The call-to-action colour, not the
 	## ambient ACCENT the "true" flag would otherwise apply - _on_listening_changed()
 	## switches it to OK while actually listening and back to this otherwise.
 	_mic_button.icon = MIC_ICON
@@ -107,19 +121,12 @@ func _build() -> void:
 	_mic_button.pressed.connect(_on_mic_pressed)
 	column.add_child(_mic_button)
 
-	# Text, not a button: cancelling is a minor, low-stakes escape hatch, not an action
-	# that deserves the mic button's visual weight. Still a real Button underneath (flat,
-	# no stylebox override) so it keeps a normal click target and hover feedback without
-	# looking like one.
-	_cancel_label = Button.new()
-	_cancel_label.text = "キャンセル"
-	_cancel_label.flat = true
-	_cancel_label.focus_mode = Control.FOCUS_NONE
+	# A quiet outlined action: subordinate to Confirm/Talk, but visibly tappable and
+	# keyboard-focusable rather than text that happens to react to a click.
+	_cancel_label = UiKit.button("キャンセル", UiKit.H3)
+	UiKit.style_secondary(_cancel_label)
+	_cancel_label.custom_minimum_size = Vector2(170, 52)
 	_cancel_label.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	_cancel_label.add_theme_font_size_override("font_size", UiKit.H3)
-	_cancel_label.add_theme_color_override("font_color", UiKit.MUTED)
-	_cancel_label.add_theme_color_override("font_hover_color", UiKit.TEXT)
-	_cancel_label.add_theme_color_override("font_pressed_color", UiKit.TEXT)
 	_cancel_label.pressed.connect(func() -> void:
 		Audio.play("click")
 		change_requested.emit())
@@ -135,6 +142,8 @@ func _build() -> void:
 	add_child(_listen_timer)
 
 	_override_button = UiKit.button("正しく言えました － 先生が承認", UiKit.SMALL)
+	_override_button.custom_minimum_size.y = 52
+	UiKit.style_secondary(_override_button)
 	_override_button.visible = false
 	_override_button.pressed.connect(func() -> void:
 		Audio.play("success")
@@ -152,6 +161,7 @@ func _sync_input_mode() -> void:
 	var mic := Speech.uses_microphone()
 	_mic_button.visible = mic
 	_entry.visible = not mic
+	_submit_button.visible = not mic
 
 
 # --- Public API --------------------------------------------------------------
@@ -260,6 +270,7 @@ func _sentence_bbcode(text: String) -> String:
 func _set_input_enabled(enabled: bool) -> void:
 	_mic_button.disabled = not enabled
 	_entry.editable = enabled
+	_submit_button.disabled = not enabled or _entry.text.strip_edges().is_empty()
 
 
 ## Typed answers go through SpeechService like everything else, so there is exactly one
@@ -268,6 +279,7 @@ func _submit_typed(text: String) -> void:
 	if not _armed or text.strip_edges().is_empty():
 		return
 	_entry.clear()
+	_submit_button.disabled = true
 	Speech.submit_typed(text)
 
 

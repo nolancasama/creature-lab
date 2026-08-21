@@ -29,7 +29,7 @@ func _build() -> void:
 	centre.add_child(buttons)
 
 	buttons.add_child(_menu_button("クリーチャーをつくる", func() -> void:
-		Game.set_phase(Game.Phase.ANIMAL_SELECTION), true))
+		Game.set_phase(Game.Phase.ANIMAL_SELECTION), "primary"))
 
 	if not Game.zoo.is_empty():
 		buttons.add_child(_menu_button("わたしのどうぶつえん  (%d)" % Game.zoo.size(), func() -> void:
@@ -38,14 +38,18 @@ func _build() -> void:
 	buttons.add_child(_menu_button("先生用設定", func() -> void: Game.open_settings()))
 
 	if not OS.has_feature("web"):
-		buttons.add_child(_menu_button("終了", func() -> void: get_tree().quit()))
+		buttons.add_child(_menu_button("終了", func() -> void: get_tree().quit(), "secondary"))
 
 	centre.add_child(UiKit.spacer(20))
 	centre.add_child(UiKit.title(_input_summary(), UiKit.SMALL, UiKit.MUTED))
 
 
-func _menu_button(text: String, action: Callable, accent := false) -> Button:
-	var b := UiKit.button(text, UiKit.H3, accent)
+func _menu_button(text: String, action: Callable, role := "navigation") -> Button:
+	var b := UiKit.button(text, UiKit.H3)
+	match role:
+		"primary": UiKit.style_primary(b)
+		"secondary": UiKit.style_secondary(b)
+		_: UiKit.style_navigation(b)
 	b.custom_minimum_size = Vector2(320, 54)
 	b.pressed.connect(func() -> void:
 		Audio.play("select")

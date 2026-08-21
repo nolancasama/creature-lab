@@ -142,6 +142,7 @@ func _build_ui() -> void:
 	var column := UiKit.vbox(8)
 	panel.add_child(column)
 	column.add_child(UiKit.title("できあがり！", UiKit.H3, UiKit.MUTED))
+	column.add_child(UiKit.title("名前はここで変えられます", UiKit.SMALL, UiKit.MUTED))
 
 	_entry = UiKit.line_edit("クリーチャーの名前")
 	_entry.text = Game.current.generated_name
@@ -151,11 +152,13 @@ func _build_ui() -> void:
 	column.add_child(_entry)
 
 	var send := UiKit.button("どうぶつえんへ送る", UiKit.H3, true)
+	UiKit.style_primary(send)
 	send.custom_minimum_size = Vector2(360, 54)
 	send.pressed.connect(_send_to_zoo)
 	column.add_child(send)
 
 	var start_again := UiKit.button("もう一度つくる", UiKit.H3)
+	UiKit.style_navigation(start_again)
 	start_again.custom_minimum_size = Vector2(360, 54)
 	start_again.pressed.connect(_start_again)
 	column.add_child(start_again)
