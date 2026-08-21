@@ -14,7 +14,7 @@
   "animals": [
     {
       "id": "dog",
-      "display_name": "犬",
+      "display_name": "Dog",
       "fantasy_noun": "ハウンド",
       "model": "dog_0012",
       "skin": "#c9ced6",
@@ -248,7 +248,7 @@
     },
     {
       "id": "cat",
-      "display_name": "猫",
+      "display_name": "Cat",
       "fantasy_noun": "オオヤマネコ",
       "model": "kitty_0012",
       "skin": "#3a3a42",
@@ -483,7 +483,7 @@
     },
     {
       "id": "tiger",
-      "display_name": "トラ",
+      "display_name": "Tiger",
       "fantasy_noun": "サーベルタイガー",
       "model": "tiger",
       "skin": "#e08a3c",
@@ -729,7 +729,7 @@
     },
     {
       "id": "horse",
-      "display_name": "馬",
+      "display_name": "Horse",
       "fantasy_noun": "ユニコーン",
       "model": "horse_0012",
       "skin": "#a9673f",
@@ -979,7 +979,7 @@
     },
     {
       "id": "deer",
-      "display_name": "シカ",
+      "display_name": "Deer",
       "fantasy_noun": "大鹿",
       "model": "deer",
       "skin": "#9a6b43",
@@ -1232,7 +1232,7 @@
     },
     {
       "id": "penguin",
-      "display_name": "ペンギン",
+      "display_name": "Penguin",
       "fantasy_noun": "フロストウィング",
       "model": "pinguin_0012",
       "skin": "#34343c",
@@ -1452,7 +1452,7 @@
     },
     {
       "id": "chicken",
-      "display_name": "ニワトリ",
+      "display_name": "Chicken",
       "fantasy_noun": "フェニックス",
       "model": "chicken_0012",
       "skin": "#a55f3a",
