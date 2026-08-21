@@ -1326,12 +1326,15 @@ static func _carousel_checks(failures: Array[String], main: Node) -> void:
 	var past_choices: Array[String] = []
 	var selections: Array[PackedStringArray] = []
 	var cancellations := [0]
+	var colour_steps: Array[bool] = []
 	car.before_colour_previewed.connect(func(word: String) -> void: previews.append(word))
 	car.before_colour_selected.connect(func(word: String) -> void: past_choices.append(word))
 	car.pair_selected.connect(func(category: String, before: String, after: String) -> void:
 		if category == Content.COLOR_CATEGORY:
 			selections.append(PackedStringArray([before, after])))
 	car.colour_selection_cancelled.connect(func() -> void: cancellations[0] += 1)
+	car.colour_step_changed.connect(func(choosing_now: bool) -> void:
+		colour_steps.append(choosing_now))
 	car._colour_step = DescriptorCarousel.ColourStep.BEFORE
 	car._was_index = 0
 	car._now_index = 1
@@ -1380,7 +1383,8 @@ static func _carousel_checks(failures: Array[String], main: Node) -> void:
 		and past_choices[-1] == previews[-1],
 		"carousel: confirming BEFORE did not hand the colour to the past-tense panel")
 	car.continue_colour_after_past()
-	_check(failures, car._colour_step == DescriptorCarousel.ColourStep.AFTER,
+	_check(failures, car._colour_step == DescriptorCarousel.ColourStep.AFTER
+		and not colour_steps.is_empty() and colour_steps[-1],
 		"carousel: completing the past clause did not reveal the Now colours")
 	var previews_after_confirm := previews.size()
 	for i in colours.size() * 2:
@@ -1395,13 +1399,15 @@ static func _carousel_checks(failures: Array[String], main: Node) -> void:
 		"carousel: AFTER browsing recoloured the live animal preview")
 	car._cancel_colour()
 	_check(failures, car._colour_step == DescriptorCarousel.ColourStep.BEFORE
-		and car._was_index == confirmed_before,
+		and car._was_index == confirmed_before and not colour_steps[-1],
 		"carousel: cancelling AFTER did not return to the confirmed BEFORE choice")
 	await car._confirm_colour()
 	car.continue_colour_after_past()
 	await car._confirm_colour()
 	_check(failures, selections.size() == 1 and selections[0][0] != selections[0][1],
 		"carousel: final colour confirmation did not emit a different pair")
+	_check(failures, not colour_steps.is_empty() and not colour_steps[-1],
+		"carousel: finishing the Now colour did not restore the default heading state")
 	car._colour_step = DescriptorCarousel.ColourStep.BEFORE
 	car._show_view(DescriptorCarousel.View.COLOUR)
 	car._cancel_colour()

@@ -26,6 +26,7 @@ signal pair_selected(category: String, before: String, after: String)
 signal before_colour_previewed(word: String)
 signal before_colour_selected(word: String)
 signal colour_selection_cancelled()
+signal colour_step_changed(choosing_now: bool)
 
 enum View { CATEGORY, COLOUR }
 enum ColourStep { BEFORE, AFTER }
@@ -296,6 +297,7 @@ func _activate() -> void:
 	_was_index = 0
 	_now_index = _next_colour_index(_was_index, 1, true)
 	_colour_step = ColourStep.BEFORE
+	colour_step_changed.emit(false)
 	_sync_colour()
 	_show_view(View.COLOUR)
 
@@ -558,6 +560,7 @@ func _confirm_colour() -> void:
 	_show_colour_confirmation(now, "Now")
 	await get_tree().create_timer(COLOUR_CONFIRM_TIME).timeout
 	_colour_committing = false
+	colour_step_changed.emit(false)
 	pair_selected.emit(Content.COLOR_CATEGORY, was.word, now.word)
 	_show_view(View.CATEGORY)
 
@@ -570,6 +573,7 @@ func continue_colour_after_past() -> void:
 		_now_index = _next_colour_index(_was_index, 1, true)
 	_sync_colour()
 	_show_view(View.COLOUR)
+	colour_step_changed.emit(true)
 
 
 func _cancel_colour() -> void:
@@ -581,8 +585,10 @@ func _cancel_colour() -> void:
 		# confirmed BEFORE choice that is still painted on the animal.
 		_colour_step = ColourStep.BEFORE
 		_sync_colour()
+		colour_step_changed.emit(false)
 		colour_selection_cancelled.emit()
 		return
+	colour_step_changed.emit(false)
 	colour_selection_cancelled.emit()
 	_show_view(View.CATEGORY)
 

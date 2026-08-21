@@ -58,6 +58,8 @@ const SAY_IT_WIDTH := 620
 ## the VBox toward the right and no longer shared the platform's centreline.
 const PROGRESS_WIDTH := 760
 const PROGRESS_HEIGHT := 64 ## The single "Before" heading.
+const APPEARANCE_HEADING := "Choose its appearance before"
+const NOW_COLOUR_HEADING := "Choose its color now"
 
 const CAMERA_SHIFT := 0.0 ## The picker has no side panel; the animal owns the screen centre.
 const ANIMAL_CARD_SIZE := Vector2(112, 78)
@@ -98,6 +100,7 @@ var _attempts := 0
 var _busy := false
 var _dragging_view := false
 var _colour_speech_stage := ColourSpeechStage.NONE
+var _choosing_now_colour := false
 var _colour_past_accepted := false
 var _colour_past_assisted := false
 var _pre_transforming := false
@@ -510,6 +513,7 @@ func _enter_picking() -> void:
 	_attempts = 0
 	_busy = false
 	_colour_speech_stage = ColourSpeechStage.NONE
+	_choosing_now_colour = false
 	_colour_past_accepted = false
 	_colour_past_assisted = false
 
@@ -549,6 +553,7 @@ func _enter_present() -> void:
 	_busy = false
 	_pending = {}
 	_colour_speech_stage = ColourSpeechStage.NONE
+	_choosing_now_colour = false
 	_colour_past_accepted = false
 	_colour_past_assisted = false
 	_clear_overlays()
@@ -638,6 +643,7 @@ func _enter_recording() -> void:
 	_dragging_view = false
 	_colour_preview = ""
 	_colour_speech_stage = ColourSpeechStage.NONE
+	_choosing_now_colour = false
 	_colour_past_accepted = false
 	_colour_past_assisted = false
 	if _preview_root != null:
@@ -676,6 +682,7 @@ func _build_recording_ui() -> void:
 	_word_lab.before_colour_previewed.connect(_on_before_colour_previewed)
 	_word_lab.before_colour_selected.connect(_on_before_colour_selected)
 	_word_lab.colour_selection_cancelled.connect(_on_colour_selection_cancelled)
+	_word_lab.colour_step_changed.connect(_on_colour_step_changed)
 	_console.add_child(_word_lab)
 	var animal := Content.animal(Game.current.animal_id) if Game.current != null else null
 	_word_lab.set_disabled_categories(animal.disabled_categories if animal != null else PackedStringArray())
@@ -747,7 +754,7 @@ func _sync_ui() -> void:
 		return
 	var assigned := _assigned_category()
 	if _progress != null:
-		_progress.text = "Choose its appearance before"
+		_progress.text = NOW_COLOUR_HEADING if _choosing_now_colour else APPEARANCE_HEADING
 
 	_word_lab.set_used(Game.current.used_categories())
 	_word_lab.set_restriction(assigned)
@@ -884,6 +891,12 @@ func _on_colour_selection_cancelled() -> void:
 	_colour_past_accepted = false
 	_colour_past_assisted = false
 	_apply_traits(true)
+
+
+func _on_colour_step_changed(choosing_now: bool) -> void:
+	_choosing_now_colour = choosing_now
+	if _progress != null:
+		_progress.text = NOW_COLOUR_HEADING if choosing_now else APPEARANCE_HEADING
 
 
 func _cancel_pending() -> void:
