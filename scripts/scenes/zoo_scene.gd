@@ -163,17 +163,41 @@ func _populate() -> void:
 		child.queue_free()
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 7717
+	var occupied: Array[Dictionary] = []
 	for state in Game.zoo:
-		# Scattered across the rectangle rather than around a circle, so the residents use
-		# the corners instead of leaving them conspicuously empty.
-		var spot := Vector3(rng.randf_range(-1.0, 1.0) * (YARD.x - 1.5), 0.0,
-			rng.randf_range(-1.0, 1.0) * (YARD.y - 1.5))
+		var radius := CreatureBrain.spacing_radius_for(state)
+		var spot := _find_open_spot(rng, radius, occupied)
+		occupied.append({"position": spot, "radius": radius})
 		var brain := CreatureBrain.create(state, spot)
 		brain.clicked.connect(_show_info)
 		_creatures.add_child(brain)
 
 	if Game.zoo.is_empty():
 		_show_empty_hint()
+
+
+func _find_open_spot(rng: RandomNumberGenerator, radius: float,
+		occupied: Array[Dictionary]) -> Vector3:
+	# Try many candidates so the initial frame is already separated; the brains' live
+	# separation pass remains as a safeguard once they start walking.
+	var x_limit := maxf(YARD.x - radius - 0.7, 1.0)
+	var z_limit := maxf(YARD.y - radius - 0.7, 1.0)
+	for _attempt in 80:
+		var candidate := Vector3(rng.randf_range(-x_limit, x_limit), 0.0,
+			rng.randf_range(-z_limit, z_limit))
+		var clear := true
+		for entry in occupied:
+			var other: Vector3 = entry["position"]
+			var required: float = radius + float(entry["radius"]) + CreatureBrain.NEIGHBOUR_GAP
+			if candidate.distance_to(other) < required:
+				clear = false
+				break
+		if clear:
+			return candidate
+	# At high zoo capacity, return the best-effort candidate and let live steering finish the
+	# separation instead of stacking every late resident at one fixed fallback point.
+	return Vector3(rng.randf_range(-x_limit, x_limit), 0.0,
+		rng.randf_range(-z_limit, z_limit))
 
 
 func _show_empty_hint() -> void:

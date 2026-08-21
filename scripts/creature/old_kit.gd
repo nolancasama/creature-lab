@@ -54,8 +54,9 @@ static var BEARD_OUTLINE := PackedVector3Array([
 ])
 
 
-## Everything is placed from measured face anchors; OLD does not scale the head, so unlike
-## YoungKit there is no head-scale factor to fold in.
+## Everything is placed from measured face anchors. Beard placement has normal/small/big/
+## long/short/tall overlays because the lower edge of a muzzle is not in the same place after
+## every body presentation, especially on long-faced animals and beaked birds.
 static func apply(rig: CreatureRig) -> void:
 	var def := rig.definition
 	var a := rig.face_anchors()
@@ -152,21 +153,32 @@ static func _add_spectacles(rig: CreatureRig, def: AnimalDefinition, a: Dictiona
 ## face-forward card would disappear edge-on in the recording screen's profile view.
 static func _add_beard(rig: CreatureRig, def: AnimalDefinition, a: Dictionary) -> void:
 	var depth := float(a["depth"])
-	var mouth_surface: Vector3 = a["mouth_surface"]
-	var size := def.old_value("beard", "size", 0.48) * depth
-	var length := def.old_value("beard", "length", 1.0)
-	var down := def.old_value("beard", "down", 0.0) * depth
-	var forward := def.old_value("beard", "forward", 0.0) * depth * FORWARD
+	var span := float(a["span"])
+	var modes := rig.beard_modes()
+	# Birds deliberately use the measured mouth surface by default: the beard belongs at the
+	# middle/base of the beak, never on its point. `tip` remains available for a future species
+	# that explicitly needs it.
+	var contact: Vector3 = a["face_tip"] if _beard_bool(def, modes, "tip", false) \
+		else a["mouth_surface"]
+	var size := _beard_value(def, modes, "size", 0.48) * depth
+	var length := _beard_value(def, modes, "length", 1.0)
+	var down := _beard_value(def, modes, "down", 0.18)
+	var forward := _beard_value(def, modes, "forward", 0.0) * depth * FORWARD
+	# Vertical corrections are measured along the head, then the front surface is sampled
+	# again at that height. Sliding the old Z forward with the Y coordinate is what put the
+	# deer beard on its nose instead of under its muzzle.
+	contact.y -= down * span
+	contact.z = rig.head_front_in_patch(0.0, contact.y, float(a["half_w"]) * 0.72,
+		span * 0.075, contact.z)
 	var mesh := _beard_mesh(length)
 	var mat := _beard_material(def.old_tint())
 
 	var beard := Node3D.new()
 	beard.name = "OldBeard"
-	# The outline's top is +0.10, so this offset joins that edge directly to the measured
-	# mouth/beak surface. The whole-head front can be the crown on a penguin, which leaves a
-	# beard floating beside the actual beak.
-	var at := Vector3(0.0, mouth_surface.y - size * 0.10 - down,
-		mouth_surface.z + depth * 0.02 + forward)
+	# The outline's top is +0.10, so this offset joins that edge directly to the corrected
+	# lower-mouth/beak surface.
+	var at := Vector3(0.0, contact.y - size * 0.10,
+		contact.z + depth * 0.02 + forward)
 	beard.scale = Vector3.ONE * size
 
 	var front := MeshInstance3D.new()
@@ -186,6 +198,49 @@ static func _add_beard(rig: CreatureRig, def: AnimalDefinition, a: Dictionary) -
 	side.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	beard.add_child(side)
 	rig.add_bone_accessory(beard, at, def.socket_bone("head_top"))
+
+
+static func _beard_config(def: AnimalDefinition, modes: PackedStringArray) -> Dictionary:
+	var config: Dictionary = def.old.get("beard", {})
+	var merged: Dictionary = {
+		"size": 0.48,
+		"length": 1.0,
+		"down": 0.18,
+		"forward": 0.0,
+		"tip": false,
+	}
+	# These defaults keep the top of the beard on the lower face as the body changes mode.
+	# Animal data can override any of them, including the choice to use a beak tip.
+	var mode_defaults := {
+		"small": {"down": 0.15},
+		"big": {"down": 0.21},
+		"long": {"down": 0.24},
+		"short": {"down": 0.15},
+		"tall": {"down": 0.18},
+	}
+	for key in config:
+		if key != "normal" and key != "small" and key != "big" and key != "long" \
+				and key != "short" and key != "tall" and not (config[key] is Dictionary):
+			merged[key] = config[key]
+	for mode in modes:
+		if mode_defaults.has(mode):
+			merged.merge(mode_defaults[mode], true)
+		var override = config.get(mode, {})
+		if override is Dictionary:
+			merged.merge(override, true)
+	return merged
+
+
+static func _beard_value(def: AnimalDefinition, modes: PackedStringArray, key: String,
+		fallback: float) -> float:
+	var config := _beard_config(def, modes)
+	return float(config.get(key, fallback))
+
+
+static func _beard_bool(def: AnimalDefinition, modes: PackedStringArray, key: String,
+		fallback: bool) -> bool:
+	var config := _beard_config(def, modes)
+	return bool(config.get(key, fallback))
 
 
 static func _beard_mesh(length: float) -> ArrayMesh:

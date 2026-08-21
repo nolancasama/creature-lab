@@ -48,6 +48,8 @@ static func apply_all(rig: CreatureRig, traits: Dictionary, animate := false) ->
 	var color_word := ""
 	var saw_thermal := false
 	var saw_age := false
+	var age_target := 0.0
+	var thermal_target := 0.0
 	for category in traits:
 		var word := str(traits[category])
 		if str(category) == Content.COLOR_CATEGORY:
@@ -67,9 +69,12 @@ static func apply_all(rig: CreatureRig, traits: Dictionary, animate := false) ->
 		else:
 			if pair.modifier == "THERMAL":
 				saw_thermal = true
+				thermal_target = pair.value_for(word)
 			elif pair.modifier == "AGE":
 				saw_age = true
-			_apply_pair(rig, str(category), word, animate)
+				age_target = pair.value_for(word)
+			else:
+				_apply_pair(rig, str(category), word, animate)
 	if not color_word.is_empty():
 		_apply_color(rig, color_word)
 	# A pending HOT/COLD pick was cancelled: nothing else clears thermal_fx_root, since
@@ -101,8 +106,18 @@ static func apply_all(rig: CreatureRig, traits: Dictionary, animate := false) ->
 			rig.feel.animate_to(feel_target)
 		else:
 			rig.feel.set_state(feel_target)
-	# AGE props may have been built before BODY_LENGTH was snapped to its final pose.
-	# Animated changes continue refreshing them from CreatureRig._process().
+	# Build AGE props after size, length, height, and material have reached their targets, so
+	# the beard and spectacles use the correct normal/small/long/etc. placement regardless of
+	# which card the student selected first.
+	if saw_age:
+		_apply_age(rig, age_target, rig.definition.stand_height * 0.55, animate)
+	# Deferred for the same reason AGE is, and it has to actually run: noting that a thermal
+	# trait was seen is not the same as applying it, and the flames were being skipped
+	# entirely. Placed after the deformers so the fire is built around the size the creature
+	# ends up, rather than the size it started at.
+	if saw_thermal:
+		_apply_thermal(rig, thermal_target, rig.definition.stand_height * 0.55, animate)
+	# Native bone mounts are refreshed after the final trait targets have been applied.
 	rig.sync_bone_accessories()
 
 

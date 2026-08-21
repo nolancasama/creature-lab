@@ -628,13 +628,23 @@ func add_bone_accessory(node: Node3D, at: Vector3, bone: String) -> void:
 		skeleton.force_update_all_bone_transforms()
 	node.position = at
 	var fitted_in_body := node.transform
+	var bone_index := skeleton.find_bone(bone)
+	# BoneAttachment3D does not reliably acquire a pose-scaled bone transform until it
+	# enters the SceneTree. Comparison-screen creatures are assembled off-tree, so deriving
+	# the child's local transform from the still-identity host made YOUNG's head scale apply
+	# to the pacifier a second time on the first live frame. Use the skeleton's current pose
+	# directly and initialise the host to that same transform; its native updates can then
+	# take over without changing the fitted mouth contact.
+	var bone_rest_in_body := _bone_rest_transform_in_body(bone)
 	var host := BoneAttachment3D.new()
 	host.name = "AccessoryBone_%s" % node.name
 	skeleton.add_child(host)
-	host.bone_idx = skeleton.find_bone(bone)
+	host.bone_idx = bone_index
 	host.override_pose = false
-	host.on_skeleton_update()
-	node.transform = _transform_to_ancestor(host, body).affine_inverse() * fitted_in_body
+	host.transform = skeleton.get_bone_global_pose(bone_index)
+	# Face props are measured from the neutral mesh. Store that rest-bone-relative fit and
+	# let the live bone apply SHORT/LONG and YOUNG head scale exactly once.
+	node.transform = bone_rest_in_body.affine_inverse() * fitted_in_body
 	host.add_child(node)
 	_bone_accessory_hosts.append(host)
 
@@ -649,7 +659,11 @@ func sync_bone_accessories() -> void:
 		skeleton.force_update_all_bone_transforms()
 	for host in _bone_accessory_hosts:
 		if is_instance_valid(host):
-			host.on_skeleton_update()
+			if host.is_inside_tree():
+				host.on_skeleton_update()
+			elif host.bone_idx >= 0:
+				# Match the transform BoneAttachment3D will receive on its first live frame.
+				host.transform = skeleton.get_bone_global_pose(host.bone_idx)
 
 
 func find_accessory(accessory_name: String) -> Node3D:
@@ -677,6 +691,15 @@ func _bone_transform_in_body(bone: String) -> Transform3D:
 	if index == -1:
 		return Transform3D.IDENTITY
 	return _transform_to_ancestor(skeleton, body) * skeleton.get_bone_global_pose(index)
+
+
+func _bone_rest_transform_in_body(bone: String) -> Transform3D:
+	if skeleton == null:
+		return Transform3D.IDENTITY
+	var index := skeleton.find_bone(bone)
+	if index == -1:
+		return Transform3D.IDENTITY
+	return _transform_to_ancestor(skeleton, body) * skeleton.get_bone_global_rest(index)
 
 
 func _bone_origin_in_body(bone: String, _rest := false) -> Vector3:
@@ -986,6 +1009,28 @@ func face_anchors() -> Dictionary:
 		"cheek": Vector3(half_w * 0.92, base + span * 0.48, front + depth * 0.52),
 		"temple": Vector3(half_w * 0.80, base + span * 0.78, front + depth * 0.70),
 	}
+
+
+## The AGE beard can be tuned against the current persistent proportions. Always include
+## NORMAL first, then overlay active size/length/height modes so a beard has a deliberate
+## contact point in each presentation instead of inheriting one neutral guess.
+func beard_modes() -> PackedStringArray:
+	var modes := PackedStringArray(["normal"])
+	if _trait_scale.x < 0.85:
+		modes.append("small")
+	elif _trait_scale.x > 1.15:
+		modes.append("big")
+	if deformer != null:
+		if deformer.body_length < 0.90:
+			modes.append("short")
+		elif deformer.body_length > 1.10:
+			modes.append("long")
+		if deformer.leg_target < 0.90:
+			if not modes.has("short"):
+				modes.append("short")
+		elif deformer.leg_target > 1.10:
+			modes.append("tall")
+	return modes
 
 
 ## How far the muzzle reaches in front of the head bone, measured from the model itself

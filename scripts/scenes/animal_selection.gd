@@ -104,7 +104,6 @@ var _dragging_view := false
 
 # Present-tense pass (Settings.SAY_SPLIT)
 var _present_index := 0
-var _present_counter: Label = null
 
 
 func _ready() -> void:
@@ -447,15 +446,6 @@ func _enter_present() -> void:
 	var column := UiKit.vbox(10)
 	panel.add_child(column)
 
-	var instruction := "say" if Speech.uses_microphone() else "type"
-	var heading := UiKit.label("Now %s what it IS" % instruction, UiKit.H2, UiKit.ACCENT)
-	heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	column.add_child(heading)
-
-	_present_counter = UiKit.label("", UiKit.H3, UiKit.GOLD)
-	_present_counter.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	column.add_child(_present_counter)
-
 	_speech = SpeechPanel.new()
 	_speech.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_speech.accepted_by_teacher.connect(func() -> void: _present_advance())
@@ -475,7 +465,6 @@ func _present_step() -> void:
 		"after": str(entry["after"]),
 	}
 	_attempts = 0
-	_present_counter.text = "(%d of %d)" % [_present_index + 1, Game.current.entries.size()]
 	_speech.show_target(str(entry["before"]), str(entry["after"]), GrammarValidator.CLAUSE_PRESENT)
 
 

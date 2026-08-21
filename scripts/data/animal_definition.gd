@@ -82,7 +82,8 @@ extends Resource
 ## OLD tuning, same shape and same unit as `young`. Keys, all optional:
 ##   grey     {muzzle_size, muzzle_forward, muzzle_down, temple_size, temple_forward,
 ##             temple_up, temple_spacing}
-##   beard    {size, forward, down, length}
+##   beard    {size, forward, down, length, tip, normal/small/big/long/short/tall overrides}
+##            `tip` is opt-in; birds normally use the middle/base mouth surface instead.
 ##   specs    {size, spacing, forward, up, wire}
 ##   brow     {length, thickness, spacing, forward, up, angle}  - angle in degrees
 ##   tint     "#rrggbb" - the colour of the aging markings.

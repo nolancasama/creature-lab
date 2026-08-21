@@ -216,6 +216,15 @@
           "ear.R",
           "spine.003"
         ]
+      },
+      "old": {
+        "beard": {
+          "normal": {"down": 0.18},
+          "small": {"down": 0.15},
+          "big": {"down": 0.21},
+          "long": {"down": 0.24},
+          "short": {"down": 0.15}
+        }
       }
     },
     {
@@ -421,6 +430,15 @@
           "ear.R",
           "spine.004"
         ]
+      },
+      "old": {
+        "beard": {
+          "normal": {"down": 0.16},
+          "small": {"down": 0.13},
+          "big": {"down": 0.19},
+          "long": {"down": 0.22},
+          "short": {"down": 0.13}
+        }
       }
     },
     {
@@ -642,6 +660,13 @@
         "specs": {
           "size": 0.3,
           "spacing": 0.85
+        },
+        "beard": {
+          "normal": {"down": 0.15},
+          "small": {"down": 0.12},
+          "big": {"down": 0.18},
+          "long": {"down": 0.21},
+          "short": {"down": 0.12}
         }
       }
     },
@@ -867,6 +892,15 @@
           "ear.R",
           "spine.004"
         ]
+      },
+      "old": {
+        "beard": {
+          "normal": {"down": 0.30},
+          "small": {"down": 0.26},
+          "big": {"down": 0.34},
+          "long": {"down": 0.36},
+          "short": {"down": 0.25}
+        }
       }
     },
     {
@@ -1094,6 +1128,13 @@
           "size": 0.22,
           "spacing": 0.45,
           "up": -0.32
+        },
+        "beard": {
+          "normal": {"down": 0.38},
+          "small": {"down": 0.33},
+          "big": {"down": 0.42},
+          "long": {"down": 0.46},
+          "short": {"down": 0.31}
         }
       }
     },
@@ -1289,6 +1330,15 @@
           "size": 0.2,
           "tip": 1.0
         }
+      },
+      "old": {
+        "beard": {
+          "tip": false,
+          "normal": {"down": 0.16},
+          "small": {"down": 0.13},
+          "big": {"down": 0.20},
+          "short": {"down": 0.13}
+        }
       }
     },
     {
@@ -1472,6 +1522,15 @@
       },
       "young": {
         "tint": "#ffd85c"
+      },
+      "old": {
+        "beard": {
+          "tip": false,
+          "normal": {"down": 0.14},
+          "small": {"down": 0.12},
+          "big": {"down": 0.18},
+          "short": {"down": 0.12}
+        }
       }
     }
   ]

@@ -126,9 +126,8 @@ func reset_camera() -> void:
 	cut_to(CAMERA_POS, CAMERA_AIM)
 
 
-## Face the animal toward the camera after the final pre-descent framing has settled. The
-## initial three-quarter pose keeps the lab readable while editing; the reveal beat gets a
-## true front view so the animal is looking directly at the student.
+## Face the animal toward the camera for the final reveal. The opening transformation now
+## keeps the initial three-quarter pose so it does not begin with a separate head-on shot.
 func face_rig_to_camera() -> void:
 	if _rig == null or camera == null:
 		return

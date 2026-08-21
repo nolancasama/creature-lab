@@ -17,7 +17,7 @@ signal change_requested()
 const HELP_AFTER_MODEL := 2 ## Failed attempts before the sentence is read aloud.
 const HELP_AFTER_OVERRIDE := 3 ## Failed attempts before the teacher override appears.
 const MIC_ICON := preload("res://ui/mic.svg")
-const MIC_IDLE := "Tap to speak  (Space)"
+const MIC_IDLE := ""
 const MIC_LISTENING := "Listening...  tap to stop"
 const LISTEN_TIMEOUT := 10.0 ## Seconds before an unanswered microphone closes itself.
 const HEADER_HEIGHT := 34
@@ -86,7 +86,7 @@ func _build() -> void:
 	column.add_child(_sentence_label)
 	column.add_child(UiKit.expander())
 
-	_entry = UiKit.line_edit("Type the sentence, then press Enter")
+	_entry = UiKit.line_edit("")
 	_entry.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_entry.text_submitted.connect(func(text: String) -> void: _submit_typed(text))
 	column.add_child(_entry)
@@ -165,6 +165,7 @@ func show_idle(message := "") -> void:
 	visible = false
 	_sentence_label.text = "[center][color=#93a6bf]Choose a word card.[/color][/center]"
 	_feedback.text = message
+	_feedback.visible = not message.is_empty()
 	_feedback.add_theme_color_override("font_color", UiKit.MUTED)
 	_override_button.visible = false
 	_listen_button.visible = false
@@ -179,10 +180,10 @@ func show_target(before: String, after: String, clause := GrammarValidator.CLAUS
 	_armed = true
 	visible = true
 	_sentence_label.text = _prompt_text()
-	if Speech.uses_microphone():
-		_feedback.text = "" ## The mic button carries the instruction now.
-	else:
-		_feedback.text = "Type the sentence." if Settings.past_only() else "Type the whole sentence."
+	# The field or microphone button already makes the required action clear. Keep this row
+	# out of the layout until it has useful response feedback to show.
+	_feedback.text = ""
+	_feedback.visible = false
 	_feedback.add_theme_color_override("font_color", UiKit.MUTED)
 	_override_button.visible = false
 	_listen_button.visible = Tts.available() and Settings.prompt_mode != Settings.PROMPT_HIDDEN
@@ -197,6 +198,7 @@ func show_target(before: String, after: String, clause := GrammarValidator.CLAUS
 func show_success() -> void:
 	_armed = false
 	_feedback.text = "Yes!  %s" % _target_sentence()
+	_feedback.visible = true
 	_feedback.add_theme_color_override("font_color", UiKit.OK)
 	_override_button.visible = false
 	_cancel_label.visible = false
@@ -206,6 +208,7 @@ func show_success() -> void:
 ## The scaffold ladder. `attempts` is how many times this sentence has now failed.
 func show_failure(result: Dictionary, attempts: int) -> void:
 	_feedback.text = _message_for(result)
+	_feedback.visible = true
 	_feedback.add_theme_color_override("font_color", UiKit.BAD if attempts < HELP_AFTER_MODEL else UiKit.GOLD)
 	Audio.play("fail")
 
@@ -242,7 +245,7 @@ func _target_sentence() -> String:
 
 func _prompt_text() -> String:
 	if Settings.prompt_mode == Settings.PROMPT_HIDDEN:
-		return "[center][color=#93a6bf]Say your sentence.[/color][/center]"
+		return ""
 	if Settings.prompt_mode == Settings.PROMPT_GAPPED:
 		match _clause:
 			GrammarValidator.CLAUSE_PAST:
@@ -279,6 +282,7 @@ func _on_mic_pressed() -> void:
 	if Speech.is_listening():
 		Speech.cancel()
 		_feedback.text = ""
+		_feedback.visible = false
 		_feedback.add_theme_color_override("font_color", UiKit.MUTED)
 	else:
 		Speech.start()
@@ -289,6 +293,7 @@ func _on_listen_timeout() -> void:
 		return
 	Speech.cancel()
 	_feedback.text = "I didn't hear anything. Tap the button and try again."
+	_feedback.visible = true
 	_feedback.add_theme_color_override("font_color", UiKit.MUTED)
 
 

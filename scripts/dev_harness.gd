@@ -8,6 +8,7 @@ extends RefCounted
 ##   godot --path . -- --shot=say          the recording screen with a card chosen
 ##   godot --path . -- --backtest          abandon a half-finished round, then restart it
 ##   godot --path . -- --splittest         the SAY_SPLIT present-tense pass, end to end
+##   godot --path . -- --youngflowtest     SHORT + YOUNG through transformation/comparison
 ##   godot --path . -- --shot=present      the centred present-tense panel
 ##   godot --path . -- --shot=carousel     recording screen after one carousel step
 ##   godot --path . -- --shot=color-before sequential colour picker, Before step
@@ -33,7 +34,7 @@ const SPLIT_PICKS := [
 static func is_requested() -> bool:
 	for arg in OS.get_cmdline_user_args():
 		var text := str(arg)
-		if text in ["--selftest", "--autoplay", "--backtest", "--splittest"] \
+		if text in ["--selftest", "--autoplay", "--backtest", "--splittest", "--youngflowtest"] \
 				or text.begins_with("--shot=") or text.begins_with("--phase=") or text.begins_with("--look="):
 			return true
 	return false
@@ -65,6 +66,8 @@ static func run_if_requested(main: Node) -> void:
 		_backtest(main)
 	elif args.has("--splittest"):
 		_splittest(main)
+	elif args.has("--youngflowtest"):
+		_youngflowtest(main)
 	elif not look.is_empty():
 		_look(main, look)
 	elif not shot.is_empty():
@@ -256,6 +259,38 @@ static func _splittest(main: Node) -> void:
 	tree.quit(0 if ok else 1)
 
 
+## Exercises the exact boundary that once detached YOUNG's pacifier: the chamber builds
+## the finished rig, completes its reveal, and only then routes to the comparison screen,
+## which constructs another finished rig from the same CreatureState.
+static func _youngflowtest(main: Node) -> void:
+	var tree := main.get_tree()
+	var ids := Content.animal_ids()
+	if ids.is_empty():
+		printerr("[youngflowtest] FAIL: no animals")
+		tree.quit(1)
+		return
+	_seed_young_short_creature(ids)
+	Game.set_phase(Game.Phase.ANIMAL_SELECTION)
+	Game.set_phase(Game.Phase.CREATURE_LAB)
+	# Wait on the state transition rather than a guessed cinematic length: captured speech
+	# can legitimately make each of the three beats longer than the TTS fallback.
+	for poll in 90:
+		if Game.phase == Game.Phase.NAMING and Router.current_scene != null \
+				and Router.current_scene.name == "NamingScreen":
+			break
+		await tree.create_timer(0.5).timeout
+	if Game.phase != Game.Phase.NAMING or Router.current_scene == null \
+			or Router.current_scene.name != "NamingScreen":
+		printerr("[youngflowtest] FAIL: transformation ended in %s" % Game.Phase.keys()[Game.phase])
+		tree.quit(1)
+		return
+	await RenderingServer.frame_post_draw
+	var path := "user://shot_young_flow.png"
+	main.get_viewport().get_texture().get_image().save_png(path)
+	print("[youngflowtest] PASS -> %s" % ProjectSettings.globalize_path(path))
+	tree.quit(0)
+
+
 ## Renders one creature wearing one trait, so a look can actually be seen rather than
 ## inferred from the code that builds it. `spec` is a trait word, optionally "word:animal"
 ## - "young", "young:horse", "cold:penguin". The word is committed as the creature's BEFORE
@@ -412,10 +447,10 @@ static func _screenshot(main: Node, phase: String) -> void:
 					break
 			colour_carousel._step_colour(1)
 			if phase in ["color-after", "color-say"]:
-				colour_carousel._confirm_colour()
+				await colour_carousel._confirm_colour()
 				colour_carousel._step_colour(1)
 			if phase == "color-say":
-				colour_carousel._confirm_colour()
+				await colour_carousel._confirm_colour()
 		await main.get_tree().create_timer(0.6).timeout
 	await RenderingServer.frame_post_draw
 	var image := main.get_viewport().get_texture().get_image()
@@ -736,10 +771,11 @@ static func _selftest(main: Node) -> void:
 				contact.z = rig.head_front_in_patch(0.0, contact.y,
 					float(anchors["half_w"]) * 0.72,
 					float(anchors["span"]) * 0.075, contact.z)
-			var expected_contact: Vector3 = anchors["head_pivot"] \
-				+ (contact - anchors["head_pivot"]) * young_scale
-			expected_contact.z += def.young_value("pacifier", "forward", 0.0) \
-				* float(anchors["depth"]) * young_scale * -1.0
+			contact.z += def.young_value("pacifier", "forward", 0.0) \
+				* float(anchors["depth"]) * -1.0
+			var young_head_bone := def.socket_bone("head_top")
+			var expected_contact: Vector3 = rig._bone_transform_in_body(young_head_bone) \
+				* (rig._bone_rest_transform_in_body(young_head_bone).affine_inverse() * contact)
 			_check(failures,
 				rig.accessory_transform_in_body(pacifier).origin.distance_to(expected_contact) < 0.001,
 				"%s: YOUNG pacifier detached from its scaled mouth" % def.id)
@@ -912,6 +948,9 @@ static func _selftest(main: Node) -> void:
 			if final_pacifier != null:
 				var final_bone := def.socket_bone("head_top")
 				var mount := final_pacifier.get_parent()
+				var before_tree_relative: Transform3D = young_creature \
+					._bone_transform_in_body(final_bone).affine_inverse() \
+					* young_creature.accessory_transform_in_body(final_pacifier)
 				_check(failures, mount is BoneAttachment3D,
 					"%s: finished pacifier does not use a native bone mount" % def.id)
 				if mount is BoneAttachment3D:
@@ -921,6 +960,38 @@ static func _selftest(main: Node) -> void:
 					_check(failures,
 						bone_mount.bone_idx == young_creature.skeleton.find_bone(final_bone),
 						"%s: pacifier bone mount targets the wrong bone" % def.id)
+				var final_anchors := young_creature.face_anchors()
+				var neutral_contact: Vector3 = final_anchors["face_tip"] \
+					if def.young_value("pacifier", "tip", 0.0) > 0.5 \
+					else final_anchors["mouth_surface"]
+				var final_down := def.young_value("pacifier", "down", 0.0)
+				if not is_zero_approx(final_down) \
+						and def.young_value("pacifier", "tip", 0.0) <= 0.5:
+					neutral_contact.y -= final_down * float(final_anchors["span"])
+					neutral_contact.z = young_creature.head_front_in_patch(0.0,
+						neutral_contact.y, float(final_anchors["half_w"]) * 0.72,
+						float(final_anchors["span"]) * 0.075, neutral_contact.z)
+				neutral_contact.z += def.young_value("pacifier", "forward", 0.0) \
+					* float(final_anchors["depth"]) * -1.0
+				var expected_final_contact: Vector3 = young_creature \
+					._bone_transform_in_body(final_bone) \
+					* (young_creature._bone_rest_transform_in_body(final_bone).affine_inverse() \
+						* neutral_contact)
+				_check(failures, young_creature.accessory_transform_in_body(final_pacifier) \
+					.origin.distance_to(expected_final_contact) < 0.001,
+					"%s: finished SHORT + YOUNG pacifier missed the transformed mouth" % def.id)
+				# The comparison and zoo screens add a fully transformed rig to the tree only
+				# after its accessories were fitted. The first native bone update must not move
+				# the pacifier away from that fitted head-relative transform.
+				main.add_child(young_creature)
+				await main.get_tree().process_frame
+				await main.get_tree().process_frame
+				var live_relative: Transform3D = young_creature \
+					._bone_transform_in_body(final_bone).affine_inverse() \
+					* young_creature.accessory_transform_in_body(final_pacifier)
+				_check(failures, live_relative.is_equal_approx(before_tree_relative),
+					"%s: comparison-screen pacifier moved away from the face on entry" % def.id)
+				main.remove_child(young_creature)
 			young_creature.free()
 
 	for pair in Content.pairs:
@@ -931,7 +1002,7 @@ static func _selftest(main: Node) -> void:
 			rig.free()
 
 	_speed_checks(failures)
-	_carousel_checks(failures, main)
+	await _carousel_checks(failures, main)
 	_voice_checks(failures)
 	_compile_checks(failures)
 	_present_pass_checks(failures)
@@ -1136,7 +1207,7 @@ static func _carousel_checks(failures: Array[String], main: Node) -> void:
 		and previews[-1] == (colours[car._was_index] as ColorDefinition).word,
 		"carousel: BEFORE colour did not emit a live preview")
 	var confirmed_before := car._was_index
-	car._confirm_colour()
+	await car._confirm_colour()
 	_check(failures, car._colour_step == DescriptorCarousel.ColourStep.AFTER
 		and car._was_index == confirmed_before,
 		"carousel: confirming BEFORE did not enter AFTER with the colour fixed")
@@ -1155,8 +1226,8 @@ static func _carousel_checks(failures: Array[String], main: Node) -> void:
 	_check(failures, car._colour_step == DescriptorCarousel.ColourStep.BEFORE
 		and car._was_index == confirmed_before,
 		"carousel: cancelling AFTER did not return to the confirmed BEFORE choice")
-	car._confirm_colour()
-	car._confirm_colour()
+	await car._confirm_colour()
+	await car._confirm_colour()
 	_check(failures, selections.size() == 1 and selections[0][0] != selections[0][1],
 		"carousel: final colour confirmation did not emit a different pair")
 	car._colour_step = DescriptorCarousel.ColourStep.BEFORE
