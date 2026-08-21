@@ -55,6 +55,11 @@ extends Resource
 
 @export var leg_bones: PackedStringArray = PackedStringArray() ## Swung by the walk cycle.
 
+## Per-animal walk tuning. Any key in Gait.DEFAULTS may appear here and wins over both the
+## shared defaults and the species entry, so an individual animal can be adjusted without a
+## code change. Empty for every animal that is happy with its species walk.
+@export var gait: Dictionary = {}
+
 ## socket name -> {"bone": String, "off": Vector3}. Offsets are in normalised units
 ## (the same scale as stand_height), Y up, so they read the same on every animal.
 @export var sockets: Dictionary = {}
@@ -132,6 +137,7 @@ static func from_dict(d: Dictionary) -> AnimalDefinition:
 	a.soft_jiggle = float(feel.get("jiggle", 1.0))
 	a.floppy_bones = PackedStringArray(feel.get("floppy_bones", []))
 	a.leg_bones = PackedStringArray(d.get("leg_bones", []))
+	a.gait = d.get("gait", {})
 	for socket_name in d.get("sockets", {}):
 		var entry: Dictionary = d["sockets"][socket_name]
 		a.sockets[str(socket_name)] = {

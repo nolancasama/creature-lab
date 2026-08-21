@@ -80,6 +80,15 @@ var deformer: CreatureDeformer = null ## Body length and per-leg lengths.
 var muscle: MuscleDeformer = null ## STRONG/WEAK one-for-one forelimb morphs.
 var feel: FeelDeformer = null ## HARD/SOFT shine, puff, squash and jiggle.
 var pace: PaceDeformer = null ## FAST/SLOW dashes, twitches and drawn-out actions.
+var gait: Gait = null ## The species walk cycle.
+
+## Written by Gait each frame and read below when the body transform is assembled. Kept as
+## fields rather than returned, because the body transform is the sum of six contributors
+## and the walk is only one of them - a creature can be big, cold, dashing and walking at
+## once, and every one of those has a claim on this transform.
+var gait_body_offset := Vector3.ZERO
+var gait_body_roll := 0.0
+var gait_body_pitch := 0.0
 var selection_reaction: SelectionReaction = null ## Short picker-only, data-driven flourish.
 
 var tempo := 1.0 ## Idle animation speed; the SPEED modifier drives this.
@@ -167,6 +176,7 @@ func _build(def: AnimalDefinition) -> void:
 	muscle = MuscleDeformer.new(self)
 	feel = FeelDeformer.new(self)
 	pace = PaceDeformer.new(self)
+	gait = Gait.new(self, def)
 	selection_reaction = SelectionReaction.new(self)
 
 
@@ -1200,13 +1210,18 @@ func _process(delta: float) -> void:
 		pace.tick(delta)
 		offset += pace.offset
 		twist += pace.yaw
-	body.position = offset + shiver_offset + Vector3(0.0, lift
+	# The walk runs before the body transform is assembled, because it contributes to it:
+	# the bob, roll and pitch of a walking animal belong in the same sum as the breathing
+	# lift and the shiver, not layered on top afterwards where they would fight.
+	if gait != null:
+		gait.tick(delta, global_position, moving and not movement_locked, motion)
+	body.position = offset + shiver_offset + gait_body_offset + Vector3(0.0, lift
 		+ sin(_clock * 1.1) * 0.05 * definition.hover, 0.0)
-	body.rotation.x = lean
+	body.rotation.x = lean + gait_body_pitch
 	body.rotation.y = twist
-	body.rotation.z = sin(_clock * 0.9) * 0.01 * (1.0 - posture * 0.4) * motion + shiver_roll
+	body.rotation.z = sin(_clock * 0.9) * 0.01 * (1.0 - posture * 0.4) * motion \
+		+ shiver_roll + gait_body_roll
 	body.scale = _trait_scale * squash
-	_swing_legs((sin(_clock * 5.0) * 0.5 if moving else 0.0) * motion)
 	_sway_appendages(motion)
 	_apply_grounding(delta)
 	_sync_thermal_fx_to_body()
@@ -1322,8 +1337,6 @@ func solve_idle_grounding_immediately() -> void:
 	_apply_grounding(1.0, true)
 
 
-## No walk cycles ship with these models, so the legs are posed procedurally: opposite
-## legs swing out of phase around the bone's rest pose.
 ## Ears, tails and wings hang loose on a soft animal and lock up on a hard one. Rotation
 ## is this class's component to write, which is why the floppiness lives here rather than
 ## in FeelDeformer.
@@ -1344,21 +1357,6 @@ func _sway_appendages(motion: float) -> void:
 		var phase := _clock * (2.2 + floppy * 1.4) + float(index) * 1.3
 		var rest := skeleton.get_bone_rest(idx).basis.get_rotation_quaternion()
 		skeleton.set_bone_pose_rotation(idx, rest * Quaternion(Vector3.RIGHT, sin(phase) * amount))
-		_posed_bones[idx] = true
-
-
-func _swing_legs(amount: float) -> void:
-	if skeleton == null or definition.leg_bones.is_empty():
-		return
-	var index := 0
-	for bone in definition.leg_bones:
-		var idx := skeleton.find_bone(bone)
-		index += 1
-		if idx == -1:
-			continue
-		var phase := 1.0 if index % 2 == 0 else -1.0
-		var rest := skeleton.get_bone_rest(idx).basis.get_rotation_quaternion()
-		skeleton.set_bone_pose_rotation(idx, rest * Quaternion(Vector3.RIGHT, amount * phase))
 		_posed_bones[idx] = true
 
 

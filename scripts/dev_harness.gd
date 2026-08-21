@@ -3,6 +3,9 @@ extends RefCounted
 ## Command-line hooks for checking the build without clicking through it.
 ##
 ##   godot --path . -- --selftest          content, assembly and grammar checks, then quit
+##   godot --path . -- --gaittest          walks every animal and measures foot slide
+##   godot --path . -- --bones             every animal's skeleton, with the walk chain
+##                                         each leg bone actually has beneath it
 ##   godot --path . -- --phase=lab         jump straight to a screen
 ##   godot --path . -- --shot=lab          jump there, save user://shot_lab.png, quit
 ##   godot --path . -- --shot=select       redesigned animal picker and thumbnail strip
@@ -39,7 +42,7 @@ static func is_requested() -> bool:
 	for arg in OS.get_cmdline_user_args():
 		var text := str(arg)
 		if text in ["--selftest", "--autoplay", "--backtest", "--splittest", "--youngflowtest",
-				"--tallflowtest"] \
+				"--tallflowtest", "--bones", "--gaittest"] \
 				or text.begins_with("--shot=") or text.begins_with("--phase=") or text.begins_with("--look="):
 			return true
 	return false
@@ -75,6 +78,10 @@ static func run_if_requested(main: Node) -> void:
 		_youngflowtest(main)
 	elif args.has("--tallflowtest"):
 		_tallflowtest(main)
+	elif args.has("--bones"):
+		_bones(main)
+	elif args.has("--gaittest"):
+		_gaittest(main)
 	elif not look.is_empty():
 		_look(main, look)
 	elif not shot.is_empty():
@@ -542,6 +549,169 @@ static func _screenshot(main: Node, phase: String) -> void:
 	image.save_png(path)
 	print("[shot] saved %s -> %s" % [path, ProjectSettings.globalize_path(path)])
 	main.get_tree().quit()
+
+
+## Prints each animal's skeleton so a gait can be written against the joints that exist
+## rather than the ones a species ought to have. The walk poses one bone per leg, so the
+## question this answers is what sits BELOW that bone: an upper leg alone can only swing
+## like a rod, and no amount of curve-tuning substitutes for a missing carpus.
+## Walks each animal forward and measures whether its planted feet stay planted.
+##
+## The eye cannot judge this from a screenshot and a moving picture is not available here,
+## but the number is unambiguous: a foot in stance is on the ground, so its WORLD position
+## must not change while the body travels over it. Anything else is the skating the walk is
+## supposed to have stopped.
+##
+## Reported per animal: what fraction of the time each foot is stationary (should land near
+## the gait's duty factor) and how fast the foot drifts while it is down, as a percentage of
+## the body's own speed. Zero would be a perfect plant; the old sin-wave walk scored about
+## 100%, because the foot swept continuously and never had a stance at all.
+static func _gaittest(main: Node) -> void:
+	var tree := main.get_tree()
+	var failures: Array[String] = []
+	for def in Content.animals:
+		var rig := CreatureFactory.build_plain(def.id)
+		var carrier := Node3D.new() ## Stands in for the zoo brain that normally moves a rig.
+		main.add_child(carrier)
+		carrier.add_child(rig)
+		rig.moving = true
+		var speed: float = def.walk_speed
+		var contacts: Dictionary = rig.gait.contact_bones()
+		print("[gaittest] %s speed %.2f %s" % [def.id, speed, rig.gait.describe()])
+		var samples: Array[Dictionary] = []
+		# Long enough to cover several strides whatever the species cadence.
+		for frame in 700:
+			await tree.process_frame
+			carrier.position += Vector3(0.0, 0.0, -speed * SIM_STEP)
+			var feet := {"__phase": rig.gait.phase()}
+			for leg_id in contacts:
+				feet[leg_id] = rig.skeleton.global_transform \
+					* rig.skeleton.get_bone_global_pose(int(contacts[leg_id])).origin
+			samples.append(feet)
+		_report_slide(failures, def.id, samples, speed)
+		_report_profile(def.id, samples, speed, rig.gait.leg_offsets())
+		carrier.queue_free()
+	if failures.is_empty():
+		print("[gaittest] PASS")
+	else:
+		printerr("[gaittest] %d FAILURE(S):" % failures.size())
+		for f in failures:
+			printerr("  - %s" % f)
+	tree.quit(0 if failures.is_empty() else 1)
+
+
+## Frame time assumed when converting a per-frame foot displacement into a speed. The
+## harness runs unthrottled, so measuring real delta would compare against a number the
+## simulation never saw.
+const SIM_STEP := 1.0 / 60.0
+## Below this fraction of body speed a foot counts as planted rather than swinging.
+const PLANTED_FRACTION := 0.35
+
+
+static func _report_slide(failures: Array[String], id: String,
+		samples: Array[Dictionary], speed: float) -> void:
+	if samples.size() < 3 or speed <= 0.0:
+		return
+	for leg_id in samples[0].keys():
+		if str(leg_id).begins_with("__"): ## Bookkeeping, not a foot.
+			continue
+		var planted := 0
+		var drift := 0.0
+		var counted := 0
+		# Skip the first frames: the cycle blends in from standing, so the earliest samples
+		# describe an animal that is not walking yet.
+		for i in range(400, samples.size()):
+			if not samples[i].has(leg_id) or not samples[i - 1].has(leg_id):
+				continue
+			# Horizontal only. A foot pivoting on a straight leg necessarily rises a little
+			# at both ends of its stance, and that is not sliding - sliding is ground the
+			# foot covers while it is supposed to be standing on it.
+			var a: Vector3 = samples[i][leg_id]
+			var b: Vector3 = samples[i - 1][leg_id]
+			var moved: float = Vector2(a.x - b.x, a.z - b.z).length()
+			var foot_speed := moved / SIM_STEP
+			counted += 1
+			if foot_speed < speed * PLANTED_FRACTION:
+				planted += 1
+				drift += foot_speed / speed
+		if counted == 0:
+			continue
+		var duty := float(planted) / float(counted)
+		var slide := (drift / float(planted)) * 100.0 if planted > 0 else 100.0
+		print("[gaittest] %-8s %-12s planted %3d%% of the time, drifting %4.1f%% of body speed"
+			% [id, leg_id, roundi(duty * 100.0), slide])
+		if duty < 0.30:
+			failures.append("%s/%s: foot is almost never planted (%d%%)"
+				% [id, leg_id, roundi(duty * 100.0)])
+		if slide > 30.0:
+			failures.append("%s/%s: planted foot slides at %d%% of body speed"
+				% [id, leg_id, roundi(slide)])
+
+
+## Foot speed against position in the stride, in tenths of a cycle. A correct walk shows a
+## clear trough - the stance, where the foot is on the ground and barely moving - and a hump
+## where it swings through. A flat line means there is no stance at all and the foot is being
+## dragged the whole way round, which is what a sine-wave leg does.
+static func _report_profile(id: String, samples: Array[Dictionary], speed: float,
+		offsets: Dictionary) -> void:
+	for leg_id in offsets:
+		var buckets := []
+		var counts := []
+		for i in 10:
+			buckets.append(0.0)
+			counts.append(0)
+		for i in range(400, samples.size()):
+			if not samples[i].has(leg_id) or not samples[i - 1].has(leg_id):
+				continue
+			var a: Vector3 = samples[i][leg_id]
+			var b: Vector3 = samples[i - 1][leg_id]
+			var moved := Vector2(a.x - b.x, a.z - b.z).length() / SIM_STEP / speed
+			var t: float = fposmod(float(samples[i]["__phase"]) + float(offsets[leg_id]), 1.0)
+			var slot := clampi(int(t * 10.0), 0, 9)
+			buckets[slot] += moved
+			counts[slot] += 1
+		var line := ""
+		for i in 10:
+			line += " %5.2f" % (buckets[i] / maxf(counts[i], 1))
+		print("[gaittest] %-8s %-12s%s" % [id, leg_id, line])
+
+
+static func _bones(main: Node) -> void:
+	for def in Content.animals:
+		var rig := CreatureFactory.build_plain(def.id)
+		var skeleton: Skeleton3D = rig.skeleton
+		if skeleton == null:
+			print("[bones] %s: NO SKELETON" % def.id)
+			rig.free()
+			continue
+		print("[bones] === %s (%d bones) ===" % [def.id, skeleton.get_bone_count()])
+		for leg in def.leg_bones:
+			var idx := skeleton.find_bone(leg)
+			if idx == -1:
+				print("[bones]   %s -> MISSING FROM RIG" % leg)
+				continue
+			print("[bones]   %s%s" % [leg, _describe_chain(skeleton, idx, 1)])
+		# The trunk from the root down. Printed as a hierarchy, not a list: which end of a
+		# long spine chain is the neck and which is the tail is exactly what a gait needs
+		# to know, and a flat list of names cannot say.
+		for b in skeleton.get_bone_count():
+			if skeleton.get_bone_parent(b) == -1:
+				print("[bones]   ROOT %s%s" % [skeleton.get_bone_name(b),
+					_describe_chain(skeleton, b, 1)])
+		rig.free()
+	main.get_tree().quit()
+
+
+## One line per descendant, depth-first, with the rest-pose distance from its parent so a
+## zero-length placeholder bone is obvious rather than looking like a usable joint.
+static func _describe_chain(skeleton: Skeleton3D, idx: int, depth: int) -> String:
+	var out := ""
+	for child in skeleton.get_bone_children(idx):
+		var length := skeleton.get_bone_rest(child).origin.length()
+		out += "\n[bones]   %s%s (%.3f)" % ["  ".repeat(depth), skeleton.get_bone_name(child),
+			length]
+		out += _describe_chain(skeleton, child, depth + 1)
+	return out
 
 
 static func _selftest(main: Node) -> void:
