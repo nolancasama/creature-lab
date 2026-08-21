@@ -33,15 +33,16 @@ const CAMERA_MOVE_TIME := 0.55 ## Long enough to read as a move, short enough no
 const PANEL_RIGHT := -32
 const HUD_TOP := 24 ## Top edge of the floating buttons, above the panel on both sub-states.
 const PROGRESS_FONT := UiKit.SMALL * 3 ## Readable from the back of a classroom.
-const HUD_BUTTON := 52 ## Back button size.
+const HUD_BUTTON := 78 ## 50% taller than the former 52px back control.
+const HUD_BACK_WIDTH := 138 ## Room for the chevron and the new Back label.
 const GEAR_BUTTON_SIZE := 70 ## 33% smaller than the former 104px settings gear.
 const GEAR_ICON := preload("res://ui/gear.svg")
 const HUD_GAP := 24 ## Visible gap between the HUD row and the panel below it.
 ## Top edge for a HUD_BUTTON-sized control so its centre line matches the gear's. This is
 ## derived rather than typed so the two stay aligned when either control changes size.
 const HUD_BUTTON_TOP := HUD_TOP + (GEAR_BUTTON_SIZE - HUD_BUTTON) / 2
-const PANEL_TOP := HUD_TOP + GEAR_BUTTON_SIZE + HUD_GAP ## Clears the gear, now the taller
-                                                        ## of the two HUD buttons.
+const PANEL_TOP := HUD_TOP + GEAR_BUTTON_SIZE + HUD_GAP ## The centred back button still
+                                                        ## clears this panel edge.
 const PANEL_BOTTOM := -24 ## Tighter than the top margin: the height lost to the HUD row
                           ## above comes back here, so the Word Lab still shows every card.
 ## The centred present-tense panel. Tall enough on its own that SpeechPanel's internal
@@ -682,14 +683,13 @@ func _build_recording_ui() -> void:
 	_build_say_it_dock()
 
 	# Floating HUD
-	var back_btn := UiKit.icon_button("<", HUD_BUTTON)
-	# Named, because "<" is no longer a unique caption on this screen - the carousel uses
-	# it for its own left arrow, and a harness looking the button up by its text found the
-	# wrong one and quietly stopped abandoning the round.
+	var back_btn := UiKit.icon_button("< Back", HUD_BUTTON)
+	# Keep a stable name for the harness and for navigation code; the visible caption can
+	# now describe the action without becoming an implicit selector.
 	back_btn.name = "BackToPicking"
 	back_btn.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
 	back_btn.offset_left = 24
-	back_btn.offset_right = 24 + HUD_BUTTON
+	back_btn.offset_right = 24 + HUD_BACK_WIDTH
 	back_btn.offset_top = HUD_BUTTON_TOP
 	back_btn.offset_bottom = HUD_BUTTON_TOP + HUD_BUTTON
 	back_btn.pressed.connect(func() -> void:
