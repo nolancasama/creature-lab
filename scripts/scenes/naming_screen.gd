@@ -6,8 +6,11 @@ extends Node3D
 ## grammar is about; standing them side by side while the three sentences are on screen
 ## is the moment the lesson lands.
 
-const BEFORE_POS := Vector3(-4.9, 0.0, 0.0)
-const NOW_POS := Vector3(4.9, 0.0, 0.0)
+## Closer to the centre line than they used to be. How square a platform looks depends on
+## how far off-axis it sits, so pulling the pair in is what buys the camera room to come
+## nearer without tipping either of them back onto its side.
+const BEFORE_POS := Vector3(-3.7, 0.0, 0.0)
+const NOW_POS := Vector3(3.7, 0.0, 0.0)
 const FRONT_FACING := PI
 
 var _candidates := PackedStringArray()
@@ -29,17 +32,26 @@ func _ready() -> void:
 	Audio.play("reveal")
 
 
-func _process(delta: float) -> void:
-	if _before_root != null:
-		_before_root.rotation.y += delta * 0.35
-	if _creature_root != null:
-		_creature_root.rotation.y += delta * 0.35
+## Deliberately not turning. This screen exists to be compared, and a pair of turntables
+## means the two are almost never facing the same way at the same moment - whenever one
+## reads clearly the other is showing its back. They hold the front-facing pose instead.
+func _process(_delta: float) -> void:
+	pass
 
 
 func _build_stage() -> void:
-	add_child(StageKit.environment(Color("#08101d"), Color("#172d4a"), 0.55))
-	add_child(StageKit.key_light(Vector3(-50, -30, 0), 1.0))
-	add_child(StageKit.fill_light(Color("#fff2d0"), Vector3(2.4, 3.4, 3.4), 0.9, 14.0))
+	# Contrast here is a lighting problem, not a background one. The colour of the creature
+	# is itself one of the things the student chose - white and black are both on the
+	# palette - so no single backdrop can be relied on to sit behind it. A rim light does
+	# not care: it draws a bright edge along whatever shape is in front of it, which
+	# separates a white creature from a pale background and a black one from a dark one.
+	add_child(StageKit.environment(Color("#050b14"), Color("#0f2138"), 0.42))
+	add_child(StageKit.key_light(Vector3(-50, -30, 0), 1.35))
+	add_child(StageKit.fill_light(Color("#fff2d0"), Vector3(2.4, 3.4, 3.4), 1.1, 14.0))
+	# One behind and above each platform, aimed through the creature towards the camera.
+	for spot in [BEFORE_POS, NOW_POS]:
+		add_child(StageKit.fill_light(Color("#cfe6ff"),
+			spot + Vector3(0.0, 2.6, -3.0), 4.5, 9.0))
 	add_child(_comparison_floor())
 
 	var before_platform := StageKit.platform(1.55, Color("#1b2438"), UiKit.MUTED)
@@ -78,7 +90,12 @@ func _build_stage() -> void:
 	if creature != null:
 		_creature_root.add_child(creature)
 
-	add_child(StageKit.camera(Vector3(0.0, 2.1, 11.4), Vector3(0.0, 1.0, 0.0), 50.0))
+	# Far back with a narrow lens rather than close with a wide one. The two platforms sit
+	# either side of the centre line, and a wide lens from close up sees each of them from
+	# its own side - the further apart they are, the more each one is turned away. Pulling
+	# back and narrowing flattens that out until both read as square to the camera. Level,
+	# too: aiming at a point below the lens tipped the whole comparison forward.
+	add_child(StageKit.camera(Vector3(0.0, 1.30, 13.2), Vector3(0.0, 1.30, 0.0), 34.0))
 
 
 func _comparison_floor() -> Node3D:
