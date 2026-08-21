@@ -178,7 +178,10 @@ static func _backtest(main: Node) -> void:
 		tree.quit(1)
 		return
 	go.pressed.emit()
-	await tree.create_timer(1.0).timeout
+	# Longer than any confirm_selection_animation in animals.json (the longest is the
+	# tiger at 1.35s) plus the recording screen build. _confirm() awaits that reaction
+	# before entering, so a 1.0s wait here failed on every animal in the file.
+	await tree.create_timer(2.6).timeout
 
 	word_lab = _find_word_lab(Router.current_scene)
 	if word_lab == null:
@@ -456,18 +459,6 @@ static func _screenshot(main: Node, phase: String) -> void:
 					await main.get_tree().create_timer(1.3).timeout
 				colour_carousel._step_colour(1)
 		await main.get_tree().create_timer(0.6).timeout
-	if phase == "select":
-		var sel := Router.current_scene
-		for child in sel._picking_panel.get_children():
-			var c := child as Control
-			print("[probe] %s vis=%s rect=%s mod=%s" % [c.name, c.is_visible_in_tree(),
-				c.get_global_rect(), c.modulate])
-			for sub in c.get_children():
-				var sc := sub as Control
-				if sc != null:
-					print("[probe]    %s vis=%s rect=%s text=%s" % [sc.name,
-						sc.is_visible_in_tree(), sc.get_global_rect(),
-						sc.get("text")])
 	await RenderingServer.frame_post_draw
 	var image := main.get_viewport().get_texture().get_image()
 	var path := "user://shot_%s.png" % phase
