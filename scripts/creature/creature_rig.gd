@@ -1061,6 +1061,24 @@ func crown_height() -> float:
 	return definition.stand_height * _trait_scale.y + deform_lift
 
 
+## A rotation-independent horizontal footprint for zoo avoidance. Using the furthest
+## source-mesh corners makes this a containing circle rather than a guess based only on
+## height; LONG extends the fore/aft reach, and BIG/SMALL scales the whole result.
+func horizontal_footprint_radius() -> float:
+	if mesh_instance == null or definition == null:
+		return 1.0
+	var box := mesh_instance.get_aabb()
+	var far_x := maxf(absf(box.position.x), absf(box.end.x)) * _normal_scale
+	var far_z := maxf(absf(box.position.z), absf(box.end.z)) * _normal_scale
+	var length_scale := maxf(deformer.body_length if deformer != null else 1.0, 1.0)
+	far_z *= length_scale
+	var size_scale := maxf(absf(_trait_scale.x), absf(_trait_scale.z))
+	# A small skin around the containing circle keeps low-poly ears, tails, and worn face
+	# props from merely touching even when the underlying mesh bounds are exact.
+	return maxf(Vector2(far_x, far_z).length() * size_scale * 1.08,
+		definition.stand_height * size_scale * 0.42)
+
+
 ## Used by the naming screen's ghost: a flat translucent silhouette instead of the
 ## textured model.
 func make_ghost(color: Color, alpha := 0.3) -> void:

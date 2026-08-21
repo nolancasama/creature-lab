@@ -485,6 +485,32 @@ static func _selftest(main: Node) -> void:
 	_check(failures, Audio._ambience == null or not Audio._ambience.playing,
 		"ambient laboratory hum still plays when requested")
 
+	# A worst-case zoo solver probe: thirty residents begin at the exact same coordinate.
+	# Repeated live passes must spread every circular footprint without leaving a single
+	# intersecting pair. Keeping this parent outside the SceneTree avoids starting their
+	# normal idle AI; it exercises the same separation method deterministically.
+	var crowd := Node3D.new()
+	var crowd_state := CreatureState.create("dog")
+	var crowd_brains: Array[CreatureBrain] = []
+	for i in 30:
+		var crowd_brain := CreatureBrain.create(crowd_state, Vector3.ZERO)
+		crowd.add_child(crowd_brain)
+		crowd_brains.append(crowd_brain)
+	var crowd_penetration := CreatureBrain.resolve_group_overlaps(crowd, 96)
+	_check(failures, crowd_penetration < 0.002,
+		"zoo crowd solver retained %.3f maximum penetration" % crowd_penetration)
+	for i in crowd_brains.size():
+		for j in range(i + 1, crowd_brains.size()):
+			var required := crowd_brains[i].spacing_radius() \
+				+ crowd_brains[j].spacing_radius() + CreatureBrain.NEIGHBOUR_GAP
+			var horizontal := Vector2(
+				crowd_brains[i].position.x - crowd_brains[j].position.x,
+				crowd_brains[i].position.z - crowd_brains[j].position.z).length()
+			_check(failures, horizontal >= required - 0.002,
+				"zoo crowd solver left residents %d and %d overlapping by %.3f" \
+				% [i, j, required - horizontal])
+	crowd.free()
+
 	# Every animal must load its model, and every bone the data references must really
 	# exist in that model - a typo in animals.json is otherwise invisible until a trait
 	# silently does nothing.
@@ -495,6 +521,8 @@ static func _selftest(main: Node) -> void:
 			continue
 		_check(failures, rig.skeleton != null, "%s: no skeleton in model '%s'" % [def.id, def.model])
 		_check(failures, rig.mesh_instance != null, "%s: no mesh in model '%s'" % [def.id, def.model])
+		_check(failures, rig.horizontal_footprint_radius() >= def.stand_height * 0.42,
+			"%s: measured zoo footprint is smaller than its body" % def.id)
 		_check(failures, not def.body_bones.is_empty(), "%s has no LONG/SHORT body bones" % def.id)
 		_check(failures, not def.selection_reaction_animation.is_empty(),
 			"%s has no browse selection reaction" % def.id)

@@ -11,7 +11,8 @@ signal clicked(brain: CreatureBrain)
 
 enum State { IDLE, WALK, OBSERVE, TRAIT_ACTION, INTERACT }
 
-const YARD_RADIUS := 9.0
+## Usable grass inside the rectangular fence (ZooScene.YARD minus its inner margin).
+const YARD_HALF_EXTENTS := Vector2(12.0, 8.0)
 const ARRIVE_DISTANCE := 0.35
 const NEIGHBOUR_GAP := 0.32
 const SEPARATION_RANGE := 1.35
@@ -49,10 +50,19 @@ static func spacing_radius_for(state: CreatureState) -> float:
 		return 1.0
 	var size_scale := 1.0
 	var pair := Content.pair_for_category("SIZE")
-	var word := str(state.after_traits().get("SIZE", ""))
+	var traits := state.after_traits()
+	var word := str(traits.get("SIZE", ""))
 	if pair != null and pair.has_word(word):
 		size_scale = pair.value_for(word)
-	return maxf(0.95, def.stand_height * 0.42 * size_scale)
+	var length_scale := 1.0
+	var length_pair := Content.pair_for_category("LENGTH")
+	var length_word := str(traits.get("LENGTH", ""))
+	if length_pair != null and length_pair.has_word(length_word):
+		length_scale = maxf(length_pair.value_for(length_word), 1.0)
+	# Spawn placement has no rig yet, so include the two traits that enlarge the horizontal
+	# silhouette. _ready() replaces this estimate with the model's measured footprint.
+	return maxf(0.95, def.stand_height * 0.50 * size_scale
+		* lerpf(1.0, length_scale, 0.62))
 
 
 func _ready() -> void:
@@ -67,6 +77,7 @@ func _ready() -> void:
 	_speed = def.walk_speed * _trait_speed_scale()
 	_hover = def.hover
 	_spacing_radius = spacing_radius_for(state_data)
+	_spacing_radius = maxf(_spacing_radius, rig.horizontal_footprint_radius())
 	position.y = _hover * 0.6
 	rotation.y = _rng.randf_range(0.0, TAU)
 	_action_word = _pick_action_word()
@@ -140,7 +151,6 @@ func _pick_action_word() -> String:
 func _physics_process(delta: float) -> void:
 	if _focused:
 		return
-	_resolve_neighbour_overlap()
 	_timer -= delta
 	match _state:
 		State.WALK:
@@ -170,7 +180,7 @@ func _walk(delta: float) -> void:
 	forward = forward.normalized()
 	if forward.dot(direction) > 0.0:
 		position += forward * _speed * delta
-	_resolve_neighbour_overlap()
+	_keep_inside_yard()
 	position.y = _hover * (0.6 + sin(Time.get_ticks_msec() * 0.002) * 0.12)
 
 
@@ -209,31 +219,63 @@ func _enter(next: State) -> void:
 
 
 func _random_point() -> Vector3:
-	var angle := _rng.randf_range(0.0, TAU)
-	var distance := sqrt(_rng.randf()) * YARD_RADIUS
-	return Vector3(cos(angle) * distance, position.y, sin(angle) * distance)
+	var x_limit := maxf(YARD_HALF_EXTENTS.x - _spacing_radius, 1.0)
+	var z_limit := maxf(YARD_HALF_EXTENTS.y - _spacing_radius, 1.0)
+	return Vector3(_rng.randf_range(-x_limit, x_limit), position.y,
+		_rng.randf_range(-z_limit, z_limit))
 
 
 func spacing_radius() -> float:
 	return _spacing_radius
 
 
-## Push apart overlapping horizontal footprints. Both residents normally share the correction
-## so they do not jitter; a focused resident is stationary, so a moving neighbor takes the
-## whole correction instead.
-func _resolve_neighbour_overlap() -> void:
-	for sibling in get_parent().get_children():
-		if sibling == self or not (sibling is CreatureBrain):
-			continue
-		var other := sibling as CreatureBrain
-		var delta := Vector3(position.x - other.position.x, 0.0, position.z - other.position.z)
-		var distance := delta.length()
-		var required := _spacing_radius + other.spacing_radius() + NEIGHBOUR_GAP
-		if distance >= required:
-			continue
-		var away := delta / distance if distance > 0.0001 else _overlap_direction(other)
-		var share := 1.0 if other._focused else 0.5
-		position += away * (required - distance) * share
+## Resolve the zoo as one system after every resident has moved. Pairwise corrections are
+## split simultaneously (except around a focused animal), then repeated to settle chains.
+## This avoids the order-dependent boundary jams caused by thirty independent solvers.
+static func resolve_group_overlaps(parent: Node, passes := 8) -> float:
+	if parent == null:
+		return 0.0
+	var residents: Array[CreatureBrain] = []
+	for child in parent.get_children():
+		if child is CreatureBrain:
+			residents.append(child as CreatureBrain)
+	for _pass in maxi(passes, 1):
+		var moved := false
+		for i in residents.size():
+			for j in range(i + 1, residents.size()):
+				var first := residents[i]
+				var second := residents[j]
+				var delta := Vector3(first.position.x - second.position.x, 0.0,
+					first.position.z - second.position.z)
+				var distance := delta.length()
+				var required := first.spacing_radius() + second.spacing_radius() + NEIGHBOUR_GAP
+				if distance >= required:
+					continue
+				var away := delta / distance if distance > 0.0001 \
+					else first._overlap_direction(second)
+				var correction := required - distance
+				if first._focused:
+					second.position -= away * correction
+				elif second._focused:
+					first.position += away * correction
+				else:
+					first.position += away * correction * 0.5
+					second.position -= away * correction * 0.5
+				first._keep_inside_yard()
+				second._keep_inside_yard()
+				moved = true
+		if not moved:
+			break
+	var maximum_penetration := 0.0
+	for i in residents.size():
+		for j in range(i + 1, residents.size()):
+			var first := residents[i]
+			var second := residents[j]
+			var distance := Vector2(first.position.x - second.position.x,
+				first.position.z - second.position.z).length()
+			maximum_penetration = maxf(maximum_penetration,
+				first.spacing_radius() + second.spacing_radius() + NEIGHBOUR_GAP - distance)
+	return maxf(maximum_penetration, 0.0)
 
 
 func _neighbour_separation() -> Vector3:
@@ -252,9 +294,23 @@ func _neighbour_separation() -> Vector3:
 
 
 func _overlap_direction(other: CreatureBrain) -> Vector3:
-	var seed := int(get_instance_id()) * 31 + int(other.get_instance_id())
+	# Both directions for the same pair must be exact opposites. Otherwise two creatures
+	# spawned at one coordinate can choose nearly the same escape direction and stay piled.
+	var mine := int(get_instance_id())
+	var theirs := int(other.get_instance_id())
+	var low := mini(mine, theirs)
+	var high := maxi(mine, theirs)
+	var seed := low * 31 + high * 17
 	var angle := fposmod(float(seed), 628.0) * 0.01
-	return Vector3(cos(angle), 0.0, sin(angle)).normalized()
+	var base := Vector3(cos(angle), 0.0, sin(angle)).normalized()
+	return base if mine < theirs else -base
+
+
+func _keep_inside_yard() -> void:
+	var x_limit := maxf(YARD_HALF_EXTENTS.x - _spacing_radius, 1.0)
+	var z_limit := maxf(YARD_HALF_EXTENTS.y - _spacing_radius, 1.0)
+	position.x = clampf(position.x, -x_limit, x_limit)
+	position.z = clampf(position.z, -z_limit, z_limit)
 
 
 ## A short, readable flourish tied to one of the creature's own "Now it is..." words.
@@ -266,7 +322,13 @@ func _perform_trait_action() -> void:
 		"fast":
 			var origin := position
 			var dash_target := _safe_target(origin - global_transform.basis.z * 1.6)
+			# Endpoint clearance is not enough: a straight tween can still pass through a
+			# neighbour on its way there. Keep the visual burst but skip displacement when
+			# the swept footprint is occupied.
+			if not _path_is_clear(origin, dash_target):
+				dash_target = origin
 			var return_target := _safe_target(origin)
+			tween.set_process_mode(Tween.TWEEN_PROCESS_PHYSICS)
 			tween.tween_property(self, "position", dash_target, 0.28)
 			tween.tween_property(self, "position", return_target, 0.5)
 			Fx.burst(self, Vector3(0, 0.4, 0.6), "motion", Color("#bfe9ff"), 0.4)
@@ -307,6 +369,27 @@ func _safe_target(target: Vector3) -> Vector3:
 				var away := delta / distance if distance > 0.0001 else _overlap_direction(other)
 				safe += away * (required - distance)
 	return safe
+
+
+func _path_is_clear(from: Vector3, to: Vector3) -> bool:
+	if get_parent() == null:
+		return true
+	var start := Vector2(from.x, from.z)
+	var finish := Vector2(to.x, to.z)
+	var segment := finish - start
+	var length_squared := segment.length_squared()
+	for sibling in get_parent().get_children():
+		if sibling == self or not (sibling is CreatureBrain):
+			continue
+		var other := sibling as CreatureBrain
+		var point := Vector2(other.position.x, other.position.z)
+		var t := clampf((point - start).dot(segment) / length_squared, 0.0, 1.0) \
+			if length_squared > 0.0001 else 0.0
+		var closest := start + segment * t
+		var required := _spacing_radius + other.spacing_radius() + NEIGHBOUR_GAP
+		if closest.distance_to(point) < required:
+			return false
+	return true
 
 
 ## Turn to face the closest neighbour - cheap, but it makes the yard feel populated.

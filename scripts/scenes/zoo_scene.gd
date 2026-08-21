@@ -36,6 +36,9 @@ var _pinch_distance := 0.0
 
 
 func _ready() -> void:
+	# Creature brains use the default priority. Run the yard-wide collision pass after all
+	# of them have advanced for this physics frame.
+	process_physics_priority = 100
 	# Clicking a creature relies on Area3D picking, which the viewport does not do by
 	# default.
 	get_viewport().physics_object_picking = true
@@ -44,6 +47,11 @@ func _ready() -> void:
 	_populate()
 	Game.zoo_changed.connect(_populate)
 	Audio.play_ambience(true)
+
+
+func _physics_process(_delta: float) -> void:
+	if _creatures != null:
+		CreatureBrain.resolve_group_overlaps(_creatures, 8)
 
 
 func _build_stage() -> void:
@@ -168,17 +176,31 @@ func _build_ui() -> void:
 
 func _populate() -> void:
 	for child in _creatures.get_children():
+		# Detach immediately so the collision pass below cannot include residents already
+		# queued for deletion when the zoo is repopulated in-place.
+		_creatures.remove_child(child)
 		child.queue_free()
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 7717
 	var occupied: Array[Dictionary] = []
 	for state in Game.zoo:
-		var radius := CreatureBrain.spacing_radius_for(state)
-		var spot := _find_open_spot(rng, radius, occupied)
-		occupied.append({"position": spot, "radius": radius})
+		var estimated_radius := CreatureBrain.spacing_radius_for(state)
+		var spot := _find_open_spot(rng, estimated_radius, occupied)
 		var brain := CreatureBrain.create(state, spot)
 		brain.clicked.connect(_show_info)
 		_creatures.add_child(brain)
+		# add_child() runs the brain's _ready(), where its transformed mesh is available for
+		# an exact footprint. Re-place if that measured circle exceeds the data-only estimate,
+		# then use the measured value for every later resident.
+		var radius := brain.spacing_radius()
+		if radius > estimated_radius + 0.001:
+			spot = _find_open_spot(rng, radius, occupied)
+			brain.position.x = spot.x
+			brain.position.z = spot.z
+		occupied.append({"position": spot, "radius": radius})
+	# Fallback placement can be approximate at maximum capacity. Settle the full group
+	# before the first rendered frame so no initial pile is ever visible.
+	CreatureBrain.resolve_group_overlaps(_creatures, 64)
 
 	if Game.zoo.is_empty():
 		_show_empty_hint()
