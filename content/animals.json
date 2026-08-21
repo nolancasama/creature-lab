@@ -1442,6 +1442,7 @@
       "old": {
         "beard": {
           "tip": false,
+          "forward": 0.1,
           "normal": {"down": 0.16},
           "small": {"down": 0.13},
           "big": {"down": 0.20},
