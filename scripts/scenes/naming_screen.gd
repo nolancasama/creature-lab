@@ -14,7 +14,6 @@ const NOW_POS := Vector3(3.7, 0.0, 0.0)
 const FRONT_FACING := PI
 
 var _candidates := PackedStringArray()
-var _index := 0
 var _entry: LineEdit = null
 var _before_root: Node3D = null
 var _creature_root: Node3D = null
@@ -131,7 +130,7 @@ func _build_ui() -> void:
 	panel.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
 	panel.offset_left = -220
 	panel.offset_right = 220
-	panel.offset_top = -354
+	panel.offset_top = -292
 	panel.offset_bottom = -28
 	root.add_child(panel)
 
@@ -150,11 +149,6 @@ func _build_ui() -> void:
 	send.custom_minimum_size = Vector2(360, 54)
 	send.pressed.connect(_send_to_zoo)
 	column.add_child(send)
-
-	var another := UiKit.button("Another name", UiKit.H3)
-	another.custom_minimum_size = Vector2(360, 54)
-	another.pressed.connect(_next_name)
-	column.add_child(another)
 
 	var start_again := UiKit.button("Start again", UiKit.H3)
 	start_again.custom_minimum_size = Vector2(360, 54)
@@ -184,15 +178,6 @@ func _build_captions() -> Control:
 func _current_name() -> String:
 	var typed := _entry.text.strip_edges()
 	return typed if not typed.is_empty() else Game.current.generated_name
-
-
-func _next_name() -> void:
-	if _candidates.is_empty():
-		return
-	Audio.play("click")
-	_index = (_index + 1) % _candidates.size()
-	Game.current.generated_name = _candidates[_index]
-	_entry.text = _candidates[_index]
 
 
 func _send_to_zoo() -> void:
