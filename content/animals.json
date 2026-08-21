@@ -491,10 +491,10 @@
       },
       "selection_reaction_sound": "tiger_call",
       "confirm_selection_animation": {
-        "duration": 1.35, "forward": -0.085, "pitch_deg": -8, "scale": 0.07,
+        "duration": 1.35, "scale": 0.07,
         "bones": [
-          {"bone": "spine.012", "axis": [1, 0, 0], "angle_deg": -14},
-          {"bone": "jaw", "axis": [1, 0, 0], "angle_deg": 24},
+          {"bone": "spine.012", "axis": [1, 0, 0], "angle_deg": -20},
+          {"bone": "jaw", "axis": [1, 0, 0], "angle_deg": 28},
           {"bone": "shoulder.L", "axis": [0, 0, 1], "angle_deg": 8}
         ]
       },
@@ -737,7 +737,7 @@
       },
       "selection_reaction_sound": "horse_call",
       "confirm_selection_animation": {
-        "duration": 1.25, "lift": 0.12, "bounces": 1, "pitch_deg": -8, "roll_deg": 2, "scale": 0.025,
+        "duration": 1.25, "lift": 0.12, "bounces": 1, "pitch_deg": 8, "roll_deg": 2, "scale": 0.025,
         "bones": [
           {"bone": "scull", "axis": [1, 0, 0], "angle_deg": -18},
           {"bone": "front_thigh.L", "axis": [1, 0, 0], "angle_deg": -16},
