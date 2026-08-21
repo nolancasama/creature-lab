@@ -76,6 +76,16 @@ func _build() -> void:
 
 	_sentence_label = UiKit.rich("", UiKit.H2)
 	_sentence_label.custom_minimum_size = Vector2(0, 38)
+	# Hugs its own text so the speaker button sits beside the sentence rather than out at
+	# the panel edge, and the pair centres in the row as one group.
+	#
+	# Wrapping has to be off for that. A RichTextLabel reports a minimum width of zero, so
+	# with wrapping on it shrinks to nothing here and puts one letter per line - which then
+	# stretches the row tall enough to turn the Listen button into a vertical bar. With
+	# wrapping off its minimum is the width of the sentence, which is what shrink-to-fit
+	# needs. These sentences are one short clause each and fit the console comfortably.
+	_sentence_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	_sentence_label.fit_content = true
 	_sentence_label.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	sentence_row.add_child(_sentence_label)
 
@@ -83,6 +93,7 @@ func _build() -> void:
 	_listen_button.icon = SPEAKER_ICON
 	_listen_button.tooltip_text = "Listen to the sentence"
 	_listen_button.custom_minimum_size = Vector2(44, 38)
+	_listen_button.size_flags_vertical = Control.SIZE_SHRINK_CENTER ## Never a full-height bar.
 	# A theme constant on Button, not a property - assigning it directly fails at runtime
 	# and leaves the icon at its full size.
 	_listen_button.add_theme_constant_override("icon_max_width", 24)

@@ -35,7 +35,11 @@ enum ColourStep { BEFORE, AFTER }
 ## build shipped its right arrow off the edge.
 ## One card per adjective, side by side, so the pair still reads as a pair. Two of these
 ## plus the gap has to come in under what CARD_SIZE used to occupy or the row stops fitting.
-const WORD_CARD_SIZE := Vector2(140, 112)
+## Every card in the deck is this size, middle one included. A larger centre card says
+## "this is the selection" - but any visible word can be tapped, so there is no selection
+## to point at, and the odd one out only made the row read as a scroller.
+const WORD_CARD_SIZE := Vector2(112, 78)
+const WORD_TEXT_SIZE := UiKit.BODY ## Uniform across the deck, and big enough to read.
 const WORD_GAP := 8
 const SIDE_CARD_SIZE := Vector2(112, 78)
 const ARROW_SIZE := 55 ## 25% larger than the former 44px chevron controls.
@@ -151,8 +155,7 @@ func _build_category_view(page: VBoxContainer) -> void:
 	# Kept at the old two-card width so the console's centre column did not narrow when the
 	# deck went to one word at a time - the surrounding layout is fixed, and a card that
 	# suddenly occupied half of it would leave the row looking unbalanced.
-	_main_host.custom_minimum_size = Vector2(
-		WORD_CARD_SIZE.x * 2.0 + WORD_GAP, WORD_CARD_SIZE.y)
+	_main_host.custom_minimum_size = WORD_CARD_SIZE
 	_main_host.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_main_host.clip_contents = true
 	row.add_child(_main_host)
@@ -164,7 +167,7 @@ func _build_category_view(page: VBoxContainer) -> void:
 	_main_host.add_child(_main_card)
 	_main_card.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var word_card := Button.new()
-	word_card.custom_minimum_size = Vector2(WORD_CARD_SIZE.x * 2.0 + WORD_GAP, WORD_CARD_SIZE.y)
+	word_card.custom_minimum_size = WORD_CARD_SIZE
 	word_card.focus_mode = Control.FOCUS_NONE
 	word_card.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	word_card.pressed.connect(_activate)
@@ -212,7 +215,7 @@ func _side_card(direction: int) -> PanelContainer:
 	var card := UiKit.panel(Color("#16233a"), 12, 2, UiKit.PANEL_HI, 8)
 	card.custom_minimum_size = SIDE_CARD_SIZE
 	card.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	card.modulate = Color(1, 1, 1, 0.55) ## Peeking in, not competing with the centre.
+	card.modulate = Color.WHITE ## A choice, not a preview of one - see _side().
 	card.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	card.gui_input.connect(func(event: InputEvent) -> void:
 		if event is InputEventMouseButton and event.pressed \
@@ -222,7 +225,7 @@ func _side_card(direction: int) -> PanelContainer:
 		elif event is InputEventScreenTouch and event.pressed:
 			_select_visible_word(direction)
 			card.accept_event())
-	var label := UiKit.label("", UiKit.SMALL, UiKit.MUTED)
+	var label := UiKit.label("", WORD_TEXT_SIZE, UiKit.TEXT)
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -648,11 +651,16 @@ func _refresh() -> void:
 	var blocked := _blocked(category)
 
 	var face := UiKit.OK.darkened(0.55) if done else Color("#16233a")
-	var edge := UiKit.OK if done else UiKit.ACCENT
+	# No accent ring on the middle card either: it is not a selection, it is just the one in
+	# the middle. The tick colour stays, because "already used" is real information.
+	var edge := UiKit.OK if done else UiKit.PANEL_HI
 	for card in _word_cards:
 		card.visible = true
 		card.text = _slot_title(slot)
-		card.add_theme_font_size_override("font_size", UiKit.H2)
+		# The same size as the words either side of it. Every visible word can be tapped, so
+		# enlarging the middle one implied it was the only one that could be - and made the
+		# deck read as a thing to scroll rather than a row of choices.
+		card.add_theme_font_size_override("font_size", WORD_TEXT_SIZE)
 		card.disabled = blocked
 		for state in ["normal", "disabled"]:
 			card.add_theme_stylebox_override(state, UiKit.stylebox(face, 14, 2, edge, 10))
@@ -691,5 +699,10 @@ func _side(card: PanelContainer, index: int) -> void:
 	var slot = _slots[index]
 	label.text = _slot_title(slot)
 	var blocked := _blocked(_slot_category(slot))
-	card.modulate = Color(1, 1, 1, 0.22 if _used.has(_slot_category(slot)) else 0.42)
+	# Full strength unless the category is spent. These are tappable choices, and dimming
+	# them said "preview" - a student cannot tell a faded word from an unavailable one.
+	# Fading now means exactly one thing: already used on this creature.
+	card.modulate = Color(1, 1, 1, 0.35) if blocked else Color.WHITE
+	var label_colour: Color = UiKit.MUTED if blocked else UiKit.TEXT
+	label.add_theme_color_override("font_color", label_colour)
 	card.mouse_default_cursor_shape = Control.CURSOR_ARROW if blocked else Control.CURSOR_POINTING_HAND
