@@ -147,7 +147,7 @@ func _build_ui() -> void:
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	root.add_child(title)
 
-	var again := UiKit.button("Start again", UiKit.BODY, true)
+	var again := UiKit.button("もう一度つくる", UiKit.BODY, true)
 	again.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
 	again.custom_minimum_size = Vector2(180, 52)
 	again.offset_left = -208
@@ -235,9 +235,9 @@ func _show_empty_hint() -> void:
 	_info.offset_left = -230
 	_info.offset_right = 230
 	_info.offset_top = -150
-	_info_body.add_child(UiKit.label("Your zoo is empty", UiKit.H3, UiKit.GOLD))
+	_info_body.add_child(UiKit.label("どうぶつえんはまだ空です", UiKit.H3, UiKit.GOLD))
 	_info_body.add_child(UiKit.label(
-		"Make a creature and it will live here for the rest of the lesson.",
+		"クリーチャーをつくると、このレッスンのあいだここでくらします。",
 		UiKit.BODY, UiKit.MUTED))
 	_info.visible = true
 

@@ -201,7 +201,7 @@ func _build_category_view(page: VBoxContainer) -> void:
 	_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	page.add_child(_status)
 
-	var word_list := UiKit.button("Word List", UiKit.SMALL)
+	var word_list := UiKit.button("単語リスト", UiKit.SMALL)
 	word_list.custom_minimum_size = Vector2(140, 38)
 	word_list.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	UiKit.style_button(word_list, UiKit.PANEL_HI)
@@ -273,7 +273,7 @@ func _slot_category(slot) -> String:
 func _slot_title(slot) -> String:
 	if slot is Dictionary:
 		return str((slot as Dictionary).get("word", "")).to_upper()
-	return "COLOURS"
+	return "いろ"
 
 
 ## The card that was tapped IS the direction: tapping "big" says the animal was big and
@@ -381,7 +381,7 @@ func _build_colour_view(page: VBoxContainer) -> void:
 	var actions := UiKit.vbox(8)
 	actions.alignment = BoxContainer.ALIGNMENT_CENTER
 	_colour_picker.add_child(actions)
-	_colour_cancel = UiKit.button("Cancel", UiKit.BODY)
+	_colour_cancel = UiKit.button("キャンセル", UiKit.BODY)
 	_colour_cancel.custom_minimum_size = ACTION_SIZE
 	_colour_cancel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	_colour_cancel.focus_mode = Control.FOCUS_NONE
@@ -483,11 +483,11 @@ func _sync_colour() -> void:
 	_paint(_colour_swatch, colours[active_index])
 	_paint(_colour_next, colours[following])
 	_paint(_colour_far_next, colours[far_following])
-	_colour_heading.text = "Before" if _colour_step == ColourStep.BEFORE else "Now"
+	_colour_heading.text = "へんしん前" if _colour_step == ColourStep.BEFORE else "いま"
 	_colour_feedback.text = ""
 	_colour_feedback.visible = false
 	_colour_feedback.add_theme_color_override("font_color", UiKit.MUTED)
-	_colour_cancel.text = "Cancel"
+	_colour_cancel.text = "キャンセル"
 	_colour_picker.visible = true
 
 
@@ -522,7 +522,7 @@ func _emit_before_preview() -> void:
 
 
 func _show_colour_confirmation(colour: ColorDefinition, step_name: String) -> void:
-	_colour_feedback.text = "%s selected for %s." % [colour.word.capitalize(), step_name]
+	_colour_feedback.text = "「%s」を%sの色にえらびました。" % [colour.word, step_name]
 	_colour_feedback.visible = true
 	_colour_feedback.add_theme_color_override("font_color", UiKit.OK)
 	var shade := Content.color_of(colour.word, Color.WHITE)
@@ -557,7 +557,7 @@ func _confirm_colour() -> void:
 		_colour_committing = false
 		return
 	_audio_confirm_selection(now.word)
-	_show_colour_confirmation(now, "Now")
+	_show_colour_confirmation(now, "いま")
 	await get_tree().create_timer(COLOUR_CONFIRM_TIME).timeout
 	_colour_committing = false
 	colour_step_changed.emit(false)
@@ -596,7 +596,7 @@ func _cancel_colour() -> void:
 # --- Shared ------------------------------------------------------------------
 
 func _back_button() -> Button:
-	var b := UiKit.button("Back", UiKit.SMALL)
+	var b := UiKit.button("もどる", UiKit.SMALL)
 	b.custom_minimum_size = Vector2(120, 38)
 	b.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	b.focus_mode = Control.FOCUS_NONE
@@ -623,7 +623,7 @@ func _open_reference() -> void:
 		_reference.popup_centered(Vector2i(700, 560))
 		return
 	_reference = Window.new()
-	_reference.title = "Word List"
+	_reference.title = "単語リスト"
 	_reference.transient = true
 	_reference.exclusive = true
 	_reference.close_requested.connect(func() -> void: _reference.hide())
@@ -709,11 +709,11 @@ func _refresh() -> void:
 
 	if _status != null:
 		if _locked:
-			_status.text = "Say the sentence first."
+			_status.text = "先に文を言ってください。"
 		elif done:
-			_status.text = "Already used on this creature."
+			_status.text = "このクリーチャーにはすでに使いました。"
 		elif blocked:
-			_status.text = "Not for this creature."
+			_status.text = "このどうぶつには使えません。"
 		else:
 			_status.text = ""
 

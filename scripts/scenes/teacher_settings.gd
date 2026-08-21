@@ -23,9 +23,9 @@ func _build() -> void:
 
 	var header := UiKit.hbox(12)
 	frame.add_child(header)
-	header.add_child(UiKit.label("TEACHER SETTINGS", UiKit.H2, UiKit.ACCENT))
+	header.add_child(UiKit.label("先生用設定", UiKit.H2, UiKit.ACCENT))
 	header.add_child(UiKit.expander())
-	var back := UiKit.button("Done", UiKit.H3, true)
+	var back := UiKit.button("完了", UiKit.H3, true)
 	back.custom_minimum_size = Vector2(180, 50)
 	back.pressed.connect(func() -> void:
 		Settings.save_settings()
@@ -41,31 +41,31 @@ func _build() -> void:
 	scroll.add_child(column)
 
 	column.add_child(_choice_section(
-		"How much the student says",
-		"Past only is one short clause, and short answers are recognised far more reliably. The creature still changes both ways.",
-		[["Past only  (It was small.)", Settings.SAY_PAST],
-			["Past, then all three in the present", Settings.SAY_SPLIT],
-			["Whole sentence", Settings.SAY_FULL]],
+		"学習者が言う文の長さ",
+		"過去形だけなら短く、音声認識がより安定します。クリーチャーの変化は同じです。",
+		[["過去形だけ（It was small.）", Settings.SAY_PAST],
+			["過去形のあと、現在形を3文", Settings.SAY_SPLIT],
+			["文をすべて言う", Settings.SAY_FULL]],
 		func() -> String: return Settings.say_mode,
 		func(value: String) -> void: Settings.say_mode = value))
 
 	column.add_child(_choice_section(
-		"Who chooses the words", "Easy Mode in the original design.",
-		[["Student chooses freely", Settings.CHOICE_FREE], ["Game assigns the pairs", Settings.CHOICE_GUIDED]],
+		"単語をえらぶ人", "元のデザインの「かんたんモード」です。",
+		[["学習者が自由にえらぶ", Settings.CHOICE_FREE], ["ゲームが組み合わせを指定", Settings.CHOICE_GUIDED]],
 		func() -> String: return Settings.choice_mode,
 		func(value: String) -> void: Settings.choice_mode = value))
 
 	column.add_child(_choice_section(
-		"How much of the sentence is shown",
-		"Raise this over a term: printed sentence, then a frame with gaps, then nothing.",
-		[["Whole sentence", Settings.PROMPT_FULL], ["Frame with gaps", Settings.PROMPT_GAPPED], ["Nothing", Settings.PROMPT_HIDDEN]],
+		"表示する文の量",
+		"学期中に、全文表示、空欄つき、非表示の順で難しくできます。",
+		[["全文", Settings.PROMPT_FULL], ["空欄つき", Settings.PROMPT_GAPPED], ["表示しない", Settings.PROMPT_HIDDEN]],
 		func() -> String: return Settings.prompt_mode,
 		func(value: String) -> void: Settings.prompt_mode = value))
 
 	column.add_child(_choice_section(
-		"How strictly speech is judged",
-		"Lenient accepts the two words in order; Exact needs the whole sentence.",
-		[["Lenient", str(Settings.STRICT_LENIENT)], ["Normal", str(Settings.STRICT_NORMAL)], ["Exact", str(Settings.STRICT_EXACT)]],
+		"音声判定のきびしさ",
+		"やさしい判定は2語の順番だけ、厳密な判定は文全体を確認します。",
+		[["やさしい", str(Settings.STRICT_LENIENT)], ["ふつう", str(Settings.STRICT_NORMAL)], ["厳密", str(Settings.STRICT_EXACT)]],
 		func() -> String: return str(Settings.strictness),
 		func(value: String) -> void: Settings.strictness = int(value)))
 
@@ -118,8 +118,8 @@ func _paint_choice(buttons: Dictionary, active: String) -> void:
 
 
 func _vocabulary_section() -> Control:
-	var column := _section("Vocabulary in play",
-		"Switching everything off is the same as leaving everything on.")
+	var column := _section("使用する単語",
+		"すべてオフにした場合は、すべてオンとして扱います。")
 
 	var pairs := GridContainer.new()
 	pairs.columns = 5
@@ -163,22 +163,22 @@ func _paint_toggle(b: Button) -> void:
 
 
 func _toggles_section() -> Control:
-	var column := _section("Speech and reading",
-		"With the microphone off, students type the sentence instead - the game plays exactly the same.")
+	var column := _section("音声と読み上げ",
+		"マイクをオフにすると文を入力します。ゲームの進み方は同じです。")
 	var row := UiKit.hbox(8)
 	column.add_child(row)
-	row.add_child(_switch("Microphone", func() -> bool: return Settings.stt_enabled,
+	row.add_child(_switch("マイク", func() -> bool: return Settings.stt_enabled,
 		func(on: bool) -> void:
 			Settings.stt_enabled = on
 			Speech.select_backend()))
-	row.add_child(_switch("Read aloud (TTS)", func() -> bool: return Settings.tts_enabled,
+	row.add_child(_switch("読み上げ（TTS）", func() -> bool: return Settings.tts_enabled,
 		func(on: bool) -> void: Settings.tts_enabled = on))
-	row.add_child(_switch("Fullscreen", func() -> bool: return Settings.fullscreen,
+	row.add_child(_switch("全画面", func() -> bool: return Settings.fullscreen,
 		func(on: bool) -> void:
 			Settings.fullscreen = on
 			Settings.save_settings()))
 	row.add_child(UiKit.label(
-		"Speech input on this build: %s" % Speech.prompt_label(), UiKit.SMALL, UiKit.MUTED))
+		"この環境の入力方法：%s" % Speech.prompt_label(), UiKit.SMALL, UiKit.MUTED))
 	return _wrap(column)
 
 
@@ -195,13 +195,13 @@ func _switch(label: String, getter: Callable, setter: Callable) -> Button:
 
 
 func _audio_section() -> Control:
-	var column := _section("Volume")
+	var column := _section("音量")
 	var row := UiKit.hbox(12)
 	column.add_child(row)
-	row.add_child(_slider("Music", Settings.music_volume, func(v: float) -> void:
+	row.add_child(_slider("音楽", Settings.music_volume, func(v: float) -> void:
 		Settings.music_volume = v
 		Audio.play_ambience(true)))
-	row.add_child(_slider("Sounds", Settings.sfx_volume, func(v: float) -> void:
+	row.add_child(_slider("効果音", Settings.sfx_volume, func(v: float) -> void:
 		Settings.sfx_volume = v
 		Audio.play("click")))
 	return _wrap(column)
@@ -223,17 +223,17 @@ func _slider(label: String, value: float, setter: Callable) -> Control:
 
 
 func _zoo_section() -> Control:
-	var column := _section("Zoo",
-		"The zoo is a session. It is mirrored to disk so a crash does not lose the lesson.")
+	var column := _section("どうぶつえん",
+		"レッスン中のどうぶつえんです。異常終了でも失われないよう保存されます。")
 	var row := UiKit.hbox(10)
 	column.add_child(row)
-	row.add_child(_switch("Keep zoo between runs", func() -> bool: return Settings.persist_zoo,
+	row.add_child(_switch("次回もどうぶつえんを残す", func() -> bool: return Settings.persist_zoo,
 		func(on: bool) -> void: Settings.persist_zoo = on))
-	var reset := UiKit.button("Reset zoo now", UiKit.SMALL)
+	var reset := UiKit.button("どうぶつえんをリセット", UiKit.SMALL)
 	reset.custom_minimum_size = Vector2(200, 44)
 	reset.pressed.connect(func() -> void:
 		Game.reset_zoo()
 		Audio.play("pop"))
 	row.add_child(reset)
-	row.add_child(UiKit.label("%d creature(s) stored" % Game.zoo.size(), UiKit.SMALL, UiKit.MUTED))
+	row.add_child(UiKit.label("保存中：%d体" % Game.zoo.size(), UiKit.SMALL, UiKit.MUTED))
 	return _wrap(column)

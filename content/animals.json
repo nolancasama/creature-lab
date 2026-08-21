@@ -14,8 +14,8 @@
   "animals": [
     {
       "id": "dog",
-      "display_name": "Dog",
-      "fantasy_noun": "Hound",
+      "display_name": "犬",
+      "fantasy_noun": "ハウンド",
       "model": "dog_0012",
       "skin": "#c9ced6",
       "stand_height": 1.55,
@@ -248,8 +248,8 @@
     },
     {
       "id": "cat",
-      "display_name": "Cat",
-      "fantasy_noun": "Lynx",
+      "display_name": "猫",
+      "fantasy_noun": "オオヤマネコ",
       "model": "kitty_0012",
       "skin": "#3a3a42",
       "stand_height": 1.25,
@@ -483,8 +483,8 @@
     },
     {
       "id": "tiger",
-      "display_name": "Tiger",
-      "fantasy_noun": "Sabertooth",
+      "display_name": "トラ",
+      "fantasy_noun": "サーベルタイガー",
       "model": "tiger",
       "skin": "#e08a3c",
       "stand_height": 1.85,
@@ -729,8 +729,8 @@
     },
     {
       "id": "horse",
-      "display_name": "Horse",
-      "fantasy_noun": "Unicorn",
+      "display_name": "馬",
+      "fantasy_noun": "ユニコーン",
       "model": "horse_0012",
       "skin": "#a9673f",
       "stand_height": 2.15,
@@ -979,8 +979,8 @@
     },
     {
       "id": "deer",
-      "display_name": "Deer",
-      "fantasy_noun": "Stag",
+      "display_name": "シカ",
+      "fantasy_noun": "大鹿",
       "model": "deer",
       "skin": "#9a6b43",
       "stand_height": 2.0,
@@ -1232,8 +1232,8 @@
     },
     {
       "id": "penguin",
-      "display_name": "Penguin",
-      "fantasy_noun": "Frostwing",
+      "display_name": "ペンギン",
+      "fantasy_noun": "フロストウィング",
       "model": "pinguin_0012",
       "skin": "#34343c",
       "stand_height": 1.4,
@@ -1452,8 +1452,8 @@
     },
     {
       "id": "chicken",
-      "display_name": "Chicken",
-      "fantasy_noun": "Phoenix",
+      "display_name": "ニワトリ",
+      "fantasy_noun": "フェニックス",
       "model": "chicken_0012",
       "skin": "#a55f3a",
       "stand_height": 1.15,

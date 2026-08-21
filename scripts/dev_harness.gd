@@ -1054,6 +1054,8 @@ static func _selftest(main: Node) -> void:
 				"%s: COLD still appended a post-transformation crest" % def.id)
 		var names := NameGenerator.candidates(state)
 		_check(failures, names.size() > 0 and not names[0].is_empty(), "%s: no name generated" % def.id)
+		_check(failures, names.size() > 0 and names[0].contains("の") \
+			and not names[0].contains(" "), "%s: generated name is not Japanese-localized" % def.id)
 		_check(failures, state.fingerprint() == CreatureState.from_dict(state.to_dict()).fingerprint(),
 			"%s: fingerprint not stable through save/load" % def.id)
 		if creature != null:

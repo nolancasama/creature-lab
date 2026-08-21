@@ -18,8 +18,8 @@ const HELP_AFTER_MODEL := 2 ## Failed attempts before the sentence is read aloud
 const HELP_AFTER_OVERRIDE := 3 ## Failed attempts before the teacher override appears.
 const MIC_ICON := preload("res://ui/mic.svg")
 const SPEAKER_ICON := preload("res://ui/speaker.svg")
-const MIC_IDLE := "Tap to speak  (Space)"
-const MIC_LISTENING := "Listening...  tap to stop"
+const MIC_IDLE := "タップして話す（スペース）"
+const MIC_LISTENING := "聞いています… タップで停止"
 const LISTEN_TIMEOUT := 10.0 ## Seconds before an unanswered microphone closes itself.
 
 var _sentence_label: RichTextLabel = null
@@ -75,7 +75,7 @@ func _build() -> void:
 
 	_listen_button = UiKit.button("", UiKit.SMALL)
 	_listen_button.icon = SPEAKER_ICON
-	_listen_button.tooltip_text = "Listen to the sentence"
+	_listen_button.tooltip_text = "文をきく"
 	_listen_button.custom_minimum_size = Vector2(44, 38)
 	_listen_button.size_flags_vertical = Control.SIZE_SHRINK_CENTER ## Never a full-height bar.
 	# A theme constant on Button, not a property - assigning it directly fails at runtime
@@ -86,7 +86,7 @@ func _build() -> void:
 
 	column.add_child(UiKit.expander())
 
-	_entry = UiKit.line_edit("Type the sentence, then press Enter")
+	_entry = UiKit.line_edit("英語の文を入力して Enter キーを押してください")
 	_entry.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_entry.text_submitted.connect(func(text: String) -> void: _submit_typed(text))
 	column.add_child(_entry)
@@ -112,7 +112,7 @@ func _build() -> void:
 	# no stylebox override) so it keeps a normal click target and hover feedback without
 	# looking like one.
 	_cancel_label = Button.new()
-	_cancel_label.text = "Cancel"
+	_cancel_label.text = "キャンセル"
 	_cancel_label.flat = true
 	_cancel_label.focus_mode = Control.FOCUS_NONE
 	_cancel_label.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
@@ -134,7 +134,7 @@ func _build() -> void:
 	_listen_timer.timeout.connect(_on_listen_timeout)
 	add_child(_listen_timer)
 
-	_override_button = UiKit.button("That was right - accept it", UiKit.SMALL)
+	_override_button = UiKit.button("正しく言えました － 先生が承認", UiKit.SMALL)
 	_override_button.visible = false
 	_override_button.pressed.connect(func() -> void:
 		Audio.play("success")
@@ -162,7 +162,7 @@ func show_idle(message := "") -> void:
 	_before = ""
 	_after = ""
 	visible = false
-	_sentence_label.text = "[center][color=#93a6bf]Choose a word card.[/color][/center]"
+	_sentence_label.text = "[center][color=#93a6bf]単語カードをえらぼう。[/color][/center]"
 	_feedback.text = message
 	_feedback.visible = not message.is_empty()
 	_feedback.add_theme_color_override("font_color", UiKit.MUTED)
@@ -194,7 +194,7 @@ func show_target(before: String, after: String, clause := GrammarValidator.CLAUS
 
 func show_success() -> void:
 	_armed = false
-	_feedback.text = "Yes!  %s" % _target_sentence()
+	_feedback.text = "できました！  %s" % _target_sentence()
 	_feedback.visible = true
 	_feedback.add_theme_color_override("font_color", UiKit.OK)
 	_override_button.visible = false
@@ -215,7 +215,7 @@ func show_failure(result: Dictionary, attempts: int) -> void:
 		Tts.speak(_target_sentence(), 0.75)
 	if attempts >= HELP_AFTER_OVERRIDE:
 		_override_button.visible = true
-		_feedback.text += "  A teacher can accept it below."
+		_feedback.text += "  下のボタンから先生が承認できます。"
 
 	_entry.clear()
 	_set_input_enabled(true)
@@ -289,7 +289,7 @@ func _on_listen_timeout() -> void:
 	if not Speech.is_listening():
 		return
 	Speech.cancel()
-	_feedback.text = "I didn't hear anything. Tap the button and try again."
+	_feedback.text = "声が聞こえませんでした。ボタンをタップして、もう一度ためそう。"
 	_feedback.visible = true
 	_feedback.add_theme_color_override("font_color", UiKit.MUTED)
 
@@ -319,21 +319,21 @@ func _message_for(result: Dictionary) -> String:
 	var heard := str(result.get("normalized", ""))
 	match str(result.get("reason", "")):
 		"empty":
-			return "I didn't hear anything. Try again!"
+			return "声が聞こえませんでした。もう一度ためそう！"
 		"nothing":
-			return "Try again - I heard \"%s\"." % heard
+			return "もう一度ためそう。「%s」と聞こえました。" % heard
 		"no_after":
-			return "Good start! I heard \"It was %s\". Now say: Now it is %s." % [_before, _after]
+			return "いいスタート！「It was %s」と聞こえました。つぎに「Now it is %s」と言おう。" % [_before, _after]
 		"no_before":
-			return "Almost! Start with: It was %s..." % _before
+			return "おしい！「It was %s」からはじめよう。" % _before
 		"swapped":
-			return "Nearly - say the OLD word first: It was %s. Now it is %s." % [_before, _after]
+			return "おしい！前の単語から言おう：It was %s. Now it is %s." % [_before, _after]
 		"said_before", "frame_before":
-			return "Remember the whole frame: It was %s." % _before
+			return "文の形をぜんぶ言おう：It was %s." % _before
 		"said_after":
-			return "Remember the whole frame: Now it is %s." % _after
+			return "文の形をぜんぶ言おう：Now it is %s." % _after
 		"frame_after":
-			return "Remember the second half: Now it is %s." % _after
+			return "後半を言おう：Now it is %s." % _after
 		"exact":
-			return "So close! Say just the sentence: %s" % _target_sentence()
-	return "Try again!"
+			return "あと少し！この文だけを言おう：%s" % _target_sentence()
+	return "もう一度ためそう！"

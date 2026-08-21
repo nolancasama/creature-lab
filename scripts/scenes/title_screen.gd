@@ -16,11 +16,11 @@ func _build() -> void:
 	centre.alignment = BoxContainer.ALIGNMENT_CENTER
 	add_child(centre)
 
-	centre.add_child(UiKit.title("CREATURE LAB", UiKit.H1, UiKit.ACCENT))
+	centre.add_child(UiKit.title("クリーチャーラボ", UiKit.H1, UiKit.ACCENT))
 	centre.add_child(UiKit.title("It was... Now it is...", UiKit.H2, UiKit.GOLD))
 	centre.add_child(UiKit.spacer(6))
 	centre.add_child(UiKit.title(
-		"Choose an animal. Say three sentences. Watch it change.", UiKit.BODY, UiKit.MUTED))
+		"どうぶつをえらび、3つの文を言って、へんしんを見よう。", UiKit.BODY, UiKit.MUTED))
 	centre.add_child(UiKit.spacer(18))
 
 	var buttons := UiKit.vbox(10)
@@ -28,17 +28,17 @@ func _build() -> void:
 	buttons.custom_minimum_size = Vector2(320, 0)
 	centre.add_child(buttons)
 
-	buttons.add_child(_menu_button("Make a Creature", func() -> void:
+	buttons.add_child(_menu_button("クリーチャーをつくる", func() -> void:
 		Game.set_phase(Game.Phase.ANIMAL_SELECTION), true))
 
 	if not Game.zoo.is_empty():
-		buttons.add_child(_menu_button("My Zoo  (%d)" % Game.zoo.size(), func() -> void:
+		buttons.add_child(_menu_button("わたしのどうぶつえん  (%d)" % Game.zoo.size(), func() -> void:
 			Game.set_phase(Game.Phase.ZOO)))
 
-	buttons.add_child(_menu_button("Teacher Settings", func() -> void: Game.open_settings()))
+	buttons.add_child(_menu_button("先生用設定", func() -> void: Game.open_settings()))
 
 	if not OS.has_feature("web"):
-		buttons.add_child(_menu_button("Quit", func() -> void: get_tree().quit()))
+		buttons.add_child(_menu_button("終了", func() -> void: get_tree().quit()))
 
 	centre.add_child(UiKit.spacer(20))
 	centre.add_child(UiKit.title(_input_summary(), UiKit.SMALL, UiKit.MUTED))
@@ -57,5 +57,5 @@ func _menu_button(text: String, action: Callable, accent := false) -> Button:
 ## them to type.
 func _input_summary() -> String:
 	if Speech.uses_microphone():
-		return "Microphone ready  -  hold SPACE to speak"
-	return "No microphone on this build - students type their sentence instead"
+		return "マイクの準備ができました － スペースキーを押して話します"
+	return "マイクを使えないため、文を入力します"

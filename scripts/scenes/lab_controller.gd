@@ -52,7 +52,7 @@ func _build_ui() -> void:
 	_top_bar.visible = Game.phase != Game.Phase.CREATURE_LAB
 	root.add_child(_top_bar)
 
-	_banner = UiKit.label("D N A   C O M P L E T E", UiKit.H1, UiKit.ACCENT)
+	_banner = UiKit.label("へんしん完了！", UiKit.H1, UiKit.ACCENT)
 	_banner.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
 	_banner.offset_top = 150
 	_banner.offset_bottom = 220
@@ -78,18 +78,18 @@ func _build_top_bar() -> Control:
 	var def: AnimalDefinition = null
 	if Game.current != null:
 		def = Content.animal(Game.current.animal_id)
-	row.add_child(UiKit.label("CREATURE LAB", UiKit.H3, UiKit.ACCENT))
+	row.add_child(UiKit.label("クリーチャーラボ", UiKit.H3, UiKit.ACCENT))
 	row.add_child(UiKit.label("-", UiKit.H3, UiKit.MUTED))
 	row.add_child(UiKit.label(def.display_name if def != null else "-", UiKit.H3, UiKit.TEXT))
 	row.add_child(UiKit.expander())
 
-	var skip := UiKit.button("Skip", UiKit.SMALL)
+	var skip := UiKit.button("スキップ", UiKit.SMALL)
 	skip.pressed.connect(func() -> void:
 		if _director != null:
 			_director.request_skip())
 	row.add_child(skip)
 
-	var quit := UiKit.button("Menu", UiKit.SMALL)
+	var quit := UiKit.button("メニュー", UiKit.SMALL)
 	quit.pressed.connect(func() -> void: Game.set_phase(Game.Phase.ANIMAL_SELECTION))
 	row.add_child(quit)
 

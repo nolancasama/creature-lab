@@ -19,7 +19,7 @@ func backend_id() -> String:
 
 ## Human-readable label for the mic button.
 func display_name() -> String:
-	return "Unavailable"
+	return "利用できません"
 
 
 func is_supported() -> bool:

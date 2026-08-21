@@ -51,7 +51,7 @@ func backend_id() -> String:
 
 
 func display_name() -> String:
-	return "Press to speak"
+	return "ボタンを押して話す"
 
 
 func is_supported() -> bool:

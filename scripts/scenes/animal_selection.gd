@@ -58,8 +58,8 @@ const SAY_IT_WIDTH := 620
 ## the VBox toward the right and no longer shared the platform's centreline.
 const PROGRESS_WIDTH := 760
 const PROGRESS_HEIGHT := 64 ## The single "Before" heading.
-const APPEARANCE_HEADING := "Choose its appearance before"
-const NOW_COLOUR_HEADING := "Choose its color now"
+const APPEARANCE_HEADING := "へんしん前の見た目をえらぼう"
+const NOW_COLOUR_HEADING := "今の色をえらぼう"
 
 const CAMERA_SHIFT := 0.0 ## The picker has no side panel; the animal owns the screen centre.
 const ANIMAL_CARD_SIZE := Vector2(112, 78)
@@ -263,7 +263,7 @@ func _build_picking_panel() -> void:
 	picker.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_root.add_child(picker)
 	_picking_panel = picker
-	var heading := UiKit.label("Choose your animal", PROGRESS_FONT, UiKit.GOLD)
+	var heading := UiKit.label("どうぶつをえらぼう", PROGRESS_FONT, UiKit.GOLD)
 	heading.name = "AnimalSelectionHeading"
 	heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	heading.anchor_left = 0.5
@@ -307,7 +307,7 @@ func _build_picking_panel() -> void:
 	carousel.add_child(UiKit.spacer(ANIMAL_ARROW_GAP))
 	carousel.add_child(_animal_carousel_arrow(">", 1))
 
-	var choose := UiKit.button("SELECT", UiKit.H3, true)
+	var choose := UiKit.button("このどうぶつにする", UiKit.H3, true)
 	UiKit.style_button(choose, UiKit.CTA, true)
 	choose.name = "SelectAnimal"
 	choose.custom_minimum_size = SELECT_BUTTON_SIZE
@@ -690,7 +690,7 @@ func _build_recording_ui() -> void:
 	_build_say_it_dock()
 
 	# Floating HUD
-	var back_btn := UiKit.icon_button("< Back", HUD_BUTTON)
+	var back_btn := UiKit.icon_button("< もどる", HUD_BUTTON)
 	# Keep a stable name for the harness and for navigation code; the visible caption can
 	# now describe the action without becoming an implicit selector.
 	back_btn.name = "BackToPicking"
@@ -1049,7 +1049,7 @@ func _finish_sentence() -> void:
 	else:
 		_word_lab.set_locked(false)
 		_word_lab.visible = true
-		_speech.show_idle("Choose your next card.")
+		_speech.show_idle("つぎのカードをえらぼう。")
 		_sync_ui()
 
 

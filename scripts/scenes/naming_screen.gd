@@ -141,21 +141,21 @@ func _build_ui() -> void:
 
 	var column := UiKit.vbox(8)
 	panel.add_child(column)
-	column.add_child(UiKit.title("You created...", UiKit.H3, UiKit.MUTED))
+	column.add_child(UiKit.title("できあがり！", UiKit.H3, UiKit.MUTED))
 
-	_entry = UiKit.line_edit("Name your creature")
+	_entry = UiKit.line_edit("クリーチャーの名前")
 	_entry.text = Game.current.generated_name
 	_entry.alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_entry.add_theme_font_size_override("font_size", UiKit.H2)
 	_entry.custom_minimum_size = Vector2(0, 62)
 	column.add_child(_entry)
 
-	var send := UiKit.button("Send to my zoo", UiKit.H3, true)
+	var send := UiKit.button("どうぶつえんへ送る", UiKit.H3, true)
 	send.custom_minimum_size = Vector2(360, 54)
 	send.pressed.connect(_send_to_zoo)
 	column.add_child(send)
 
-	var start_again := UiKit.button("Start again", UiKit.H3)
+	var start_again := UiKit.button("もう一度つくる", UiKit.H3)
 	start_again.custom_minimum_size = Vector2(360, 54)
 	start_again.pressed.connect(_start_again)
 	column.add_child(start_again)
@@ -171,10 +171,10 @@ func _build_captions() -> Control:
 	bar.offset_right = 0
 	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
-	_before_caption = UiKit.title("Before", UiKit.H2, UiKit.MUTED)
+	_before_caption = UiKit.title("へんしん前", UiKit.H2, UiKit.MUTED)
 	bar.add_child(_before_caption)
 
-	_now_caption = UiKit.title("Now", UiKit.H2, UiKit.GOLD)
+	_now_caption = UiKit.title("へんしん後", UiKit.H2, UiKit.GOLD)
 	bar.add_child(_now_caption)
 	_position_captions()
 	get_viewport().size_changed.connect(_position_captions)

@@ -12,7 +12,7 @@ func backend_id() -> String:
 
 
 func display_name() -> String:
-	return "Type the sentence"
+	return "文を入力"
 
 
 func is_supported() -> bool:

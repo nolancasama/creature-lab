@@ -48,7 +48,7 @@ func uses_microphone() -> bool:
 
 
 func prompt_label() -> String:
-	return backend.display_name() if backend != null else "Unavailable"
+	return backend.display_name() if backend != null else "利用できません"
 
 
 func is_listening() -> bool:

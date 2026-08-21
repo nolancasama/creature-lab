@@ -13,7 +13,7 @@ func _ready() -> void:
 
 	var header := UiKit.hbox(8)
 	column.add_child(header)
-	header.add_child(UiKit.label("DNA LOG", UiKit.H3, UiKit.ACCENT))
+	header.add_child(UiKit.label("DNAログ", UiKit.H3, UiKit.ACCENT))
 	header.add_child(UiKit.expander())
 	header.add_child(UiKit.label("It was... Now it is...", UiKit.SMALL, UiKit.MUTED))
 
@@ -37,7 +37,7 @@ func _build_row(index: int) -> Control:
 	text.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	row.add_child(text)
 
-	var listen := UiKit.button("Listen", UiKit.SMALL)
+	var listen := UiKit.button("きく", UiKit.SMALL)
 	listen.visible = false
 	row.add_child(listen)
 

@@ -192,11 +192,11 @@ func _refresh_colors() -> void:
 	if _color_hint == null:
 		return
 	if colors_done:
-		_color_hint.text = "Colours - already used this round."
+		_color_hint.text = "色はこのラウンドですでに使いました。"
 	elif colors_blocked:
 		_color_hint.text = "" ## Disabled swatches say this without a line of text.
 	elif _color_before.is_empty():
 		_color_hint.text = "" ## The standing prompt is gone; the swatches say it themselves.
 	else:
-		_color_hint.text = "It was %s... now tap the colour it is NOW." % _color_before
+		_color_hint.text = "It was %s... 今の色をタップしてください。" % _color_before
 	_color_hint.visible = not _color_hint.text.is_empty()
