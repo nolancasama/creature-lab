@@ -41,7 +41,8 @@ const SIDE_CARD_SIZE := Vector2(112, 78)
 const ARROW_SIZE := 55 ## 25% larger than the former 44px chevron controls.
 const CATEGORY_ARROW_FONT := 38 ## 25% larger than the former 30px glyphs.
 const COLOUR_ARROW_FONT := 28 ## 25% larger than the former 22px glyphs.
-const CAROUSEL_GAP := 24 ## Three times the original padding around the adjective selector.
+const CAROUSEL_GAP := 8
+const CAROUSEL_ARROW_GAP := 24 ## Three times the word-to-word gap, only beside the chevrons.
 const COLOUR_CARD_GAP := 10
 const COLOUR_ARROW_GAP := 30 ## Triple the card gap so the chevrons read as navigation.
 const SWATCH_SIZE := Vector2(220, 94)
@@ -129,15 +130,17 @@ func _build_slots() -> void:
 # --- Category carousel -------------------------------------------------------
 
 func _build_category_view(page: VBoxContainer) -> void:
-	var row := UiKit.hbox(CAROUSEL_GAP)
+	var row := UiKit.hbox(0)
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	page.add_child(row)
 
 	_left_arrow = _arrow("<", -1)
 	row.add_child(_left_arrow)
+	row.add_child(_carousel_gap(CAROUSEL_ARROW_GAP))
 
-	_prev_card = _side_card()
+	_prev_card = _side_card(-1)
 	row.add_child(_prev_card)
+	row.add_child(_carousel_gap(CAROUSEL_GAP))
 
 	# The row's Container must own a fixed cell, not the card that animates. Moving a
 	# Container-managed child by setting position.x corrupts its layout offsets: after the
@@ -153,6 +156,7 @@ func _build_category_view(page: VBoxContainer) -> void:
 	_main_host.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_main_host.clip_contents = true
 	row.add_child(_main_host)
+	row.add_child(_carousel_gap(CAROUSEL_GAP))
 
 	_main_card = UiKit.hbox(WORD_GAP)
 	_main_card.name = "SlidingWordCards"
@@ -167,8 +171,9 @@ func _build_category_view(page: VBoxContainer) -> void:
 	_main_card.add_child(word_card)
 	_word_cards.append(word_card)
 
-	_next_card = _side_card()
+	_next_card = _side_card(1)
 	row.add_child(_next_card)
+	row.add_child(_carousel_gap(CAROUSEL_ARROW_GAP))
 
 	_right_arrow = _arrow(">", 1)
 	row.add_child(_right_arrow)
@@ -197,15 +202,31 @@ func _arrow(glyph: String, step: int) -> Button:
 	return b
 
 
-func _side_card() -> PanelContainer:
+func _carousel_gap(width: float) -> Control:
+	var gap := Control.new()
+	gap.custom_minimum_size = Vector2(width, 0)
+	return gap
+
+
+func _side_card(direction: int) -> PanelContainer:
 	var card := UiKit.panel(Color("#16233a"), 12, 2, UiKit.PANEL_HI, 8)
 	card.custom_minimum_size = SIDE_CARD_SIZE
 	card.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	card.modulate = Color(1, 1, 1, 0.55) ## Peeking in, not competing with the centre.
+	card.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	card.gui_input.connect(func(event: InputEvent) -> void:
+		if event is InputEventMouseButton and event.pressed \
+				and event.button_index == MOUSE_BUTTON_LEFT:
+			_select_visible_word(direction)
+			card.accept_event()
+		elif event is InputEventScreenTouch and event.pressed:
+			_select_visible_word(direction)
+			card.accept_event())
 	var label := UiKit.label("", UiKit.SMALL, UiKit.MUTED)
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	card.add_child(label)
 	return card
@@ -270,7 +291,21 @@ func _activate() -> void:
 	_colour_step = ColourStep.BEFORE
 	_sync_colour()
 	_show_view(View.COLOUR)
-	_emit_before_preview()
+
+
+## The peeking word cards are choices too. Move the selected slot onto the card that was
+## pressed, refresh the deck so the choice becomes centred, then use the same activation
+## path as pressing the centre card. The centre cell itself is unchanged in size.
+func _select_visible_word(direction: int) -> void:
+	if _slots.is_empty() or _locked or not _restriction.is_empty():
+		return
+	var target_index := wrapi(_index + direction, 0, _slots.size())
+	if _blocked(_slot_category(_slots[target_index])):
+		Audio.play("fail", 0.9)
+		return
+	_index = target_index
+	_refresh()
+	_activate()
 
 
 # --- Colours -----------------------------------------------------------------
@@ -293,7 +328,8 @@ func _build_colour_view(page: VBoxContainer) -> void:
 	row.add_child(left)
 	row.add_child(_colour_gap(COLOUR_ARROW_GAP))
 
-	_colour_prev = _colour_card(COLOUR_SIDE_SIZE, 0.48)
+	_colour_prev = _colour_card(COLOUR_SIDE_SIZE, 0.48, true)
+	_colour_prev.pressed.connect(func() -> void: _select_visible_colour(-1))
 	row.add_child(_colour_prev)
 	row.add_child(_colour_gap(COLOUR_CARD_GAP))
 
@@ -303,7 +339,8 @@ func _build_colour_view(page: VBoxContainer) -> void:
 	row.add_child(_colour_swatch)
 	row.add_child(_colour_gap(COLOUR_CARD_GAP))
 
-	_colour_next = _colour_card(COLOUR_SIDE_SIZE, 0.48)
+	_colour_next = _colour_card(COLOUR_SIDE_SIZE, 0.48, true)
+	_colour_next.pressed.connect(func() -> void: _select_visible_colour(1))
 	row.add_child(_colour_next)
 	row.add_child(_colour_gap(COLOUR_ARROW_GAP))
 
@@ -360,12 +397,28 @@ func _step_colour(direction: int) -> void:
 	Audio.play("click")
 	if _colour_step == ColourStep.BEFORE:
 		_was_index = _next_colour_index(_was_index, direction, false)
-		_emit_before_preview()
 	else:
 		# AFTER automatically skips the confirmed BEFORE colour. The student can see it
 		# remains on the animal, but can never land on a sentence that changes nothing.
 		_now_index = _next_colour_index(_now_index, direction, true)
 	_sync_colour()
+
+
+## Any visible colour card is a choice. Side cards use the same direction as their
+## position relative to the centre, then go through the same confirmation path as the
+## centre card. Browsing with the arrows remains preview-free until this is pressed.
+func _select_visible_colour(direction: int) -> void:
+	if _colour_committing or _locked or _blocked(Content.COLOR_CATEGORY):
+		return
+	var active_index := _was_index if _colour_step == ColourStep.BEFORE else _now_index
+	var skip_before := _colour_step == ColourStep.AFTER
+	var selected_index := _next_colour_index(active_index, direction, skip_before)
+	if _colour_step == ColourStep.BEFORE:
+		_was_index = selected_index
+	else:
+		_now_index = selected_index
+	_sync_colour()
+	_confirm_colour()
 
 
 func _next_colour_index(from: int, direction: int, skip_before: bool) -> int:
@@ -396,7 +449,7 @@ func _sync_colour() -> void:
 	_paint(_colour_swatch, colours[active_index])
 	_paint(_colour_next, colours[following])
 	_colour_heading.text = "Before" if _colour_step == ColourStep.BEFORE else "Now"
-	_colour_feedback.text = "Tap the centre colour to choose it."
+	_colour_feedback.text = "Tap any visible colour to choose it."
 	_colour_feedback.add_theme_color_override("font_color", UiKit.MUTED)
 	_colour_cancel.text = "Cancel"
 
@@ -420,6 +473,8 @@ func _paint(swatch: Button, colour: ColorDefinition) -> void:
 func _emit_before_preview() -> void:
 	var colours := Content.enabled_colors()
 	if not colours.is_empty():
+		# This signal is emitted only after an explicit colour-card press. Arrow browsing
+		# changes the carousel labels without changing the animal.
 		before_colour_previewed.emit((colours[_was_index] as ColorDefinition).word)
 
 
@@ -448,8 +503,15 @@ func _confirm_colour() -> void:
 	if _colour_step == ColourStep.BEFORE:
 		var selected_before: ColorDefinition = colours[_was_index]
 		_audio_confirm_selection(selected_before.word)
+		_emit_before_preview()
 		_show_colour_confirmation(selected_before, "Before")
 		await get_tree().create_timer(COLOUR_CONFIRM_TIME).timeout
+		# The panel can be torn down while this pause is running - the round ends, the
+		# screen rebuilds, the scene is left. Everything below writes to nodes that no
+		# longer exist by then, which is a handful of errors per shot and a real crash the
+		# moment one of those writes matters.
+		if not is_instance_valid(self) or not is_inside_tree():
+			return
 		_colour_committing = false
 		_colour_step = ColourStep.AFTER
 		if _now_index == _was_index:
@@ -478,7 +540,6 @@ func _cancel_colour() -> void:
 		# confirmed BEFORE choice that is still painted on the animal.
 		_colour_step = ColourStep.BEFORE
 		_sync_colour()
-		_emit_before_preview()
 		return
 	colour_selection_cancelled.emit()
 	_show_view(View.CATEGORY)
@@ -629,4 +690,6 @@ func _side(card: PanelContainer, index: int) -> void:
 	card.visible = true
 	var slot = _slots[index]
 	label.text = _slot_title(slot)
+	var blocked := _blocked(_slot_category(slot))
 	card.modulate = Color(1, 1, 1, 0.22 if _used.has(_slot_category(slot)) else 0.42)
+	card.mouse_default_cursor_shape = Control.CURSOR_ARROW if blocked else Control.CURSOR_POINTING_HAND

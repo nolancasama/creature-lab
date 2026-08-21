@@ -49,6 +49,9 @@ const PANEL_TOP := HUD_TOP + GEAR_BUTTON_SIZE + HUD_GAP ## Clears the gear, now 
 const PANEL_BOTTOM := -24 ## Tighter than the top margin: the height lost to the HUD row
                           ## above comes back here, so the Word Lab still shows every card.
 const PANEL_WIDTH := -PANEL_LEFT + PANEL_RIGHT ## 648 - the rect's actual width.
+const PICKING_PANEL_SHIFT := PANEL_WIDTH * 0.20 ## Move left by one fifth of its own width.
+const PICKING_PANEL_LEFT := PANEL_LEFT - PICKING_PANEL_SHIFT
+const PICKING_PANEL_RIGHT := PANEL_RIGHT - PICKING_PANEL_SHIFT
 ## The centred present-tense panel. Tall enough on its own that SpeechPanel's internal
 ## centring expanders (see its _build()) already have real slack to work with here without
 ## any extra tuning.
@@ -69,7 +72,7 @@ const PROGRESS_HEIGHT := 64 ## The single "Before" heading.
 ## The animal sits centred in the gap beside the panel, which is always half the panel's
 ## span left of screen centre, whatever the window is doing. Applied as a lens shift - see
 ## _lens_shift() for why it is not simply a camera move.
-const CAMERA_SHIFT := -PANEL_LEFT / 2.0
+const CAMERA_SHIFT := -PICKING_PANEL_LEFT / 2.0
 
 enum Mode { PICKING, RECORDING, PRESENT }
 
@@ -241,7 +244,7 @@ func _clause() -> int:
 ## agree on where "centred above the platform" is regardless of how the window is sized.
 func _center_left(width: float) -> float:
 	var view_width := get_viewport().get_visible_rect().size.x
-	var free_width: float = view_width + PANEL_LEFT ## PANEL_LEFT is negative.
+	var free_width: float = view_width + PICKING_PANEL_LEFT
 	return maxf(0.0, (free_width - width) * 0.5)
 
 
@@ -266,8 +269,8 @@ func _build_picking_panel() -> void:
 	panel.anchor_right = 1.0
 	panel.anchor_top = 0.5
 	panel.anchor_bottom = 0.5
-	panel.offset_left = PANEL_LEFT
-	panel.offset_right = PANEL_RIGHT
+	panel.offset_left = PICKING_PANEL_LEFT
+	panel.offset_right = PICKING_PANEL_RIGHT
 	panel.offset_top = -PICKING_PANEL_HEIGHT * 0.5
 	panel.offset_bottom = PICKING_PANEL_HEIGHT * 0.5
 	_root.add_child(panel)

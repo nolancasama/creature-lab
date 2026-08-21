@@ -11,6 +11,7 @@ const ORBIT_SPEED := 0.006
 const ZOOM_LIMITS := Vector2(9.0, 26.0)
 const FOCUS_DISTANCE := 8.0
 const YARD_CAMERA_TARGET := Vector3(0.0, 1.2, 0.0)
+const TITLE_COLOR := Color("#17324d") ## Deep enough to stay legible against the pale sky.
 const PINCH_ZOOM_SCALE := 0.018
 
 var _camera: Camera3D = null
@@ -126,7 +127,7 @@ func _build_ui() -> void:
 	# No bar across the top. It was a strip of chrome carrying a count, a line of controls
 	# and an instruction, sitting over the one thing the screen is for - the zoo itself.
 	# The name and one button do the same work without covering the yard.
-	var title := UiKit.label("Matsubara Zoo", UiKit.H1, UiKit.GOLD)
+	var title := UiKit.label("Matsubara Zoo", UiKit.H1, TITLE_COLOR)
 	title.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
 	title.offset_top = 26
 	title.offset_bottom = 26 + UiKit.H1 + 8
@@ -152,9 +153,11 @@ func _build_ui() -> void:
 	_info.offset_top = -150
 	_info.offset_bottom = -28
 	_info.visible = false
+	_info.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(_info)
 
 	_info_body = UiKit.vbox(8)
+	_info_body.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_info.add_child(_info_body)
 
 
@@ -202,6 +205,9 @@ func _find_open_spot(rng: RandomNumberGenerator, radius: float,
 
 func _show_empty_hint() -> void:
 	_info_body_reset()
+	_info.offset_left = -230
+	_info.offset_right = 230
+	_info.offset_top = -150
 	_info_body.add_child(UiKit.label("Your zoo is empty", UiKit.H3, UiKit.GOLD))
 	_info_body.add_child(UiKit.label(
 		"Make a creature and it will live here for the rest of the lesson.",
@@ -230,10 +236,26 @@ func _show_info(brain: CreatureBrain) -> void:
 	brain.focus_on(_camera)
 	_info_body_reset()
 
-	var head := UiKit.hbox(8)
-	head.alignment = BoxContainer.ALIGNMENT_CENTER
-	head.add_child(UiKit.label(state.display_name(), UiKit.H2, UiKit.GOLD))
+	var head := Control.new()
+	head.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var name_label := UiKit.label(state.display_name(), UiKit.H2, UiKit.GOLD)
+	name_label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	head.add_child(name_label)
+	# Fit the panel to the name while reserving a clean corner for the close button.
+	var head_width := maxf(name_label.get_combined_minimum_size().x + 52.0, 96.0)
+	head.custom_minimum_size = Vector2(head_width, 44)
+	var box_width := head_width + 28.0 ## The panel's horizontal content margins.
+	_info.offset_left = -box_width * 0.5
+	_info.offset_right = box_width * 0.5
+	_info.offset_top = -96
 	var close := UiKit.button("×", UiKit.SMALL)
+	close.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
+	close.offset_left = -44
+	close.offset_right = 0
+	close.offset_top = 0
+	close.offset_bottom = 44
 	close.custom_minimum_size = Vector2(44, 44)
 	close.pressed.connect(_dismiss_info)
 	head.add_child(close)
@@ -256,6 +278,15 @@ func _dismiss_info() -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if _focused_brain != null:
+		if event is InputEventScreenTouch and event.pressed:
+			if _creature_at(event.position) != _focused_brain:
+				_dismiss_info()
+			return
+		if event is InputEventMouseButton and event.pressed \
+				and event.button_index == MOUSE_BUTTON_LEFT:
+			if _creature_at(event.position) != _focused_brain:
+				_dismiss_info()
+			return
 		return
 	if event is InputEventScreenTouch:
 		if event.pressed:
@@ -283,8 +314,14 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _pick_creature_at(screen_position: Vector2) -> void:
+	var creature := _creature_at(screen_position)
+	if creature != null:
+		_show_info(creature)
+
+
+func _creature_at(screen_position: Vector2) -> CreatureBrain:
 	if _camera == null or _creatures == null:
-		return
+		return null
 	var origin := _camera.project_ray_origin(screen_position)
 	var endpoint := origin + _camera.project_ray_normal(screen_position) * 100.0
 	var query := PhysicsRayQueryParameters3D.create(origin, endpoint)
@@ -292,13 +329,13 @@ func _pick_creature_at(screen_position: Vector2) -> void:
 	query.collide_with_bodies = false
 	var hit := get_world_3d().direct_space_state.intersect_ray(query)
 	if hit.is_empty():
-		return
+		return null
 	var node: Node = hit.get("collider")
 	while node != null and node != _creatures:
 		if node is CreatureBrain:
-			_show_info(node)
-			return
+			return node as CreatureBrain
 		node = node.get_parent()
+	return null
 
 
 func _handle_screen_touch(event: InputEventScreenTouch) -> void:

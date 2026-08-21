@@ -1018,17 +1018,6 @@ static func _selftest(main: Node) -> void:
 	main.get_tree().quit(0 if failures.is_empty() else 1)
 
 
-## The student's recorded voice is optional by design - typed answers, a refused
-## microphone and a browser that will not open an input stream all have to reach the same
-## transformation. What must hold is that a missing clip is reported as missing rather
-## than played as silence, and that one child's recording cannot outlive their round.
-## TALL grows every leg by the same vertical distance. It cannot grow them by the same
-## FACTOR: these chains are slanted differently front to rear, so an equal factor moves a
-## steep chain further down than a shallow one and the pairs visibly stop matching.
-##
-## apply() multiplies every configured rest offset by the leg's factor. The deformer caches
-## the complete chain's vertical response in global rest space, including the first listed
-## segment, so growth is response * (factor - 1).
 static func _leg_growth_checks(failures: Array[String]) -> void:
 	var height_pair := Content.pair_for_category("HEIGHT")
 	var tall_value := height_pair.value_for("tall") if height_pair != null else 2.20
@@ -1186,8 +1175,9 @@ static func _carousel_checks(failures: Array[String], main: Node) -> void:
 		car._slide.kill()
 	car._main_card.position.x = 0.0
 
-	# Colours are sequential: BEFORE browsing emits live previews, confirming it enters
-	# AFTER without changing that value, and AFTER always skips the confirmed colour.
+	# Colours are sequential: BEFORE browsing is visual only, and the first explicit
+	# colour press emits the preview before entering AFTER. AFTER always skips the
+	# confirmed colour.
 	var colours := Content.enabled_colors()
 	var previews: Array[String] = []
 	var selections: Array[PackedStringArray] = []
@@ -1202,15 +1192,21 @@ static func _carousel_checks(failures: Array[String], main: Node) -> void:
 	car._now_index = 1
 	car._show_view(DescriptorCarousel.View.COLOUR)
 	car._sync_colour()
+	_check(failures, not car._colour_prev.disabled and not car._colour_swatch.disabled
+		and not car._colour_next.disabled,
+		"carousel: not every visible colour card is selectable")
+	_check(failures, car._colour_swatch.custom_minimum_size == DescriptorCarousel.SWATCH_SIZE,
+		"carousel: centre colour card changed size")
 	car._step_colour(1)
-	_check(failures, not previews.is_empty()
-		and previews[-1] == (colours[car._was_index] as ColorDefinition).word,
-		"carousel: BEFORE colour did not emit a live preview")
+	_check(failures, previews.is_empty(),
+		"carousel: BEFORE browsing recoloured the live animal preview")
 	var confirmed_before := car._was_index
 	await car._confirm_colour()
 	_check(failures, car._colour_step == DescriptorCarousel.ColourStep.AFTER
-		and car._was_index == confirmed_before,
-		"carousel: confirming BEFORE did not enter AFTER with the colour fixed")
+		and car._was_index == confirmed_before
+		and previews.size() == 1
+		and previews[-1] == (colours[confirmed_before] as ColorDefinition).word,
+		"carousel: confirming BEFORE did not preview the pressed colour")
 	var previews_after_confirm := previews.size()
 	for i in colours.size() * 2:
 		car._step_colour(1)

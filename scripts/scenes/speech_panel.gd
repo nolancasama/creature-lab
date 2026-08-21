@@ -17,11 +17,11 @@ signal change_requested()
 const HELP_AFTER_MODEL := 2 ## Failed attempts before the sentence is read aloud.
 const HELP_AFTER_OVERRIDE := 3 ## Failed attempts before the teacher override appears.
 const MIC_ICON := preload("res://ui/mic.svg")
+const SPEAKER_ICON := preload("res://ui/speaker.svg")
 const MIC_IDLE := "Tap to speak  (Space)"
 const MIC_LISTENING := "Listening...  tap to stop"
 const LISTEN_TIMEOUT := 10.0 ## Seconds before an unanswered microphone closes itself.
 const HEADER_HEIGHT := 34
-const LISTEN_WIDTH := 96
 
 var _sentence_label: RichTextLabel = null
 var _feedback: Label = null
@@ -51,9 +51,8 @@ func _build() -> void:
 	var column := UiKit.vbox(8)
 	add_child(column)
 
-	# A plain hbox would centre the title only when Listen is hidden, and shift it every
-	# time Listen appears. Anchoring both inside one Control keeps the title on the panel's
-	# centre line whatever else is in the row.
+	# Keep the title on the panel's centre line. The sentence speaker lives beside the
+	# sentence below, so it never changes the title's position.
 	var header := Control.new()
 	header.custom_minimum_size = Vector2(0, HEADER_HEIGHT)
 	column.add_child(header)
@@ -64,26 +63,32 @@ func _build() -> void:
 	_title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	header.add_child(_title)
 
-	_listen_button = UiKit.button("Listen", UiKit.SMALL)
-	_listen_button.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
-	_listen_button.offset_left = -LISTEN_WIDTH
-	_listen_button.offset_right = 0
-	_listen_button.offset_top = 0
-	_listen_button.offset_bottom = HEADER_HEIGHT
-	_listen_button.pressed.connect(func() -> void: Tts.speak(_target_sentence()))
-	header.add_child(_listen_button)
-
 	# Two expanders, not a fixed spacer, so the sentence centres between the header and the
 	# entry/mic block below however much slack the panel actually has - SAY_IT_HEIGHT
 	# carries a deliberate margin above the tight-content minimum for exactly this, and the
 	# present-tense pass's taller modal has plenty of its own regardless.
 	column.add_child(UiKit.expander())
+
+	var sentence_row := UiKit.hbox(8)
+	sentence_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	sentence_row.custom_minimum_size = Vector2(0, 38)
+	column.add_child(sentence_row)
+
 	_sentence_label = UiKit.rich("", UiKit.H2)
-	# One line's worth, not two. It is fit_content, so a sentence that wraps still gets the
-	# room it needs; reserving the taller box unconditionally just left a band of empty
-	# panel under every short sentence and pushed the buttons down into the screen edge.
 	_sentence_label.custom_minimum_size = Vector2(0, 38)
-	column.add_child(_sentence_label)
+	_sentence_label.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	sentence_row.add_child(_sentence_label)
+
+	_listen_button = UiKit.button("", UiKit.SMALL)
+	_listen_button.icon = SPEAKER_ICON
+	_listen_button.tooltip_text = "Listen to the sentence"
+	_listen_button.custom_minimum_size = Vector2(44, 38)
+	# A theme constant on Button, not a property - assigning it directly fails at runtime
+	# and leaves the icon at its full size.
+	_listen_button.add_theme_constant_override("icon_max_width", 24)
+	_listen_button.pressed.connect(func() -> void: Tts.speak(_target_sentence()))
+	sentence_row.add_child(_listen_button)
+
 	column.add_child(UiKit.expander())
 
 	_entry = UiKit.line_edit("Type the sentence, then press Enter")
