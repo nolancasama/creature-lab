@@ -491,7 +491,7 @@
       "selection_reaction_animation": {
         "duration": 1.05, "forward": -0.055, "pitch_deg": -5, "scale": 0.045,
         "bones": [
-          {"bone": "spine.012", "axis": [1, 0, 0], "angle_deg": -10},
+          {"bone": "spine.012", "axis": [1, 0, 0], "angle_deg": 10},
           {"bone": "jaw", "axis": [1, 0, 0], "angle_deg": 16}
         ]
       },
@@ -499,7 +499,7 @@
       "confirm_selection_animation": {
         "duration": 1.35, "scale": 0.07,
         "bones": [
-          {"bone": "spine.012", "axis": [1, 0, 0], "angle_deg": -20},
+          {"bone": "spine.012", "axis": [1, 0, 0], "angle_deg": 20},
           {"bone": "jaw", "axis": [1, 0, 0], "angle_deg": 28},
           {"bone": "shoulder.L", "axis": [0, 0, 1], "angle_deg": 8}
         ]
