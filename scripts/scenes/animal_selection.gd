@@ -12,6 +12,9 @@ extends Node3D
 
 const PREVIEW_SPIN := 0.18 ## Slow enough that the animal remains readable as a profile.
 const RECORDING_FACING := -PI * 0.5 ## Godot forward (-Z) turned toward screen-right.
+const CONFIRM_TURN_SPEED := 8.0 ## Radians per second: quick, but still a visible transition.
+const CONFIRM_TURN_MIN := 0.10
+const CONFIRM_TURN_MAX := 0.38 ## Formerly as long as 0.9s while the reaction had begun.
 const DRAG_TURN_SPEED := 0.012
 const SUCCESS_PAUSE := 1.1
 const PRE_TRANSFORM_PAUSE := 0.28
@@ -456,15 +459,25 @@ func _confirm() -> void:
 	var serial := _confirmation_serial
 	var chosen := _selected
 	var def := Content.animal(chosen)
-	var duration := 0.0
 	_confirming_selection = true
+	var turn_time := _turn_selected_right()
+	if turn_time > 0.0:
+		await get_tree().create_timer(turn_time).timeout
+	if not is_inside_tree() or _mode != Mode.PICKING \
+			or serial != _confirmation_serial or chosen != _selected:
+		return
+	# Finish on one canonical angle before any root or bone response begins. Equivalent
+	# wrapped angles look the same, but normalising here makes the ordering unambiguous.
+	if _preview_root != null:
+		_preview_root.rotation.y = RECORDING_FACING
+
+	var duration := 0.0
 	if def != null and _rig != null:
 		duration = _rig.play_selection_reaction(def.confirm_selection_animation)
 		Audio.play_animal_call(def.confirm_selection_sound, def.voice_pitch)
 		Fx.burst(_preview_root, Vector3(0, 0.38, 0), "sparkle", UiKit.GOLD, 1.25)
 	else:
 		Audio.play("charge")
-	_turn_selected_right(duration)
 	if duration > 0.0:
 		await get_tree().create_timer(duration).timeout
 	if not is_inside_tree() or _mode != Mode.PICKING \
@@ -477,20 +490,25 @@ func _confirm() -> void:
 ## Ease from whatever angle the turntable had reached to the established right-facing
 ## recording pose. A wrapped angular delta chooses the nearest equivalent rotation, so it
 ## never spins almost a full revolution merely because it was just past the target.
-func _turn_selected_right(reaction_duration: float) -> void:
+func _turn_selected_right() -> float:
 	if _preview_root == null:
-		return
+		return 0.0
 	if _facing_tween != null and _facing_tween.is_valid():
 		_facing_tween.kill()
 	var start_angle := _preview_root.rotation.y
 	var turn := wrapf(RECORDING_FACING - start_angle, -PI, PI)
+	if absf(turn) < 0.001:
+		_preview_root.rotation.y = RECORDING_FACING
+		return 0.0
 	var target_angle := start_angle + turn
-	var turn_time := clampf(reaction_duration * 0.72, 0.5, 0.9)
+	var turn_time := clampf(absf(turn) / CONFIRM_TURN_SPEED,
+		CONFIRM_TURN_MIN, CONFIRM_TURN_MAX)
 	_facing_tween = create_tween()
 	_facing_tween.tween_method(func(angle: float) -> void:
 			if _preview_root != null:
 				_preview_root.rotation.y = angle,
 		start_angle, target_angle, turn_time).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	return turn_time
 
 
 ## The mirror of _enter_recording(), for the back button abandoning a half-finished
