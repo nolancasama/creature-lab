@@ -30,6 +30,13 @@ const REVEAL_HOLD := 1.1
 const FRONT_CAMERA_MOVE := 0.42 ## A quick orbit replaces the old instant animal swivel.
 const FRONT_CAMERA_DISTANCE := 7.05 ## Matches the final pull-back shot's subject scale.
 const FRONT_CAMERA_HEIGHT := 1.75
+const THIRD_CAMERA_DISTANCE := 5.6 ## Front view with the animal and machine both readable.
+const THIRD_CAMERA_HEIGHT := 1.5
+const PEAK_CAMERA_DISTANCE := 3.8 ## A closer version of that same front-facing angle.
+const PEAK_CAMERA_HEIGHT := 1.25
+const PEAK_CAMERA_MOVE := 0.45
+const REVEAL_PULL_DISTANCE := 8.45
+const REVEAL_PULL_HEIGHT := 2.1
 const TRAIT_SETTLE := 2.2 ## Let one trait finish visibly before the next sentence begins.
 ## Gap between the top of the animal and the lowest part of the machine. Enough to read as
 ## "hanging over it" rather than "resting on it", and enough that the bolts have somewhere
@@ -152,13 +159,13 @@ func _beat(index: int, total: int, sentence: String, entry: Dictionary,
 		Tts.speak(sentence, 0.95)
 	_stage.array.set_charge(rising * 0.75)
 
-	# Camera: push in, drop to a low angle, then swing round. One continuous move per
-	# sentence rather than a cut, so the animal never leaves the frame.
+	# Camera: push in, drop to a low angle, then orbit to the animal's own front. One
+	# continuous move per sentence rather than a cut, so the animal never leaves the frame.
 	var eye := _hero_eye()
 	match index:
 		0: eye = _hero_eye() + Vector3(0.4, -0.6, -1.6) * _spread()
 		1: eye = _stage.STAND + Vector3(3.4, 0.7, 4.4) * _spread()
-		_: eye = _stage.STAND + Vector3(-3.6, 1.5, 4.0) * _spread()
+		_: eye = _third_eye()
 	_stage.frame(eye, _machine_aim(), BEAT_SPEAK + 0.5)
 
 	# Wait for the recording to actually finish rather than a fixed guess: a child who
@@ -201,8 +208,8 @@ func _beat(index: int, total: int, sentence: String, entry: Dictionary,
 	await _wait(TRAIT_SETTLE)
 
 
-## The final machine flourish, and the only hard cut in the sequence - the trait changes
-## have already happened one at a time, so this peak reads as the completed transformation.
+## The final machine flourish. Ease closer along the third shot's front-facing line so the
+## impact grows without teleporting the camera or suddenly exposing the animal's backside.
 func _peak() -> void:
 	if _skip:
 		_stage.vent_steam(1.0)
@@ -210,7 +217,7 @@ func _peak() -> void:
 	Audio.play("transform", 1.0)
 	_stage.array.set_charge(1.0)
 	_stage.array.flash(0.85) ## Not a full white-out: the silhouette has to stay findable.
-	_stage.cut_to(_stage.STAND + Vector3(0.0, 1.2, 3.4) * _spread(), _machine_aim())
+	_stage.frame(_peak_eye(), _machine_aim(), PEAK_CAMERA_MOVE, Tween.TRANS_CUBIC)
 	for i in 10:
 		if not _alive():
 			return
@@ -237,7 +244,7 @@ func _reveal() -> void:
 			Tween.TRANS_CUBIC)
 		await skipped_front.finished
 		return
-	var pull := _stage.frame(_hero_eye() + Vector3(-0.8, 0.35, 1.4) * _spread(),
+	var pull := _stage.frame(_reveal_pull_eye(),
 		_stage.STAND + Vector3(0, 0.45, 0), 1.6)
 	await _stage.array.retract()
 	if not _alive():
@@ -258,6 +265,21 @@ func _reveal() -> void:
 func _front_eye() -> Vector3:
 	return _stage.front_camera_position(
 		FRONT_CAMERA_DISTANCE * _spread(), FRONT_CAMERA_HEIGHT * _spread())
+
+
+func _third_eye() -> Vector3:
+	return _stage.front_camera_position(
+		THIRD_CAMERA_DISTANCE * _spread(), THIRD_CAMERA_HEIGHT * _spread())
+
+
+func _peak_eye() -> Vector3:
+	return _stage.front_camera_position(
+		PEAK_CAMERA_DISTANCE * _spread(), PEAK_CAMERA_HEIGHT * _spread())
+
+
+func _reveal_pull_eye() -> Vector3:
+	return _stage.front_camera_position(
+		REVEAL_PULL_DISTANCE * _spread(), REVEAL_PULL_HEIGHT * _spread())
 
 
 func _front_aim() -> Vector3:
