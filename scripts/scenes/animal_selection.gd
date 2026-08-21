@@ -358,6 +358,23 @@ func _animal_name_card() -> Button:
 		var animal_id := str(card.get_meta("animal_id", ""))
 		if not animal_id.is_empty():
 			_preview(animal_id))
+	var check_badge := PanelContainer.new()
+	check_badge.name = "SelectedCheck"
+	check_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	check_badge.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	check_badge.offset_left = -32
+	check_badge.offset_right = -6
+	check_badge.offset_top = 6
+	check_badge.offset_bottom = 32
+	check_badge.add_theme_stylebox_override("panel",
+		UiKit.stylebox(UiKit.ACCENT, 13, 2, UiKit.TEXT, 1))
+	var check := UiKit.label("✓", UiKit.SMALL, UiKit.INK)
+	check.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	check.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	check.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	check_badge.add_child(check)
+	check_badge.visible = false
+	card.add_child(check_badge)
 	_style_animal_card(card, false)
 	return card
 
@@ -375,6 +392,9 @@ func _style_animal_card(card: Button, selected: bool) -> void:
 		UiKit.stylebox(face, 12, 3, UiKit.GOLD, 5))
 	card.add_theme_color_override("font_color", UiKit.GOLD if selected else UiKit.TEXT)
 	card.add_theme_color_override("font_hover_color", UiKit.GOLD if selected else UiKit.TEXT)
+	var check_badge := card.get_node_or_null("SelectedCheck") as Control
+	if check_badge != null:
+		check_badge.visible = selected
 
 
 func _refresh_animal_cards() -> void:
@@ -389,7 +409,7 @@ func _refresh_animal_cards() -> void:
 		var card := _animal_cards[slot]
 		card.visible = true
 		var label := def.display_name if def != null else animal_id.capitalize()
-		card.text = ("[x] " if offset == 0 else "") + label
+		card.text = label
 		card.set_meta("animal_id", animal_id)
 		_style_animal_card(card, offset == 0)
 
