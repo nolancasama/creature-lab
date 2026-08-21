@@ -4,6 +4,7 @@ const INFO_CLOSE_SIZE := 52.0
 const INFO_NAME_GAP := 16.0
 const INFO_MIN_HEAD_WIDTH := 220.0
 const INFO_PANEL_MARGIN := 28.0
+const INFO_VIEWPORT_MARGIN := 48.0
 ## The reward. Every creature here gets a quiet close-up when selected.
 
 ## Half-extents of the yard, X by Z. A rectangle rather than a disc: a zoo enclosure is a
@@ -253,6 +254,10 @@ func _show_empty_hint() -> void:
 
 func _info_body_reset() -> void:
 	for child in _info_body.get_children():
+		# A queued Control still contributes its minimum size until the end of the frame.
+		# Detach it now so rapidly choosing another resident cannot size the new name card
+		# from both the old and new labels at once.
+		_info_body.remove_child(child)
 		child.queue_free()
 
 
@@ -286,17 +291,9 @@ func _show_info(brain: CreatureBrain) -> void:
 	name_label.offset_right = -side_reserve
 	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	name_label.clip_text = true
+	name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	head.add_child(name_label)
-	# Fit the frame around the actual rendered name plus matching utility space at either
-	# side, then add the panel's own content margins. This remains tidy for both "Mox" and
-	# long generated fantasy names.
-	var name_width := ceilf(name_label.get_combined_minimum_size().x)
-	var head_width := maxf(name_width + side_reserve * 2.0, INFO_MIN_HEAD_WIDTH)
-	head.custom_minimum_size = Vector2(head_width, 56)
-	var box_width := head_width + INFO_PANEL_MARGIN
-	_info.offset_left = -box_width * 0.5
-	_info.offset_right = box_width * 0.5
-	_info.offset_top = -112
 	var close := UiKit.button("×", UiKit.SMALL)
 	UiKit.style_navigation(close)
 	close.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
@@ -308,6 +305,22 @@ func _show_info(brain: CreatureBrain) -> void:
 	close.pressed.connect(_dismiss_info)
 	head.add_child(close)
 	_info_body.add_child(head)
+
+	# Measure only after the label has entered the live scene tree and inherited its actual
+	# theme font. Measuring it beforehand returned the fallback minimum, so Japanese names
+	# could extend through the close button and beyond the panel border.
+	var font := name_label.get_theme_font("font")
+	var name_width := ceilf(font.get_string_size(name_label.text,
+		HORIZONTAL_ALIGNMENT_LEFT, -1, UiKit.H2).x)
+	var desired_head_width := maxf(name_width + side_reserve * 2.0, INFO_MIN_HEAD_WIDTH)
+	var max_box_width := maxf(get_viewport().get_visible_rect().size.x - INFO_VIEWPORT_MARGIN,
+		INFO_MIN_HEAD_WIDTH + INFO_PANEL_MARGIN)
+	var box_width := minf(desired_head_width + INFO_PANEL_MARGIN, max_box_width)
+	var head_width := box_width - INFO_PANEL_MARGIN
+	head.custom_minimum_size = Vector2(head_width, 56)
+	_info.offset_left = -box_width * 0.5
+	_info.offset_right = box_width * 0.5
+	_info.offset_top = -112
 	_info.visible = true
 
 

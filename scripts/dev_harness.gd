@@ -8,6 +8,7 @@ extends RefCounted
 ##   godot --path . -- --shot=select       redesigned animal picker and thumbnail strip
 ##   godot --path . -- --shot=select-side  select a side card without recentering the deck
 ##   godot --path . -- --shot=walk-dog     freeze a quadruped at peak wrist-flex in its gait
+##   godot --path . -- --shot=zoo-name     open a resident's measured name card
 ##   godot --path . -- --shot=say          the recording screen with a card chosen
 ##   godot --path . -- --backtest          abandon a half-finished round, then restart it
 ##   godot --path . -- --splittest         the SAY_SPLIT present-tense pass, end to end
@@ -478,7 +479,8 @@ static func _screenshot(main: Node, phase: String) -> void:
 	# seen from --shot=lab, which only ever shows the idle screen.
 	if phase == "present":
 		Settings.say_mode = Settings.SAY_SPLIT
-	var routed_phase := "select" if phase == "select-side" or phase.begins_with("walk-") else phase
+	var routed_phase := "select" if phase == "select-side" or phase.begins_with("walk-") \
+		else ("zoo" if phase == "zoo-name" else phase)
 	_goto("lab" if routed_phase in ["say", "present", "carousel", "color-before", "color-after", "color-say"] else routed_phase)
 	await main.get_tree().create_timer(SHOT_DELAY).timeout
 	if phase.begins_with("walk-"):
@@ -496,6 +498,12 @@ static func _screenshot(main: Node, phase: String) -> void:
 				rig.moving = true
 				rig._clock = PI / 10.0 ## sin(clock * 5) = 1: peak airborne flex.
 				rig._process(0.0)
+	elif phase == "zoo-name":
+		var zoo_scene := Router.current_scene
+		var residents: Node3D = zoo_scene.get("_creatures") if zoo_scene != null else null
+		if residents != null and residents.get_child_count() > 0:
+			zoo_scene._show_info(residents.get_child(0))
+			await main.get_tree().create_timer(0.5).timeout
 	elif phase == "select-side":
 		var selection_scene := Router.current_scene
 		var cards: Array = selection_scene.get("_animal_cards") if selection_scene != null else []
