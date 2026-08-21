@@ -234,6 +234,9 @@
         ]
       },
       "old": {
+        "specs": {
+          "up": -0.1
+        },
         "beard": {
           "normal": {"down": 0.18},
           "small": {"down": 0.15},
@@ -466,6 +469,9 @@
         ]
       },
       "old": {
+        "specs": {
+          "up": -0.11
+        },
         "beard": {
           "normal": {"down": 0.16},
           "small": {"down": 0.13},
@@ -1213,7 +1219,7 @@
         "specs": {
           "size": 0.22,
           "spacing": 0.45,
-          "up": -0.32
+          "up": -0.39
         },
         "beard": {
           "normal": {"down": 0.15},
