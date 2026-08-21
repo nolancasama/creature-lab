@@ -205,12 +205,16 @@ func begin_descent(to_y := WORK_HEIGHT, duration := 1.7) -> Tween:
 ## descend() does. Used when the creature turns out to be bigger than the one the machine
 ## came down over - it grows into "big" or "tall" partway through, and the machine has to
 ## get out of its way rather than be worn.
-func settle_to(to_y: float, duration := 0.45) -> void:
-	if is_equal_approx(position.y, to_y):
-		return
+func settle_to(to_y: float, duration := 0.45) -> Tween:
 	var tween := create_tween()
+	if is_equal_approx(position.y, to_y):
+		# Returning a completed-on-next-tick tween gives callers one awaitable contract whether
+		# the machine actually moves or was already safely positioned.
+		tween.tween_interval(0.0)
+		return tween
 	tween.tween_property(self, "position:y", to_y, duration) \
 		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	return tween
 
 
 func park(to_y := WORK_HEIGHT) -> void:

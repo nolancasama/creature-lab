@@ -10,6 +10,7 @@ extends RefCounted
 ##   godot --path . -- --backtest          abandon a half-finished round, then restart it
 ##   godot --path . -- --splittest         the SAY_SPLIT present-tense pass, end to end
 ##   godot --path . -- --youngflowtest     SHORT + YOUNG through transformation/comparison
+##   godot --path . -- --tallflowtest      tiger SHORT -> TALL machine-clearance regression
 ##   godot --path . -- --shot=present      the centred present-tense panel
 ##   godot --path . -- --shot=carousel     recording screen after one carousel step
 ##   godot --path . -- --shot=color-before sequential colour picker, Before step
@@ -35,7 +36,8 @@ const SPLIT_PICKS := [
 static func is_requested() -> bool:
 	for arg in OS.get_cmdline_user_args():
 		var text := str(arg)
-		if text in ["--selftest", "--autoplay", "--backtest", "--splittest", "--youngflowtest"] \
+		if text in ["--selftest", "--autoplay", "--backtest", "--splittest", "--youngflowtest",
+				"--tallflowtest"] \
 				or text.begins_with("--shot=") or text.begins_with("--phase=") or text.begins_with("--look="):
 			return true
 	return false
@@ -69,6 +71,8 @@ static func run_if_requested(main: Node) -> void:
 		_splittest(main)
 	elif args.has("--youngflowtest"):
 		_youngflowtest(main)
+	elif args.has("--tallflowtest"):
+		_tallflowtest(main)
 	elif not look.is_empty():
 		_look(main, look)
 	elif not shot.is_empty():
@@ -295,6 +299,51 @@ static func _youngflowtest(main: Node) -> void:
 	main.get_viewport().get_texture().get_image().save_png(path)
 	print("[youngflowtest] PASS -> %s" % ProjectSettings.globalize_path(path))
 	tree.quit(0)
+
+
+## Drives the reported tiger SHORT -> TALL case through the real cinematic and samples
+## the prong-to-animal gap every frame. This catches collisions during leg extension, not
+## merely an unsafe final resting position after the animation has already finished.
+static func _tallflowtest(main: Node) -> void:
+	var tree := main.get_tree()
+	var ids := Content.animal_ids()
+	if ids.is_empty():
+		printerr("[tallflowtest] FAIL: no animals")
+		tree.quit(1)
+		return
+	Game.begin_creature("tiger" if ids.has("tiger") else ids[0])
+	Game.record_sentence("HEIGHT", "short", "tall")
+	Game.record_sentence("AGE", "young", "old")
+	Game.record_sentence(Content.COLOR_CATEGORY, "red", "blue")
+	Game.current.generated_name = NameGenerator.candidates(Game.current)[0]
+	Game.set_phase(Game.Phase.ANIMAL_SELECTION)
+	Game.set_phase(Game.Phase.CREATURE_LAB)
+
+	var collided := false
+	var min_gap := INF
+	for poll in 2700: ## Up to 45 seconds at 60fps, matching the other flow timeout.
+		if Game.phase == Game.Phase.NAMING and Router.current_scene != null \
+				and Router.current_scene.name == "NamingScreen":
+			break
+		var lab := Router.current_scene
+		if lab != null:
+			var array := lab.find_child("TransformArray", true, false) as TransformArray
+			var stage := array.get_parent() as LabStage if array != null else null
+			if stage != null and array.visible:
+				var gap := array.position.y - TransformArray.DROP_BELOW - stage.creature_top()
+				min_gap = minf(min_gap, gap)
+				collided = collided or gap < -0.01
+		await tree.process_frame
+
+	var reached_naming := Game.phase == Game.Phase.NAMING and Router.current_scene != null \
+		and Router.current_scene.name == "NamingScreen"
+	if reached_naming and not collided and is_finite(min_gap):
+		print("[tallflowtest] PASS: minimum machine gap %.3f" % min_gap)
+		tree.quit(0)
+	else:
+		printerr("[tallflowtest] FAIL: reached_naming=%s collided=%s min_gap=%.3f" \
+			% [reached_naming, collided, min_gap])
+		tree.quit(1)
 
 
 ## Renders one creature wearing one trait, so a look can actually be seen rather than

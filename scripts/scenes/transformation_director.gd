@@ -34,6 +34,8 @@ const TRAIT_SETTLE := 2.2 ## Let one trait finish visibly before the next senten
 const HEAD_CLEARANCE := 0.55
 const REFERENCE_TOP := 1.9 ## The creature height the framings were originally written for.
 const GROW_TIME := 0.7
+const CLEARANCE_ASCEND_TIME := 0.45 ## Move first; only then let BIG/TALL begin.
+const GROWTH_ANIMATION_HEADROOM := 0.50 ## Covers TALL's landing bounce and shape overshoot.
 
 var _stage: LabStage = null
 var _banner: Label = null
@@ -113,7 +115,12 @@ func run(state: CreatureState) -> void:
 		await _stage.get_tree().process_frame
 		if not _alive():
 			return
-		_stage.array.settle_to(_work_height())
+		# Never lower a machine that already rose to clear a growing trait. It retracts after
+		# this reveal, and descending toward the animal while the reveal scale grows would
+		# throw away the safe TALL headroom we established before the transformation.
+		var final_work_height := _work_height()
+		if final_work_height > _stage.array.position.y + 0.001:
+			_stage.array.settle_to(final_work_height)
 		creature.scale = Vector3.ONE * 0.72
 		var grow := _stage.create_tween()
 		grow.tween_property(creature, "scale", Vector3.ONE, GROW_TIME).set_trans(Tween.TRANS_BACK)
@@ -174,6 +181,19 @@ func _beat(index: int, total: int, sentence: String, entry: Dictionary,
 	# preserves earlier changes, while the newly added category is the only new trait this
 	# zap can introduce.
 	staged_traits[str(entry["category"])] = str(entry["after"])
+	# The machine descended around the Before animal. Preview the cumulative target before
+	# changing the live rig, and visibly lift the machine first whenever the next trait will
+	# make the animal taller. Recalculating after TALL settles is too late: the head has
+	# already passed through the prongs by then.
+	var predicted_top := _stage.predicted_creature_top(staged_traits)
+	var safe_height := _work_height_for_top(predicted_top)
+	if predicted_top > _stage.creature_top() + 0.001:
+		safe_height += GROWTH_ANIMATION_HEADROOM
+	if safe_height > _stage.array.position.y + 0.001:
+		var ascent := _stage.array.settle_to(safe_height, CLEARANCE_ASCEND_TIME)
+		await ascent.finished
+		if not _alive():
+			return
 	_stage.transform_to_traits(staged_traits)
 	await _wait(TRAIT_SETTLE)
 
@@ -232,7 +252,11 @@ func _reveal() -> void:
 ## Where the machine hangs: clear of the tallest point of THIS animal, not at a height
 ## picked for an average one. A tall horse used to stand inside the prongs.
 func _work_height() -> float:
-	var clear: float = _stage.creature_top() + HEAD_CLEARANCE + TransformArray.DROP_BELOW
+	return _work_height_for_top(_stage.creature_top())
+
+
+func _work_height_for_top(creature_top: float) -> float:
+	var clear: float = creature_top + HEAD_CLEARANCE + TransformArray.DROP_BELOW
 	return maxf(clear, TransformArray.WORK_HEIGHT)
 
 

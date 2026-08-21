@@ -207,6 +207,34 @@ func creature_top() -> float:
 	return top if is_finite(top) else STAND.y
 
 
+## How high the animal will reach after `traits` settle, without disturbing the live rig
+## or starting its animation early. The director uses this before each transformation
+## beat so the ceiling array can rise clear of BIG/TALL before the animal grows into it.
+func predicted_creature_top(traits: Dictionary) -> float:
+	if _rig == null or not is_instance_valid(_rig) or _rig.definition == null:
+		return creature_top()
+	var probe := CreatureFactory.build_plain(_rig.definition.id)
+	if probe == null or probe.mesh_instance == null:
+		if probe != null:
+			probe.free()
+		return creature_top()
+	TraitVisuals.apply_all(probe, traits)
+	var box := probe.mesh_instance.get_aabb()
+	# The probe deliberately remains outside the SceneTree; compose its local chain directly
+	# rather than asking Node3D for a global transform it cannot provide off-tree.
+	var to_probe := probe._transform_to_ancestor(probe.mesh_instance, probe)
+	var local_top := -INF
+	for i in 8:
+		local_top = maxf(local_top, (to_probe * box.get_endpoint(i)).y)
+	# An off-tree probe does not receive _process(), where the live rig copies the TALL
+	# deformer lift onto Body.position. Include that target lift explicitly or a SHORT ->
+	# TALL preview underestimates the crown by the entire leg-extension gain.
+	if probe.deformer != null:
+		local_top += probe.deformer.lift
+	probe.free()
+	return STAND.y + local_top if is_finite(local_top) else creature_top()
+
+
 ## Vents around the rim, so the steam belongs to the platform the student has been
 ## watching rather than appearing from nowhere underneath the animal.
 func vent_steam(amount: float) -> void:
