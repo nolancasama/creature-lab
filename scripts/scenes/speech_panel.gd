@@ -116,7 +116,7 @@ func _build() -> void:
 	_cancel_label.flat = true
 	_cancel_label.focus_mode = Control.FOCUS_NONE
 	_cancel_label.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	_cancel_label.add_theme_font_size_override("font_size", UiKit.SMALL)
+	_cancel_label.add_theme_font_size_override("font_size", UiKit.H3)
 	_cancel_label.add_theme_color_override("font_color", UiKit.MUTED)
 	_cancel_label.add_theme_color_override("font_hover_color", UiKit.TEXT)
 	_cancel_label.add_theme_color_override("font_pressed_color", UiKit.TEXT)

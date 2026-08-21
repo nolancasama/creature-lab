@@ -381,7 +381,7 @@ func _build_colour_view(page: VBoxContainer) -> void:
 	var actions := UiKit.vbox(8)
 	actions.alignment = BoxContainer.ALIGNMENT_CENTER
 	_colour_picker.add_child(actions)
-	_colour_cancel = UiKit.button("キャンセル", UiKit.BODY)
+	_colour_cancel = UiKit.button("キャンセル", UiKit.H3)
 	_colour_cancel.custom_minimum_size = ACTION_SIZE
 	_colour_cancel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	_colour_cancel.focus_mode = Control.FOCUS_NONE
