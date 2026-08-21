@@ -1130,11 +1130,11 @@
           "up": -0.32
         },
         "beard": {
-          "normal": {"down": 0.38},
-          "small": {"down": 0.33},
-          "big": {"down": 0.42},
-          "long": {"down": 0.46},
-          "short": {"down": 0.31}
+          "normal": {"down": 0.15},
+          "small": {"down": 0.13},
+          "big": {"down": 0.17},
+          "long": {"down": 0.18},
+          "short": {"down": 0.12}
         }
       }
     },
