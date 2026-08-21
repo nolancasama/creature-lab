@@ -92,10 +92,24 @@ static func _add_pacifier(rig: CreatureRig, def: AnimalDefinition, a: Dictionary
 		outward = Vector3.FORWARD
 	var angle := atan2(-outward.y, outward.z) \
 		+ deg_to_rad(def.young_value("pacifier", "tilt", 0.0))
+	# `angle` may include an authored tilt, so fit against the direction the finished
+	# guard actually faces rather than the uncorrected head-to-mouth ray.
+	var plane_outward := Basis(Vector3.RIGHT, angle) * Vector3.BACK
+	# Fit the whole rigid guard, not only its centre, against the measured face. On broad,
+	# curved muzzles (most visibly the tiger after SHORT) the old centre contact was valid
+	# while the guard's rim still entered the cheeks. This footprint-plane fit is the
+	# angle-aware counterpart of OLD spectacles sampling beneath both complete lenses.
+	var guard_radius := size * 0.52 ## Slight margin beyond the guard's actual 0.50 radius.
+	at = rig.fit_head_accessory_plane(at, plane_outward, guard_radius, guard_radius, size * 0.015)
 
 	var pivot := Node3D.new()
 	pivot.name = "Pacifier"
 	pivot.rotation.x = angle
+	# Keep the fitted rest-space plane inspectable. The all-species harness verifies that
+	# no head surface remains in front of the complete guard after future tuning changes.
+	pivot.set_meta("surface_plane_origin", at)
+	pivot.set_meta("surface_outward", plane_outward)
+	pivot.set_meta("guard_radius", guard_radius)
 
 	var guard := _cylinder(size, size * 0.20, PACIFIER_GUARD, 0.22)
 	guard.name = "Guard"

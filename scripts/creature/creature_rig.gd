@@ -929,6 +929,48 @@ func head_front_in_patch(target_x: float, target_y: float, radius_x: float,
 	return best_z if found else fallback
 
 
+## Move a rigid face prop's contact plane just beyond every head vertex beneath its
+## footprint. Sampling only the centre of a curved muzzle is insufficient: the centre can
+## touch while the rim of a pacifier or pair of glasses passes into the cheeks. `outward`
+## is the prop's local +Z direction; the returned point keeps the same orientation and
+## shifts only as far forward as the complete elliptical footprint requires.
+func fit_head_accessory_plane(center: Vector3, outward: Vector3, radius_x: float,
+		radius_tangent: float, clearance := 0.0) -> Vector3:
+	var normal := outward.normalized()
+	if normal.length_squared() < 0.5:
+		normal = Vector3.FORWARD
+	var protrusion := head_surface_protrusion(center, normal, radius_x, radius_tangent)
+	return center + normal * maxf(protrusion + clearance, 0.0)
+
+
+## Furthest head-surface distance through a candidate accessory plane. A positive value
+## means part of the face still lies in front of the plane and the rigid prop would clip.
+## The second footprint axis follows the face vertically, perpendicular to `outward` in
+## the Y/Z plane, so this also works on the horse's sloping muzzle and upright bird beaks.
+func head_surface_protrusion(center: Vector3, outward: Vector3, radius_x: float,
+		radius_tangent: float) -> float:
+	head_bounds() ## Populates the cached head-family points.
+	var normal := outward.normalized()
+	if normal.length_squared() < 0.5:
+		normal = Vector3.FORWARD
+	var tangent := Vector3(0.0, normal.z, -normal.y).normalized()
+	if tangent.length_squared() < 0.5:
+		tangent = Vector3.UP
+	var rx := maxf(radius_x, 0.002)
+	var rt := maxf(radius_tangent, 0.002)
+	var furthest := -INF
+	var found := false
+	for point in _head_points:
+		var delta := point - center
+		var across := delta.x / rx
+		var along := delta.dot(tangent) / rt
+		if across * across + along * along > 1.0:
+			continue
+		furthest = maxf(furthest, delta.dot(normal))
+		found = true
+	return furthest if found else 0.0
+
+
 ## Foremost central vertex of the head family. Birds can mount a rigid prop directly on
 ## the end of a beak instead of borrowing the generic lower-mouth band used by mammals.
 func _head_tip(half_w: float, fallback: Vector3) -> Vector3:

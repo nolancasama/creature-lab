@@ -273,7 +273,9 @@ static func _youngflowtest(main: Node) -> void:
 		printerr("[youngflowtest] FAIL: no animals")
 		tree.quit(1)
 		return
-	_seed_young_short_creature(ids)
+	# Tiger's broad curved muzzle exposed guard-rim clipping that a centre-point contact
+	# check could not see, so exercise the real SHORT -> YOUNG chamber flow with it.
+	_seed_young_short_creature(ids, "tiger")
 	Game.set_phase(Game.Phase.ANIMAL_SELECTION)
 	Game.set_phase(Game.Phase.CREATURE_LAB)
 	# Wait on the state transition rather than a guessed cinematic length: captured speech
@@ -411,8 +413,8 @@ static func _seed_full_creature(ids: PackedStringArray) -> void:
 	Game.current.generated_name = NameGenerator.candidates(Game.current)[0]
 
 
-static func _seed_young_short_creature(ids: PackedStringArray) -> void:
-	Game.begin_creature("dog" if ids.has("dog") else ids[0])
+static func _seed_young_short_creature(ids: PackedStringArray, preferred := "dog") -> void:
+	Game.begin_creature(preferred if ids.has(preferred) else ids[0])
 	Game.record_sentence("LENGTH", "long", "short")
 	Game.record_sentence("AGE", "old", "young")
 	Game.record_sentence(Content.COLOR_CATEGORY, "red", "blue")
@@ -820,6 +822,12 @@ static func _selftest(main: Node) -> void:
 		_check(failures, pacifier != null, "%s: YOUNG pacifier was not built" % def.id)
 		if pacifier != null:
 			var anchors := rig.face_anchors()
+			var plane_origin: Vector3 = pacifier.get_meta("surface_plane_origin", Vector3.ZERO)
+			var plane_outward: Vector3 = pacifier.get_meta("surface_outward", Vector3.FORWARD)
+			var guard_radius := float(pacifier.get_meta("guard_radius", 0.0))
+			_check(failures, guard_radius > 0.0 and rig.head_surface_protrusion(
+				plane_origin, plane_outward, guard_radius, guard_radius) <= 0.0001,
+				"%s: YOUNG pacifier guard footprint intersects the face" % def.id)
 			var contact: Vector3 = anchors["face_tip"] \
 				if def.young_value("pacifier", "tip", 0.0) > 0.5 else anchors["mouth_surface"]
 			var pacifier_down := def.young_value("pacifier", "down", 0.0)
@@ -831,9 +839,22 @@ static func _selftest(main: Node) -> void:
 					float(anchors["span"]) * 0.075, contact.z)
 			contact.z += def.young_value("pacifier", "forward", 0.0) \
 				* float(anchors["depth"]) * -1.0
+			var test_head_pivot: Vector3 = anchors["head_pivot"]
+			var raw_outward := Vector3(0.0, contact.y - test_head_pivot.y,
+				contact.z - test_head_pivot.z).normalized()
+			if raw_outward.length_squared() < 0.5 or raw_outward.z > -0.05:
+				raw_outward = Vector3.FORWARD
+			var expected_angle := atan2(-raw_outward.y, raw_outward.z) \
+				+ deg_to_rad(def.young_value("pacifier", "tilt", 0.0))
+			var expected_outward := Basis(Vector3.RIGHT, expected_angle) * Vector3.BACK
+			var expected_plane := rig.fit_head_accessory_plane(contact, expected_outward,
+				guard_radius, guard_radius,
+				def.young_value("pacifier", "size", 0.52) * float(anchors["depth"]) * 0.015)
+			_check(failures, plane_origin.distance_to(expected_plane) < 0.0001,
+				"%s: YOUNG pacifier plane was not fitted to its whole guard" % def.id)
 			var young_head_bone := def.socket_bone("head_top")
 			var expected_contact: Vector3 = rig._bone_transform_in_body(young_head_bone) \
-				* (rig._bone_rest_transform_in_body(young_head_bone).affine_inverse() * contact)
+				* (rig._bone_rest_transform_in_body(young_head_bone).affine_inverse() * expected_plane)
 			_check(failures,
 				rig.accessory_transform_in_body(pacifier).origin.distance_to(expected_contact) < 0.001,
 				"%s: YOUNG pacifier detached from its scaled mouth" % def.id)
@@ -1031,10 +1052,25 @@ static func _selftest(main: Node) -> void:
 						float(final_anchors["span"]) * 0.075, neutral_contact.z)
 				neutral_contact.z += def.young_value("pacifier", "forward", 0.0) \
 					* float(final_anchors["depth"]) * -1.0
+				var final_head_pivot: Vector3 = final_anchors["head_pivot"]
+				var final_raw_outward := Vector3(0.0,
+					neutral_contact.y - final_head_pivot.y,
+					neutral_contact.z - final_head_pivot.z).normalized()
+				if final_raw_outward.length_squared() < 0.5 or final_raw_outward.z > -0.05:
+					final_raw_outward = Vector3.FORWARD
+				var final_angle := atan2(-final_raw_outward.y, final_raw_outward.z) \
+					+ deg_to_rad(def.young_value("pacifier", "tilt", 0.0))
+				var final_outward := Basis(Vector3.RIGHT, final_angle) * Vector3.BACK
+				var final_radius := def.young_value("pacifier", "size", 0.52) \
+					* float(final_anchors["depth"]) * 0.52
+				var fitted_contact := young_creature.fit_head_accessory_plane(neutral_contact,
+					final_outward, final_radius, final_radius,
+					def.young_value("pacifier", "size", 0.52) \
+						* float(final_anchors["depth"]) * 0.015)
 				var expected_final_contact: Vector3 = young_creature \
 					._bone_transform_in_body(final_bone) \
 					* (young_creature._bone_rest_transform_in_body(final_bone).affine_inverse() \
-						* neutral_contact)
+						* fitted_contact)
 				_check(failures, young_creature.accessory_transform_in_body(final_pacifier) \
 					.origin.distance_to(expected_final_contact) < 0.001,
 					"%s: finished SHORT + YOUNG pacifier missed the transformed mouth" % def.id)
