@@ -27,6 +27,9 @@ extends RefCounted
 const BEAT_SPEAK := 1.9
 const MAX_BEAT := 6.0 ## A runaway recording must not hold the whole sequence open.
 const REVEAL_HOLD := 1.1
+const FRONT_CAMERA_MOVE := 0.42 ## A quick orbit replaces the old instant animal swivel.
+const FRONT_CAMERA_DISTANCE := 7.05 ## Matches the final pull-back shot's subject scale.
+const FRONT_CAMERA_HEIGHT := 1.75
 const TRAIT_SETTLE := 2.2 ## Let one trait finish visibly before the next sentence begins.
 ## Gap between the top of the animal and the lowest part of the machine. Enough to read as
 ## "hanging over it" rather than "resting on it", and enough that the bolts have somewhere
@@ -230,8 +233,9 @@ func _reveal() -> void:
 	_stage.array.set_charge(0.0)
 	if _skip:
 		_stage.array.visible = false
-		_stage.reset_camera()
-		_stage.face_rig_to_camera()
+		var skipped_front := _stage.frame(_front_eye(), _front_aim(), FRONT_CAMERA_MOVE,
+			Tween.TRANS_CUBIC)
+		await skipped_front.finished
 		return
 	var pull := _stage.frame(_hero_eye() + Vector3(-0.8, 0.35, 1.4) * _spread(),
 		_stage.STAND + Vector3(0, 0.45, 0), 1.6)
@@ -241,12 +245,23 @@ func _reveal() -> void:
 	await pull.finished
 	if not _alive():
 		return
-	# The camera has now reached its final reveal position; face the actual camera, not the
-	# earlier pre-descent framing.
-	_stage.face_rig_to_camera()
+	# Preserve the animal's transformation pose. Orbit the camera around to the animal's
+	# existing front instead of swivelling the animal suddenly toward the lens.
+	var front := _stage.frame(_front_eye(), _front_aim(), FRONT_CAMERA_MOVE,
+		Tween.TRANS_CUBIC)
+	await front.finished
+	if not _alive():
+		return
 	await _wait(REVEAL_HOLD)
-	if _alive():
-		_stage.reset_camera()
+
+
+func _front_eye() -> Vector3:
+	return _stage.front_camera_position(
+		FRONT_CAMERA_DISTANCE * _spread(), FRONT_CAMERA_HEIGHT * _spread())
+
+
+func _front_aim() -> Vector3:
+	return _stage.STAND + Vector3(0, 0.45, 0)
 
 
 ## Where the machine hangs: clear of the tallest point of THIS animal, not at a height

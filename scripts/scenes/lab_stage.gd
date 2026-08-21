@@ -170,15 +170,16 @@ func reset_camera() -> void:
 	cut_to(CAMERA_POS, CAMERA_AIM)
 
 
-## Face the animal toward the camera for the final reveal. The opening transformation now
-## keeps the initial three-quarter pose so it does not begin with a separate head-on shot.
-func face_rig_to_camera() -> void:
-	if _rig == null or camera == null:
-		return
-	var direction := camera.global_position - _rig.global_position
-	direction.y = 0.0
-	if direction.length_squared() > 0.0001:
-		_rig.global_rotation.y = atan2(-direction.x, -direction.z)
+## Put the camera in front of the animal without changing the animal's pose. `distance`
+## and `height` are stage-space offsets from the live rig origin. The direction is the
+## inverse of the yaw calculation formerly used to rotate the rig toward the camera.
+func front_camera_position(distance: float, height: float) -> Vector3:
+	if _rig == null:
+		return camera.position if camera != null else CAMERA_POS
+	var yaw := _rig.rotation.y
+	var toward_camera := Vector3(-sin(yaw), 0.0, -cos(yaw))
+	var rig_origin := mount.position + _rig.position
+	return rig_origin + toward_camera * distance + Vector3.UP * height
 
 
 func _apply_frame(t: float) -> void:
