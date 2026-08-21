@@ -6,13 +6,15 @@ extends Node3D
 ## data path is Word Lab -> LabController -> CreatureState -> this.
 
 const PLATFORM_POS := Vector3(-2.4, 0.0, 1.6)
-const CAMERA_POS := Vector3(1.6, 3.0, 10.4)
-const CAMERA_AIM := Vector3(1.6, 0.3, 0.0)
-const CAMERA_FOV := 50.0
-const TRANSFORMATION_FACING := -0.85
 ## Where the creature actually stands. Every cinematic framing is written relative to this
 ## rather than to the world, so moving the platform cannot silently break the shots.
 const STAND := PLATFORM_POS + Vector3(0.0, 0.28, 0.0)
+const CAMERA_POS := Vector3(1.6, 3.0, 10.4)
+## Keep the opening chamber shot locked on the creature and platform. The old target sat
+## four units to their right, visibly pulling both into the left corner at cinematic start.
+const CAMERA_AIM := STAND + Vector3(0.0, 0.45, 0.0)
+const CAMERA_FOV := 50.0
+const TRANSFORMATION_FACING := -0.85
 
 var array: TransformArray = null
 var mount: Node3D = null
