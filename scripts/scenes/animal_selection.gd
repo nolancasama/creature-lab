@@ -101,6 +101,8 @@ var _colour_past_accepted := false
 var _colour_past_assisted := false
 var _pre_transforming := false
 var _confirmation_serial := 0 ## Cancels a pending confirm if browsing changes the animal.
+var _confirming_selection := false ## Stops the turntable while the chosen animal responds.
+var _facing_tween: Tween = null
 
 # Present-tense pass (Settings.SAY_SPLIT)
 var _present_index := 0
@@ -134,7 +136,7 @@ func _exit_tree() -> void:
 
 
 func _process(delta: float) -> void:
-	if _preview_root != null and _mode == Mode.PICKING:
+	if _preview_root != null and _mode == Mode.PICKING and not _confirming_selection:
 		_preview_root.rotation.y += delta * PREVIEW_SPIN
 
 
@@ -426,6 +428,11 @@ func _preview(animal_id: String) -> void:
 	if animal_id == _selected:
 		return
 	_confirmation_serial += 1
+	_confirming_selection = false
+	if _facing_tween != null and _facing_tween.is_valid():
+		_facing_tween.kill()
+	_facing_tween = null
+	Audio.stop_animal_call()
 	_selected = animal_id
 
 	_build_rig(animal_id)
@@ -433,10 +440,6 @@ func _preview(animal_id: String) -> void:
 	# picking grid is up, only the rig child underneath it gets swapped, so the turntable
 	# is already exactly where it needs to be to continue uninterrupted.
 	_refresh_animal_cards()
-	var def := Content.animal(animal_id)
-	if def != null and _rig != null:
-		_rig.play_selection_reaction(def.selection_reaction_animation)
-		Audio.play_animal_call(def.selection_reaction_sound, def.voice_pitch)
 
 
 func _confirm() -> void:
@@ -450,12 +453,14 @@ func _confirm() -> void:
 	var chosen := _selected
 	var def := Content.animal(chosen)
 	var duration := 0.0
+	_confirming_selection = true
 	if def != null and _rig != null:
 		duration = _rig.play_selection_reaction(def.confirm_selection_animation)
 		Audio.play_animal_call(def.confirm_selection_sound, def.voice_pitch)
 		Fx.burst(_preview_root, Vector3(0, 0.38, 0), "sparkle", UiKit.GOLD, 1.25)
 	else:
 		Audio.play("charge")
+	_turn_selected_right(duration)
 	if duration > 0.0:
 		await get_tree().create_timer(duration).timeout
 	if not is_inside_tree() or _mode != Mode.PICKING \
@@ -463,6 +468,25 @@ func _confirm() -> void:
 		return
 	Game.begin_creature(chosen)
 	_enter_recording()
+
+
+## Ease from whatever angle the turntable had reached to the established right-facing
+## recording pose. A wrapped angular delta chooses the nearest equivalent rotation, so it
+## never spins almost a full revolution merely because it was just past the target.
+func _turn_selected_right(reaction_duration: float) -> void:
+	if _preview_root == null:
+		return
+	if _facing_tween != null and _facing_tween.is_valid():
+		_facing_tween.kill()
+	var start_angle := _preview_root.rotation.y
+	var turn := wrapf(RECORDING_FACING - start_angle, -PI, PI)
+	var target_angle := start_angle + turn
+	var turn_time := clampf(reaction_duration * 0.72, 0.5, 0.9)
+	_facing_tween = create_tween()
+	_facing_tween.tween_method(func(angle: float) -> void:
+			if _preview_root != null:
+				_preview_root.rotation.y = angle,
+		start_angle, target_angle, turn_time).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 
 
 ## The mirror of _enter_recording(), for the back button abandoning a half-finished
@@ -474,6 +498,10 @@ func _confirm() -> void:
 func _enter_picking() -> void:
 	Speech.stop()
 	_mode = Mode.PICKING
+	_confirming_selection = false
+	if _facing_tween != null and _facing_tween.is_valid():
+		_facing_tween.kill()
+	_facing_tween = null
 	_set_recording_composition(false)
 	_dragging_view = false
 	_colour_preview = ""
@@ -604,6 +632,7 @@ func _present_advance() -> void:
 ## changes, only what is shown on top of it.
 func _enter_recording() -> void:
 	_mode = Mode.RECORDING
+	_confirming_selection = false
 	_set_recording_composition(true, true)
 	_dragging_view = false
 	_colour_preview = ""
