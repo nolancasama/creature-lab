@@ -29,6 +29,9 @@ const ALLOWED := {
 var phase: Phase = Phase.TITLE
 var current: CreatureState = null
 var zoo: Array[CreatureState] = []
+## A one-scene visual handoff, never saved with the creature. The recording screen writes
+## its final subject-relative camera and animal angle; the chamber consumes it once.
+var _transformation_handoff := {}
 
 var _return_phase: Phase = Phase.TITLE
 
@@ -64,6 +67,7 @@ func close_settings() -> void:
 
 func begin_creature(animal_id: String) -> void:
 	current = CreatureState.create(animal_id)
+	_transformation_handoff = {}
 	# One child's recorded voice must never surface in the next child's transformation.
 	Voice.clear()
 	creature_updated.emit(current)
@@ -85,12 +89,30 @@ func finish_creature(final_name: String) -> void:
 		zoo.pop_front()
 	SaveService.save_zoo(zoo)
 	current = null
+	_transformation_handoff = {}
 	zoo_changed.emit()
 
 
 func abandon_creature() -> void:
 	current = null
+	_transformation_handoff = {}
 	Voice.clear()
+
+
+func set_transformation_handoff(camera_offset: Vector3, aim_offset: Vector3,
+		camera_fov: float, creature_rotation_y: float) -> void:
+	_transformation_handoff = {
+		"camera_offset": camera_offset,
+		"aim_offset": aim_offset,
+		"camera_fov": camera_fov,
+		"creature_rotation_y": creature_rotation_y,
+	}
+
+
+func take_transformation_handoff() -> Dictionary:
+	var handoff := _transformation_handoff.duplicate(true)
+	_transformation_handoff = {}
+	return handoff
 
 
 func reset_zoo() -> void:

@@ -20,6 +20,7 @@ func _ready() -> void:
 
 	if Game.current != null:
 		stage.set_rig(CreatureFactory.build_lab_animal(Game.current))
+		stage.apply_before_view(Game.take_transformation_handoff())
 
 	stage.array.flash_requested.connect(_flash_screen)
 	_director = TransformationDirector.new(stage, _banner)

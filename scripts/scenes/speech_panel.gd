@@ -17,7 +17,7 @@ signal change_requested()
 const HELP_AFTER_MODEL := 2 ## Failed attempts before the sentence is read aloud.
 const HELP_AFTER_OVERRIDE := 3 ## Failed attempts before the teacher override appears.
 const MIC_ICON := preload("res://ui/mic.svg")
-const MIC_IDLE := ""
+const MIC_IDLE := "Tap to speak  (Space)"
 const MIC_LISTENING := "Listening...  tap to stop"
 const LISTEN_TIMEOUT := 10.0 ## Seconds before an unanswered microphone closes itself.
 const HEADER_HEIGHT := 34
@@ -86,7 +86,7 @@ func _build() -> void:
 	column.add_child(_sentence_label)
 	column.add_child(UiKit.expander())
 
-	_entry = UiKit.line_edit("")
+	_entry = UiKit.line_edit("Type the sentence, then press Enter")
 	_entry.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_entry.text_submitted.connect(func(text: String) -> void: _submit_typed(text))
 	column.add_child(_entry)

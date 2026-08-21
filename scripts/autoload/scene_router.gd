@@ -72,6 +72,13 @@ func _swap(path: String, animate: bool) -> void:
 	_swapping = false
 
 
+## A newly instantiated scene starts running while it is still behind the fade. Cinematic
+## handoffs wait here so their first matching frame is actually shown before it moves.
+func wait_until_revealed() -> void:
+	while _swapping or (_fade != null and _fade.visible):
+		await get_tree().process_frame
+
+
 func _fade_to(alpha: float, duration: float) -> void:
 	if _fade == null:
 		return

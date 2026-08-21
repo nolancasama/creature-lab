@@ -487,7 +487,7 @@ func _present_advance() -> void:
 	_busy = false
 	_present_index += 1
 	if Game.current == null or _present_index >= Game.current.entries.size():
-		Game.set_phase(Game.Phase.CREATURE_LAB)
+		_handoff_to_transformation()
 		return
 	_present_step()
 
@@ -799,12 +799,26 @@ func _finish_sentence() -> void:
 		if Settings.needs_present_pass(Speech.uses_microphone()):
 			_enter_present()
 		else:
-			Game.set_phase(Game.Phase.CREATURE_LAB)
+			_handoff_to_transformation()
 	else:
 		_word_lab.set_locked(false)
 		_word_lab.visible = true
 		_speech.show_idle("Choose your next card.")
 		_sync_ui()
+
+
+## Preserve the view the learner has been watching. Offsets are relative to the animal's
+## stand point so the chamber can recreate the shot even though its platform lives at a
+## different world coordinate.
+func _handoff_to_transformation() -> void:
+	if _preview_root != null and _camera != null:
+		var stand := _preview_root.global_position
+		Game.set_transformation_handoff(
+			_camera.global_position - stand,
+			_camera_aim - stand,
+			_camera.fov,
+			_preview_root.global_rotation.y)
+	Game.set_phase(Game.Phase.CREATURE_LAB)
 
 
 func _on_debug_action(action: String) -> void:

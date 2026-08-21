@@ -41,7 +41,7 @@ const SIDE_CARD_SIZE := Vector2(112, 78)
 const ARROW_SIZE := 55 ## 25% larger than the former 44px chevron controls.
 const CATEGORY_ARROW_FONT := 38 ## 25% larger than the former 30px glyphs.
 const COLOUR_ARROW_FONT := 28 ## 25% larger than the former 22px glyphs.
-const CAROUSEL_GAP := 8
+const CAROUSEL_GAP := 24 ## Three times the original padding around the adjective selector.
 const COLOUR_CARD_GAP := 10
 const COLOUR_ARROW_GAP := 30 ## Triple the card gap so the chevrons read as navigation.
 const SWATCH_SIZE := Vector2(220, 94)
@@ -261,7 +261,7 @@ func _activate() -> void:
 	var pair := _slot_pair(slot)
 	if pair != null:
 		var before := str((slot as Dictionary).get("word", ""))
-		Audio.play("select")
+		_audio_confirm_selection(before)
 		pair_selected.emit(pair.category, before, pair.opposite_of(before))
 		return
 	Audio.play("select")
@@ -432,15 +432,22 @@ func _show_colour_confirmation(colour: ColorDefinition, step_name: String) -> vo
 		_colour_swatch.add_theme_stylebox_override(state, box)
 
 
+## A confirmation chime alone is easy to miss in a busy classroom. Saying the chosen word
+## makes the feedback useful to an ESL learner as well as confirming that the tap landed.
+func _audio_confirm_selection(word: String) -> void:
+	Audio.play("select")
+	Tts.speak(word, 0.9)
+
+
 func _confirm_colour() -> void:
 	var colours := Content.enabled_colors()
 	if colours.size() < 2 or _locked or _colour_committing \
 			or _blocked(Content.COLOR_CATEGORY):
 		return
-	Audio.play("select")
 	_colour_committing = true
 	if _colour_step == ColourStep.BEFORE:
 		var selected_before: ColorDefinition = colours[_was_index]
+		_audio_confirm_selection(selected_before.word)
 		_show_colour_confirmation(selected_before, "Before")
 		await get_tree().create_timer(COLOUR_CONFIRM_TIME).timeout
 		_colour_committing = false
@@ -454,6 +461,7 @@ func _confirm_colour() -> void:
 	if was.word == now.word:
 		_colour_committing = false
 		return
+	_audio_confirm_selection(now.word)
 	_show_colour_confirmation(now, "Now")
 	await get_tree().create_timer(COLOUR_CONFIRM_TIME).timeout
 	_colour_committing = false

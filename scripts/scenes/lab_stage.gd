@@ -8,6 +8,8 @@ extends Node3D
 const PLATFORM_POS := Vector3(-2.4, 0.0, 1.6)
 const CAMERA_POS := Vector3(1.6, 3.0, 10.4)
 const CAMERA_AIM := Vector3(1.6, 0.3, 0.0)
+const CAMERA_FOV := 50.0
+const TRANSFORMATION_FACING := -0.85
 ## Where the creature actually stands. Every cinematic framing is written relative to this
 ## rather than to the world, so moving the platform cannot silently break the shots.
 const STAND := PLATFORM_POS + Vector3(0.0, 0.28, 0.0)
@@ -21,6 +23,7 @@ var _cam_from := Vector3.ZERO
 var _aim_from := Vector3.ZERO
 var _cam_to := Vector3.ZERO
 var _aim_to := Vector3.ZERO
+var _has_before_view := false
 
 
 func _ready() -> void:
@@ -46,7 +49,7 @@ func _ready() -> void:
 	mount.position = STAND
 	add_child(mount)
 
-	camera = StageKit.camera(CAMERA_POS, CAMERA_AIM, 50.0)
+	camera = StageKit.camera(CAMERA_POS, CAMERA_AIM, CAMERA_FOV)
 	add_child(camera)
 	_cam_to = CAMERA_POS
 	_aim_to = CAMERA_AIM
@@ -66,7 +69,46 @@ func set_rig(new_rig: CreatureRig) -> void:
 		mount.add_child(_rig)
 		# A three-quarter view: head-on, the head hides the body and the silhouette
 		# stops reading as the animal it is supposed to be.
-		_rig.rotation.y = -0.85
+		_rig.rotation.y = TRANSFORMATION_FACING
+
+
+## Rebuild the camera in the same subject-relative place and lens used by the final Before
+## screen. The router's fade reveals this matching frame before transition_from_before()
+## begins moving it into the chamber shot.
+func apply_before_view(handoff: Dictionary) -> void:
+	_has_before_view = not handoff.is_empty() and _rig != null
+	if not _has_before_view:
+		return
+	var eye := STAND + Vector3(handoff.get("camera_offset", CAMERA_POS - STAND))
+	var aim := STAND + Vector3(handoff.get("aim_offset", CAMERA_AIM - STAND))
+	var fov := float(handoff.get("camera_fov", CAMERA_FOV))
+	camera.set_perspective(fov, camera.near, camera.far)
+	cut_to(eye, aim)
+	_rig.rotation.y = float(handoff.get("creature_rotation_y", TRANSFORMATION_FACING))
+
+
+func has_before_view() -> bool:
+	return _has_before_view
+
+
+## Camera position, aim, lens and creature orientation all share one easing factor, so no
+## component arrives early and makes the animal appear to snap or swivel independently.
+func transition_from_before(duration := 1.25) -> Tween:
+	_has_before_view = false
+	var from_fov := camera.fov
+	var from_rotation := _rig.rotation.y if _rig != null else TRANSFORMATION_FACING
+	_cam_from = camera.position
+	_aim_from = _aim_to
+	_cam_to = CAMERA_POS
+	_aim_to = CAMERA_AIM
+	var tween := create_tween()
+	tween.tween_method(func(t: float) -> void:
+			_apply_frame(t)
+			camera.set_perspective(lerpf(from_fov, CAMERA_FOV, t), camera.near, camera.far)
+			if _rig != null:
+				_rig.rotation.y = lerp_angle(from_rotation, TRANSFORMATION_FACING, t),
+		0.0, 1.0, duration).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	return tween
 
 
 func lock_creature_movement() -> void:

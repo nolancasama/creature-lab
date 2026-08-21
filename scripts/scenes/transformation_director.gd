@@ -55,6 +55,9 @@ func request_skip() -> void:
 func run(state: CreatureState) -> void:
 	if not _alive():
 		return
+	await Router.wait_until_revealed()
+	if not _alive():
+		return
 	_stage.lock_creature_movement()
 	_banner_text = _banner.text
 	_show_banner()
@@ -62,9 +65,11 @@ func run(state: CreatureState) -> void:
 	if _skip:
 		_stage.array.park(_work_height())
 	else:
-		# Begin from the lab's existing three-quarter view. The former one-second setup
-		# moved directly in front of the animal and turned it head-on before anything
-		# happened, creating a detached opening shot before the real sequence began.
+		# The loaded chamber begins on the exact final Before framing. Ease its camera,
+		# lens and animal orientation into the chamber view while the machine descends,
+		# making the scene boundary one continuous move rather than a new opening shot.
+		if _stage.has_before_view():
+			_stage.transition_from_before()
 		await _stage.array.descend(_work_height())
 
 	# Each sentence: the lab says it, the machine answers it. Keep the before state as the
