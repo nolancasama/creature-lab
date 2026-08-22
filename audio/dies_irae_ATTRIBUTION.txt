@@ -1,18 +1,28 @@
 dies_irae.mp3
 
-The transformation music. The first 75 seconds of "dies irae.mp3", supplied by
-the project owner, cut at MP3 frame boundaries so it is not re-encoded and loses
-no quality. The source ID3 tag (artwork and metadata the game never reads) was
-dropped with it.
+Verdi, Messa da Requiem - "Dies irae" (part 1).
 
-Why trimmed: the source is 9 minutes 55 seconds and 9.5MB, against a whole game
-that packs to about 2MB. Nothing plays past the naming screen, and the clip
-loops, so the extra 8 minutes would have quadrupled the download for audio no
-student ever reaches.
+  NBC Symphony Orchestra and the Robert Shaw Chorale, conducted by Arturo
+  Toscanini, with Herva Nelli (soprano), Fedora Barbieri (mezzo-soprano),
+  Giuseppe Di Stefano (tenor) and Cesare Siepi (bass). Recorded from the
+  broadcast performance of 27 January 1951 at Carnegie Hall, New York.
+  Issued 1954, RCA Victor Red Seal LM-6018.
 
-LICENCE: NOT ESTABLISHED. This file came from a download folder with no licence
-alongside it. "Dies Irae" as a melody is a 13th-century plainchant and is in the
-public domain, but any particular RECORDING or arrangement of it carries its own
-copyright. The game is published publicly at creature-lab-esl.vercel.app, so
-confirm the rights on this specific recording, or replace it with one whose
-licence is known, before treating the deployment as settled.
+  Held by the Sibelius Academy Library, University of the Arts Helsinki.
+  https://taju.uniarts.fi/items/996565a8-6018-41cc-8f37-4c098f38a52c
+
+LICENCE: Public Domain 1.0, open access, as recorded in the repository's own
+metadata (dc.rights). Free to use, including commercially, with no attribution
+required - this file is kept because knowing where an asset came from is worth
+more than the licence obliges.
+
+This is the first 75 seconds of the source, cut at MP3 frame boundaries so it is
+not re-encoded and loses no quality, and looped in code. The source track is
+9'54" and 9.5MB against a game that packs to about 2MB, and nothing plays past
+the naming screen, so shipping it whole would have quadrupled the download for
+audio no student ever reaches.
+
+Note for anyone shrinking it further: it is a 1951 broadcast transcription, so
+its real audio bandwidth is narrow and it survives low bitrates far better than
+a modern recording would. It is currently 128 kbps stereo, which is generous for
+a bed that plays under a child's recorded voice.
