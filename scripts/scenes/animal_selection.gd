@@ -349,7 +349,12 @@ func _add_zoo_button() -> void:
 	zoo.name = "OpenZoo"
 	zoo.custom_minimum_size = Vector2(0, GEAR_BUTTON_SIZE)
 	zoo.focus_mode = Control.FOCUS_NONE
-	UiKit.style_button(zoo, UiKit.PANEL_HI)
+	# The navigation palette, which exists for exactly this. Not CTA orange: the picker
+	# already has one orange button and it is the one that starts the lesson, so a second
+	# would compete with it and a child would tap whichever was nearer. Not OK green either
+	# - green already means "already used" on the adjective cards, and that meaning is
+	# carrying instructional weight.
+	UiKit.style_navigation(zoo)
 	zoo.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
 	zoo.offset_left = -PANEL_RIGHT ## The gear's margin, mirrored.
 	zoo.offset_top = HUD_TOP
