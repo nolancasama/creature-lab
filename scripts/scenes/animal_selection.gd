@@ -328,6 +328,37 @@ func _build_picking_panel() -> void:
 	column.add_child(choose)
 
 	_add_gear_button()
+	_add_zoo_button()
+
+
+## A way back into the zoo without playing a whole round first.
+##
+## Only appears once there is something in it. On a fresh install the zoo is an empty field,
+## and a button that leads a six-year-old to an empty field is a dead end that makes the
+## game look broken - so it stays hidden until the first creature has been sent there, at
+## which point it turns up on its own and explains itself.
+##
+## Deliberately NOT beside the gear. The gear is the teacher's control and it opens a modal
+## a young student cannot easily get out of; putting a button they ARE meant to press right
+## next to it invites exactly the mis-tap that strands them in Teacher Settings. The
+## opposite corner is empty, mirrors the gear, and keeps a hand's width between the two.
+func _add_zoo_button() -> void:
+	if Game.zoo.is_empty():
+		return
+	var zoo := UiKit.button("どうぶつえん", UiKit.BODY)
+	zoo.name = "OpenZoo"
+	zoo.custom_minimum_size = Vector2(0, GEAR_BUTTON_SIZE)
+	zoo.focus_mode = Control.FOCUS_NONE
+	UiKit.style_button(zoo, UiKit.PANEL_HI)
+	zoo.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
+	zoo.offset_left = -PANEL_RIGHT ## The gear's margin, mirrored.
+	zoo.offset_top = HUD_TOP
+	zoo.offset_bottom = HUD_TOP + GEAR_BUTTON_SIZE
+	zoo.offset_right = zoo.offset_left + 210
+	zoo.pressed.connect(func() -> void:
+		Audio.play("click")
+		Game.set_phase(Game.Phase.ZOO))
+	_root.add_child(zoo)
 
 
 func _browse_animal(direction: int) -> void:

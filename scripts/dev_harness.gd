@@ -540,7 +540,12 @@ static func _screenshot(main: Node, phase: String) -> void:
 	# seen from --shot=lab, which only ever shows the idle screen.
 	if phase == "present":
 		Settings.say_mode = Settings.SAY_SPLIT
-	var routed_phase := "select" if phase == "select-side" \
+	# The zoo shortcut on the picker only appears once the zoo has a resident, so
+	# seeing it at all means putting one there first.
+	if phase == "select-zoo":
+		_seed_full_creature(Content.animal_ids())
+		Game.finish_creature("テスト")
+	var routed_phase := "select" if phase in ["select-side", "select-zoo"] \
 		else ("zoo" if phase == "zoo-name" else phase)
 	_goto("lab" if routed_phase in ["say", "present", "carousel", "color-before", "color-after", "color-say"] else routed_phase)
 	await main.get_tree().create_timer(SHOT_DELAY).timeout
