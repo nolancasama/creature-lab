@@ -299,7 +299,10 @@ func _echo_last_word(sentence: String) -> void:
 	var word := _last_word(sentence)
 	if word.is_empty():
 		return
-	_banner.text = word
+	# The banner keeps the sentence. Replacing it with the single echoed word put the word
+	# on screen three times over, which read as the game repeating itself rather than as the
+	# chamber throwing the last word back - the echo is a sound, and the pulse below is
+	# enough to carry it where there is no sound.
 	Tts.echo(word, ECHO_REPEATS)
 	for i in ECHO_REPEATS:
 		if not _alive():
