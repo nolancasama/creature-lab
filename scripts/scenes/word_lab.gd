@@ -144,6 +144,33 @@ func set_locked(value: bool) -> void:
 	_refresh()
 
 
+## Make every word look like print rather than a control.
+##
+## The Word List is a reference sheet and its words are deliberately inert - but they were
+## still Buttons wearing the full set of button clothes: pointer cursor, a lighter face on
+## hover, a darker one on press, a focus ring. So they invited a tap, took it, and did
+## nothing, which reads as broken rather than as deliberate. Nothing here changes what a tap
+## DOES; it changes what the card promises.
+##
+## Not `disabled`, which would grey every word out - this sheet exists to be read, and the
+## words have to stay legible.
+func set_reference_mode() -> void:
+	for key in _pair_buttons:
+		_flatten(_pair_buttons[key])
+	for word in _color_buttons:
+		_flatten(_color_buttons[word])
+
+
+func _flatten(b: Button) -> void:
+	if b == null:
+		return
+	b.mouse_default_cursor_shape = Control.CURSOR_ARROW
+	b.focus_mode = Control.FOCUS_NONE
+	var resting := b.get_theme_stylebox("normal")
+	for state in ["hover", "pressed", "focus"]:
+		b.add_theme_stylebox_override(state, resting)
+
+
 func set_used(categories: PackedStringArray) -> void:
 	_used = categories
 	_color_before = ""

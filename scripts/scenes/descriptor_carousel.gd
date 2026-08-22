@@ -912,6 +912,13 @@ func _open_reference() -> void:
 	_reference.add_child(sheet)
 	sheet.set_locked(true) ## Reference only - every word in here is deliberately inert.
 	add_child(_reference)
+	# AFTER the window joins the tree, not before. WordLab builds its cards in _ready(),
+	# which does not run until its window is in the tree - so styling them any earlier
+	# reaches an empty dictionary and silently does nothing.
+	#
+	# It has to LOOK inert, too: locked words still wore a pointer cursor and hover and
+	# press faces, so the sheet invited taps it had no intention of answering.
+	sheet.set_reference_mode()
 	_reference.popup_centered(Vector2i(700, 560))
 
 

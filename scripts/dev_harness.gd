@@ -1900,6 +1900,28 @@ static func _carousel_checks(failures: Array[String], main: Node) -> void:
 	_check(failures, car._word_track_cards.size() == 9
 		and car._colour_track_cards.size() == 9,
 		"carousel: sliding buffers cannot cover a two-card snap")
+	# The Word List is a reading sheet, and its words have to look like it. They are inert by
+	# design, but they were wearing a pointer cursor and hover and press faces, so they
+	# invited a tap and then ignored it - which is indistinguishable from broken.
+	car._open_reference()
+	var sheet: WordLab = null
+	if car._reference != null:
+		for child in car._reference.get_children():
+			if child is WordLab:
+				sheet = child
+				break
+	_check(failures, sheet != null, "word list: the reference sheet did not open")
+	if sheet != null:
+		for key in sheet._pair_buttons:
+			var word := sheet._pair_buttons[key] as Button
+			_check(failures, word.mouse_default_cursor_shape == Control.CURSOR_ARROW,
+				"word list: '%s' still shows a pointer, so it reads as tappable" % key)
+			_check(failures,
+				word.get_theme_stylebox("hover") == word.get_theme_stylebox("normal"),
+				"word list: '%s' still lights up on hover" % key)
+			break
+		car._reference.hide()
+
 	# The fade has to reduce alpha, not paint a dark gradient over the cards: these cards are
 	# darker than the lab behind them, so adding black to an edge reads as a drop shadow
 	# rather than a fade. And the ramp is anchored to the window, not to any card, so it must
