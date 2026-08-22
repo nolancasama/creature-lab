@@ -34,6 +34,20 @@ const REVEAL_HOLD := 3.6
 ## The anticipation beat, immediately before the last sentence: everything stops, the lab
 ## holds its breath, and the machine sits charged over a silent animal. Costs a few seconds
 ## once per round, at the only point where the round is about to pay off.
+## How long the animal is left exactly as the student last saw it, before the chamber takes
+## the framing over.
+##
+## The cinematic turns the animal from the Before screen's profile to its three-quarter
+## chamber pose, 49 degrees off, which foreshortens about a third of the body length away -
+## and pulls the camera back while it does it. So "It was LONG" was being shown at the one
+## angle and distance where length cannot be read. By the time the camera orbited back
+## toward profile the transformation had already started, and a long animal appeared to
+## BECOME long as part of the zap rather than to have been long all along. The shape was
+## right the whole time; only the staging was wrong.
+##
+## 0.35s of hold was not enough to read a silhouette, let alone compare it to anything.
+const ESTABLISH_HOLD := 1.5
+const ESTABLISH_TURN := 1.7 ## Slow enough to follow the turn rather than lose the shape in it.
 const FINAL_PAUSE := 2.6
 const PAUSE_PUSH := 0.55 ## How far the camera creeps in during it, as a fraction of _spread().
 ## The last word of the last sentence, thrown back by the chamber. Three repeats is where it
@@ -113,13 +127,15 @@ func run(state: CreatureState) -> void:
 		# composition first; only after its descent is legible do the lens, camera and animal
 		# orientation begin easing toward the chamber shot.
 		var from_before := _stage.has_before_view()
-		var descent := _stage.array.begin_descent(_work_height())
+		# Slower than the hold, so the machine is still visibly arriving when the turn starts.
+		var descent := _stage.array.begin_descent(_work_height(),
+			ESTABLISH_HOLD + ESTABLISH_TURN)
 		if from_before:
-			await _wait(0.35)
+			await _wait(ESTABLISH_HOLD)
 			if not _alive():
 				return
 			_show_banner()
-			_stage.transition_from_before()
+			_stage.transition_from_before(ESTABLISH_TURN)
 		else:
 			_show_banner()
 		await descent.finished

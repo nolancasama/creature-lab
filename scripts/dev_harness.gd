@@ -4,6 +4,8 @@ extends RefCounted
 ##
 ##   godot --path . -- --selftest          content, assembly and grammar checks, then quit
 ##   godot --path . -- --gaittest          walks every animal and measures foot slide
+##   godot --path . -- --reverttest        the "was" shape is applied AND readable
+##                                         when the transformation cinematic opens
 ##   godot --path . -- --bones             every animal's skeleton, with the walk chain
 ##                                         each leg bone actually has beneath it
 ##   godot --path . -- --phase=lab         jump straight to a screen
@@ -42,7 +44,7 @@ static func is_requested() -> bool:
 	for arg in OS.get_cmdline_user_args():
 		var text := str(arg)
 		if text in ["--selftest", "--autoplay", "--backtest", "--splittest", "--youngflowtest",
-				"--tallflowtest", "--bones", "--gaittest"] \
+				"--tallflowtest", "--bones", "--gaittest", "--reverttest"] \
 				or text.begins_with("--shot=") or text.begins_with("--phase=") or text.begins_with("--look="):
 			return true
 	return false
@@ -82,6 +84,8 @@ static func run_if_requested(main: Node) -> void:
 		_bones(main)
 	elif args.has("--gaittest"):
 		_gaittest(main)
+	elif args.has("--reverttest"):
+		_reverttest(main)
 	elif not look.is_empty():
 		_look(main, look)
 	elif not shot.is_empty():
@@ -783,6 +787,129 @@ static func _font_checks(failures: Array[String]) -> void:
 			missing += ch
 	_check(failures, missing.is_empty(),
 		"bundled font is missing %d glyph(s) the UI prints: %s" % [missing.length(), missing])
+
+
+## Watches the creature's shape across the opening of the transformation.
+##
+## A LONG animal was seen snapping back to its normal length as the cinematic began, then
+## stretching again, then shortening - three shape changes where there should be one. This
+## samples body_length every frame from the moment the lab scene opens, so the exact frame
+## the shape is lost is visible instead of inferred.
+## Checks that the animal's "was" shape is both APPLIED and LEGIBLE when the cinematic
+## opens.
+##
+## Two different failures look identical to a player, and one of them is invisible to every
+## other check here:
+##
+##   The shape is never applied, so the animal stands there unchanged and the first zap
+##   appears to stretch it. Caught by the pose assertion below.
+##
+##   The shape IS applied, and the camera immediately turns the animal 49 degrees off
+##   profile and pulls back, which foreshortens a third of its length away. The data is
+##   perfect and the player still sees a normal dog become long during the transformation.
+##   That is what actually happened, and only a held opening shot fixes it - hence the
+##   assertion that the animal keeps its Before orientation for a readable moment.
+static func _reverttest(main: Node) -> void:
+	var tree := main.get_tree()
+	var failures: Array[String] = []
+	# Through the real UI signals: a synthetic record_sentence() plus a phase jump builds
+	# the lab creature by a different route and hides exactly this.
+	_goto("lab")
+	await tree.create_timer(1.4).timeout
+	var picks := [
+		["LENGTH", "long", "short"],
+		["HARDNESS", "hard", "soft"],
+		[Content.COLOR_CATEGORY, "red", "blue"],
+	]
+	for pick in picks:
+		var word_lab: DescriptorCarousel = _find_word_lab(Router.current_scene)
+		if word_lab == null:
+			printerr("[reverttest] FAIL: no Word Lab")
+			tree.quit(1)
+			return
+		word_lab.pair_selected.emit(str(pick[0]), str(pick[1]), str(pick[2]))
+		await tree.create_timer(0.7).timeout
+		Speech.submit_typed(_expected(str(pick[1]), str(pick[2])))
+		await tree.create_timer(2.6).timeout
+	if Settings.needs_present_pass(Speech.uses_microphone()):
+		await tree.create_timer(1.0).timeout
+		for entry in Game.current.entries:
+			Speech.submit_typed(GrammarValidator.expected_present(str(entry["after"])))
+			await tree.create_timer(2.4).timeout
+
+	# The director itself waits for the router's fade before it does anything, so measuring
+	# from the phase change would count the fade as part of the hold and report a hold that
+	# never happened.
+	while Game.phase != Game.Phase.TRANSFORMATION:
+		await tree.process_frame
+	await Router.wait_until_revealed()
+
+	var opening_pose := -1.0
+	var opening_facing := 0.0
+	var held := 0.0
+	var elapsed := 0.0
+	var entered := false
+	for frame in 1200:
+		await tree.process_frame
+		var delta: float = tree.root.get_process_delta_time()
+		var scene := Router.current_scene
+		if scene == null or Game.phase != Game.Phase.TRANSFORMATION:
+			if entered:
+				break
+			continue
+		var stage = scene.get("stage")
+		if stage == null:
+			continue
+		var rig = stage.rig()
+		if rig == null or rig.skeleton == null or rig.definition == null:
+			continue
+		var bones: PackedStringArray = rig.definition.body_bones
+		if bones.is_empty():
+			break
+		var skeleton: Skeleton3D = rig.skeleton
+		var idx := skeleton.find_bone(bones[0])
+		if idx == -1:
+			break
+		var rest: float = skeleton.get_bone_rest(idx).origin.length()
+		if rest <= 0.0001:
+			break
+		var posed: float = skeleton.get_bone_pose_position(idx).length() / rest
+		if not entered:
+			entered = true
+			opening_pose = posed
+			opening_facing = float(rig.rotation.y)
+		elapsed += delta
+		# Still holding the opening framing? Half a degree of drift is the tween starting.
+		if absf(float(rig.rotation.y) - opening_facing) < 0.01:
+			held = elapsed
+		elif held > 0.0:
+			break
+
+	_check(failures, opening_pose > 1.3,
+		"the 'was long' shape is not on the animal when the cinematic opens (posed %.2f)"
+			% opening_pose)
+	# Facing, not elapsed time. The director starts its hold the moment the router reveals
+	# the scene, and nothing outside the director can observe that instant closely enough to
+	# time it from - measuring from anywhere else silently counts part of the hold as though
+	# it had already gone. What IS stable is the angle: the animal must open in the same
+	# profile the Before screen left it in, not in the chamber's three-quarter pose, because
+	# that pose foreshortens a third of its length away.
+	_check(failures, absf(absf(opening_facing) - PI * 0.5) < 0.2,
+		"the cinematic opens at %.2f rad instead of the Before screen's profile, where the "
+			% opening_facing + "animal's length cannot be read")
+	# And the hold has to be long enough to read a silhouette. Asserted on the constant
+	# rather than on a stopwatch, deliberately: the value is the decision, and it was 0.35s.
+	_check(failures, TransformationDirector.ESTABLISH_HOLD >= 1.2,
+		"ESTABLISH_HOLD is %.2fs, too short to read the animal's shape before it turns"
+			% TransformationDirector.ESTABLISH_HOLD)
+	if failures.is_empty():
+		print("[reverttest] PASS - opened posed %.2f at %.2f rad, holding %.2fs"
+			% [opening_pose, opening_facing, TransformationDirector.ESTABLISH_HOLD])
+	else:
+		printerr("[reverttest] %d FAILURE(S):" % failures.size())
+		for f in failures:
+			printerr("  - %s" % f)
+	tree.quit(0 if failures.is_empty() else 1)
 
 
 static func _bones(main: Node) -> void:
