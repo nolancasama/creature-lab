@@ -129,10 +129,11 @@ static func _autoplay(main: Node) -> void:
 		print("[autoplay] present-tense pass answered")
 
 	# The transformation sequence plus the fade into the naming screen. It grows every time
-	# a beat is added to it - three spoken sentences, each with a surge and now a pause to
-	# let its trait land, then the peak and the reveal. Generous on purpose: this wait
-	# failing means "the lab never finished", which is a slow and confusing thing to debug.
-	await tree.create_timer(30.0).timeout
+	# a beat is added to it - three spoken sentences each with a surge and a pause to let its
+	# trait land, then the held breath before the last one, the echo after it, the peak, and
+	# a reveal that now lingers. Generous on purpose: this wait failing means "the lab never
+	# finished", which is a slow and confusing thing to debug.
+	await tree.create_timer(45.0).timeout
 
 	var ok := Game.phase == Game.Phase.NAMING
 	print("[autoplay] ended in phase %s" % Game.Phase.keys()[Game.phase])
@@ -705,6 +706,27 @@ static func _report_profile(id: String, samples: Array[Dictionary], speed: float
 ## the project, regenerated whenever this check is updated. Comments are excluded: a kanji
 ## in a comment is never drawn.
 const UI_CHARACTERS := "×…✓、。「」あいうえおかがきぎくぐけげこさしじすずせぜそただちっつてでとどなにのはひびふぶへべぼまみめもやよらりるれろわをんァアィイウェエオカガキクグゲコゴサザジスセタダチッデトドニネハバビフプベペボマムメモャヤュユラリルレロンー一上下中了人今代伝体使保停備元先入全判利前力効化半単厳去古合同名向回在地場塔境声変夕夜大天太失妻存学安完定密少山岩嵐巨常度形影後怪扱承押指文新方明星春晶期木果根桜楽欄次止正残毛水氷河法流海準火灼炎焼熱牙珠現環生用由画番異疾目真短確示稲空立粉紅終組綿羽習老者聞自色花苔若英草葉蛇表見言設話認語説読識豆象送進過量鉄鋼長陽難雪雲霜霧青非面音順風鹿！（）－："
+
+
+## The word the chamber throws back at the end of the last sentence.
+##
+## Worth its own check because it fails quietly and wrongly: the echo is spoken and printed
+## on the banner, so a trailing full stop turns into a pause the synthesiser reads aloud, and
+## an empty result means the whole anticipation beat silently does nothing.
+static func _echo_checks(failures: Array[String]) -> void:
+	var cases := {
+		"Now it is big.": "big",
+		"It was small. Now it is big.": "big",
+		"Now it is red!": "red",
+		"now it is tall": "tall",
+		"  Now it is cold.  ": "cold",
+		"": "",
+	}
+	for sentence in cases:
+		var got := TransformationDirector._last_word(str(sentence))
+		_check(failures, got == str(cases[sentence]),
+			"echo: last word of '%s' came out as '%s', expected '%s'"
+				% [sentence, got, cases[sentence]])
 
 
 ## The music asset and the volume control that rides over it.
@@ -1439,6 +1461,7 @@ static func _selftest(main: Node) -> void:
 			_check(failures, rig != null, "%s/%s failed to apply" % [pair.category, word])
 			rig.free()
 
+	_echo_checks(failures)
 	_music_checks(failures)
 	_font_checks(failures)
 	_speed_checks(failures)

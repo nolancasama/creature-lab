@@ -26,7 +26,20 @@ extends RefCounted
 ## to about as long as the sentence actually takes to say and no longer.
 const BEAT_SPEAK := 1.9
 const MAX_BEAT := 6.0 ## A runaway recording must not hold the whole sequence open.
-const REVEAL_HOLD := 1.1
+## Long enough to actually look at what the sentence built. The reveal used to cut away
+## almost as soon as it landed, which made the payoff of a whole round feel like a
+## transition rather than the end of one.
+const REVEAL_HOLD := 3.6
+
+## The anticipation beat, immediately before the last sentence: everything stops, the lab
+## holds its breath, and the machine sits charged over a silent animal. Costs a few seconds
+## once per round, at the only point where the round is about to pay off.
+const FINAL_PAUSE := 2.6
+const PAUSE_PUSH := 0.55 ## How far the camera creeps in during it, as a fraction of _spread().
+## The last word of the last sentence, thrown back by the chamber. Three repeats is where it
+## stops reading as emphasis and starts reading as a room.
+const ECHO_REPEATS := 3
+const ECHO_GAP := 0.62
 
 ## The music, and the three levels it moves between.
 ##
@@ -172,9 +185,14 @@ func run(state: CreatureState) -> void:
 func _beat(index: int, total: int, sentence: String, entry: Dictionary,
 		staged_traits: Dictionary) -> void:
 	var rising := float(index + 1) / float(total)
-	# The last sentence is where the music comes in, under the speech.
-	if index == total - 1:
+	var final_beat := index == total - 1
+	# The last sentence is where the music comes in, under the speech - and under the pause
+	# before it, so the silence has a bed rather than being a dead spot.
+	if final_beat:
 		Audio.play_music(MUSIC_TRACK, MUSIC_UNDER)
+		await _hold_breath()
+		if not _alive():
+			return
 	_banner.text = sentence
 	# The student's own voice if it was captured, the lab's if it was not. Either way the
 	# words are on the banner, because a classroom with the sound off still gets the beat.
@@ -198,6 +216,12 @@ func _beat(index: int, total: int, sentence: String, entry: Dictionary,
 	await _wait(clampf(spoken, BEAT_SPEAK, MAX_BEAT) if spoken > 0.0 else BEAT_SPEAK)
 	if not _alive():
 		return
+
+	# The last word comes back off the walls before the machine does anything with it.
+	if final_beat:
+		await _echo_last_word(sentence)
+		if not _alive():
+			return
 
 	# The surge itself: bolts converge, the platform vents, the machine spins up a notch.
 	Audio.play("zip", 1.0 + rising * 0.2)
@@ -231,6 +255,62 @@ func _beat(index: int, total: int, sentence: String, entry: Dictionary,
 			return
 	_stage.transform_to_traits(staged_traits)
 	await _wait(TRAIT_SETTLE)
+
+
+## Everything stops. No words on the banner, no bolts, just the charged machine hanging
+## over the animal and the camera creeping in. The music is already running underneath.
+func _hold_breath() -> void:
+	_banner.text = ""
+	Audio.play("charge", 0.72)
+	_stage.array.set_charge(0.55)
+	# A slow creep rather than a move: the framing barely changes, but it is not still, which
+	# is what stops the pause reading as the game having frozen.
+	_stage.frame(_third_eye() + Vector3(0.0, -0.15, -PAUSE_PUSH) * _spread(),
+		_machine_aim(), FINAL_PAUSE + 0.4)
+	await _wait(FINAL_PAUSE)
+
+
+## The last word of the sentence, repeated back by the chamber and dying away.
+##
+## The word is taken from the sentence TEXT, not from the audio, because the audio may be
+## the student's own recording played back by the browser - out of reach of anything here,
+## and not sliceable into words in any case. So the lab echoes the word rather than the
+## voice, which is also the reading that makes sense: it is the machine answering.
+##
+## The banner pulses in step whether or not any of this is audible. Speech can be switched
+## off in Teacher Settings, and the beat still has to land in a silent classroom.
+func _echo_last_word(sentence: String) -> void:
+	var word := _last_word(sentence)
+	if word.is_empty():
+		return
+	_banner.text = word
+	Tts.echo(word, ECHO_REPEATS)
+	for i in ECHO_REPEATS:
+		if not _alive():
+			return
+		var falloff := pow(0.6, float(i))
+		Audio.play("whoosh", 0.85 - float(i) * 0.12)
+		var pulse := _stage.create_tween()
+		pulse.tween_property(_banner, "modulate:a", 1.0, 0.12)
+		pulse.tween_property(_banner, "modulate:a", maxf(0.25 * falloff, 0.08), ECHO_GAP)
+		_stage.array.set_charge(0.55 + 0.15 * float(i))
+		await _wait(ECHO_GAP + 0.12)
+	if _alive():
+		_banner.modulate.a = 1.0
+
+
+## Trailing punctuation removed, so "big." echoes as "big" rather than as a word with a full
+## stop welded to it - which the speech synthesiser reads as a pause and the banner shows.
+static func _last_word(sentence: String) -> String:
+	var cleaned := sentence.strip_edges()
+	while not cleaned.is_empty() and not cleaned[cleaned.length() - 1].is_valid_identifier():
+		var tail := cleaned[cleaned.length() - 1]
+		if tail == "." or tail == "!" or tail == "?" or tail == "," or tail == "\u3002":
+			cleaned = cleaned.substr(0, cleaned.length() - 1).strip_edges()
+		else:
+			break
+	var parts := cleaned.split(" ", false)
+	return str(parts[parts.size() - 1]) if not parts.is_empty() else ""
 
 
 ## The final machine flourish. Ease closer along the third shot's front-facing line so the

@@ -41,6 +41,23 @@ func speak(text: String, rate := 0.85) -> void:
 	DisplayServer.tts_speak(text, _voice_id, 50, 1.0, clampf(rate, 0.1, 2.0))
 
 
+## Repeat one word as a decaying echo.
+##
+## Deliberately does NOT call tts_stop() first, unlike speak(): these are queued behind
+## whatever is still being said rather than cutting it off. A real echo overlaps its source
+## and the platform gives no way to mix two utterances, so this leans on the other two
+## controls instead - each repeat is quieter, lower and slower than the last, which reads as
+## an echo even though the repeats are strictly sequential.
+func echo(text: String, repeats := 3) -> void:
+	if not available() or text.strip_edges().is_empty():
+		return
+	for i in repeats:
+		var falloff := pow(0.55, float(i))
+		DisplayServer.tts_speak(text, _voice_id, int(clampf(46.0 * falloff, 4.0, 100.0)),
+			clampf(0.9 - float(i) * 0.16, 0.1, 2.0),
+			clampf(0.78 - float(i) * 0.11, 0.1, 2.0))
+
+
 func stop() -> void:
 	if _available:
 		DisplayServer.tts_stop()
