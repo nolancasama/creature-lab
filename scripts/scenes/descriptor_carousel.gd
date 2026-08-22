@@ -1,6 +1,6 @@
 class_name DescriptorCarousel
 extends PanelContainer
-## Choosing what to turn the animal into: one card at a time, not a wall of words.
+## Choosing what to turn the animal into: a focused horizontal strip, not a wall of words.
 ##
 ## Drop-in for WordLab on the recording screen - same `pair_selected` signal, same
 ## set_used/set_disabled_categories/set_restriction/set_locked state API - so nothing in
@@ -9,7 +9,7 @@ extends PanelContainer
 ## of every pair at once is actually good for.
 ##
 ## Two views share one fixed rect, and only ever swap their contents:
-##   CATEGORY - the horizontal card carousel, previous and next peeking in at the sides.
+##   CATEGORY - five visible cards with the focused choice centred in the strip.
 ##              Each adjective is its own card, so tapping one both picks the pair and
 ##              says which way it runs: the tapped word is what the animal WAS.
 ##   COLOUR   - one carousel used in sequence: first "Before", then "Now".
@@ -31,31 +31,26 @@ signal colour_step_changed(choosing_now: bool)
 enum View { CATEGORY, COLOUR }
 enum ColourStep { BEFORE, AFTER }
 
-## Sized to fit the panel it is mounted in, not chosen for looks: the row is
-## arrow + side + main + side + arrow plus four gaps. Keep the total within the fixed
-## selection console or the far arrow lands outside it, which is exactly how the first
-## build shipped its right arrow off the edge.
-## Every adjective card keeps the established size. The clipped track exposes only a small
-## part of each neighbour, while the focused card remains centred and full size.
+## Sized to fit the panel it is mounted in. Five cards, four internal gaps, two arrow gaps
+## and two chevrons total 750px, just inside the fixed 760px selection console.
+## Five adjective cards occupy the viewport: the middle three remain completely clear,
+## while only the outermost 10% of the far-left and far-right cards sits under an edge fade.
 const WORD_CARD_SIZE := Vector2(112, 78)
 const WORD_TEXT_SIZE := UiKit.BODY ## Uniform across the deck, and big enough to read.
 const WORD_GAP := 8
-const WORD_PEEK := 24.0 ## 21% of a neighbouring word card remains visible at each edge.
-const WORD_VIEWPORT_WIDTH := WORD_CARD_SIZE.x + WORD_GAP * 2.0 + WORD_PEEK * 2.0
+const WORD_VIEWPORT_WIDTH := WORD_CARD_SIZE.x * 5.0 + WORD_GAP * 4.0
+const WORD_EDGE_FADE_WIDTH := WORD_CARD_SIZE.x * 0.10
 const WORD_STRIDE := WORD_CARD_SIZE.x + WORD_GAP
 const ARROW_SIZE := 55 ## 25% larger than the former 44px chevron controls.
 const CATEGORY_ARROW_FONT := 38 ## 25% larger than the former 30px glyphs.
 const COLOUR_ARROW_FONT := 28 ## 25% larger than the former 22px glyphs.
-const CAROUSEL_GAP := 8
 const CAROUSEL_ARROW_GAP := 24 ## Three times the word-to-word gap, only beside the chevrons.
 const COLOUR_CARD_GAP := 10
 const COLOUR_ARROW_GAP := 30 ## Triple the card gap so the chevrons read as navigation.
-## Every colour card keeps the established size; the viewport, rather than smaller cards,
-## creates the two neighbouring peeks.
+## The colour deck follows the same five-card presentation and 10% outer-edge fade.
 const COLOUR_CARD_SIZE := Vector2(108, 86)
-const COLOUR_PEEK := 22.0 ## 20% of each neighbouring colour card.
-const COLOUR_VIEWPORT_WIDTH := COLOUR_CARD_SIZE.x + COLOUR_CARD_GAP * 2.0 \
-	+ COLOUR_PEEK * 2.0
+const COLOUR_VIEWPORT_WIDTH := COLOUR_CARD_SIZE.x * 5.0 + COLOUR_CARD_GAP * 4.0
+const COLOUR_EDGE_FADE_WIDTH := COLOUR_CARD_SIZE.x * 0.10
 const COLOUR_STRIDE := COLOUR_CARD_SIZE.x + COLOUR_CARD_GAP
 const COLOUR_TEXT_SIZE := UiKit.H3 ## Uniform across the colour deck.
 const ACTION_SIZE := Vector2(160, 52)
@@ -63,7 +58,6 @@ const SLIDE_TIME := 0.16 ## Long enough to see which way the deck moved, short e
 const COLOUR_CONFIRM_TIME := 0.32
 const DRAG_START_DISTANCE := 8.0
 const SWIPE_TRIGGER := 34.0
-const EDGE_FADE_WIDTH := 34.0
 const EDGE_FADE_ALPHA := 0.22 ## Subtle enough that the peeking cards still look selectable.
 
 var _view := View.CATEGORY
@@ -87,6 +81,7 @@ var _category_base_x := 0.0
 var _category_left_fade: TextureRect = null
 var _category_right_fade: TextureRect = null
 var _word_cards: Array[Button] = []
+var _word_track_cards := {} ## Relative slot (-4..4) -> Button; five are visible at rest.
 var _next_card: Button = null
 var _far_next_card: Button = null
 var _left_arrow: Button = null
@@ -104,6 +99,7 @@ var _colour_track: HBoxContainer = null
 var _colour_base_x := 0.0
 var _colour_left_fade: TextureRect = null
 var _colour_right_fade: TextureRect = null
+var _colour_track_cards := {} ## Relative colour offset (-4..4) -> Button.
 var _colour_feedback: Label = null
 var _colour_cancel: Button = null
 var _colour_committing := false
@@ -172,9 +168,8 @@ func _build_category_view(page: VBoxContainer) -> void:
 	row.add_child(_left_arrow)
 	row.add_child(_carousel_gap(CAROUSEL_ARROW_GAP))
 
-	# One clipped viewport contains five full-size cards. At rest, only the centre card and
-	# about one fifth of its immediate neighbours are visible; the far pair exists just
-	# beyond the mask so a drag can reveal continuous content instead of an empty edge.
+	# Nine cards live on the sliding track. Five are visible at rest; two buffers on each
+	# side keep one- and two-card snaps continuous without exposing an empty edge.
 	_main_host = Control.new()
 	_main_host.name = "WordCarouselViewport"
 	_main_host.custom_minimum_size = Vector2(WORD_VIEWPORT_WIDTH, WORD_CARD_SIZE.y)
@@ -184,32 +179,34 @@ func _build_category_view(page: VBoxContainer) -> void:
 
 	_main_card = UiKit.hbox(WORD_GAP)
 	_main_card.name = "SlidingWordCards"
-	_main_card.custom_minimum_size = Vector2(WORD_CARD_SIZE.x * 5.0 + WORD_GAP * 4.0,
+	_main_card.custom_minimum_size = Vector2(WORD_CARD_SIZE.x * 9.0 + WORD_GAP * 8.0,
 		WORD_CARD_SIZE.y)
 	_main_host.add_child(_main_card)
-	_far_prev_card = _side_card(-2)
-	_far_prev_card.focus_mode = Control.FOCUS_NONE
-	_main_card.add_child(_far_prev_card)
-	_prev_card = _side_card(-1)
-	_main_card.add_child(_prev_card)
-	var word_card := Button.new()
-	word_card.custom_minimum_size = WORD_CARD_SIZE
-	word_card.focus_mode = Control.FOCUS_ALL
-	word_card.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	word_card.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	word_card.pressed.connect(_activate)
-	_main_card.add_child(word_card)
-	_word_cards.append(word_card)
-	_next_card = _side_card(1)
-	_main_card.add_child(_next_card)
-	_far_next_card = _side_card(2)
-	_far_next_card.focus_mode = Control.FOCUS_NONE
-	_main_card.add_child(_far_next_card)
-	_category_base_x = WORD_PEEK + WORD_GAP - WORD_STRIDE * 2.0
+	for offset in range(-4, 5):
+		var card: Button
+		if offset == 0:
+			card = Button.new()
+			card.custom_minimum_size = WORD_CARD_SIZE
+			card.focus_mode = Control.FOCUS_ALL
+			card.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+			card.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+			card.pressed.connect(_activate)
+			_word_cards.append(card)
+		else:
+			card = _side_card(offset)
+			if absi(offset) > 2:
+				card.focus_mode = Control.FOCUS_NONE
+		_word_track_cards[offset] = card
+		_main_card.add_child(card)
+	_far_prev_card = _word_track_cards[-2]
+	_prev_card = _word_track_cards[-1]
+	_next_card = _word_track_cards[1]
+	_far_next_card = _word_track_cards[2]
+	_category_base_x = -WORD_STRIDE * 2.0
 	_main_card.position = Vector2(_category_base_x, 0.0)
-	_category_left_fade = _edge_fade(false)
+	_category_left_fade = _edge_fade(false, WORD_EDGE_FADE_WIDTH)
 	_main_host.add_child(_category_left_fade)
-	_category_right_fade = _edge_fade(true)
+	_category_right_fade = _edge_fade(true, WORD_EDGE_FADE_WIDTH)
 	_main_host.add_child(_category_right_fade)
 
 	row.add_child(_carousel_gap(CAROUSEL_ARROW_GAP))
@@ -246,7 +243,7 @@ func _carousel_gap(width: float) -> Control:
 	return gap
 
 
-func _edge_fade(right_edge: bool) -> TextureRect:
+func _edge_fade(right_edge: bool, width: float) -> TextureRect:
 	var gradient := Gradient.new()
 	var shade := Color(0.02, 0.035, 0.06, EDGE_FADE_ALPHA)
 	gradient.offsets = PackedFloat32Array([0.0, 1.0])
@@ -268,8 +265,8 @@ func _edge_fade(right_edge: bool) -> TextureRect:
 	fade.anchor_right = 1.0 if right_edge else 0.0
 	fade.anchor_top = 0.0
 	fade.anchor_bottom = 1.0
-	fade.offset_left = -EDGE_FADE_WIDTH if right_edge else 0.0
-	fade.offset_right = 0.0 if right_edge else EDGE_FADE_WIDTH
+	fade.offset_left = -width if right_edge else 0.0
+	fade.offset_right = 0.0 if right_edge else width
 	return fade
 
 
@@ -402,35 +399,29 @@ func _build_colour_view(page: VBoxContainer) -> void:
 	row.add_child(_colour_host)
 	_colour_track = UiKit.hbox(COLOUR_CARD_GAP)
 	_colour_track.name = "SlidingColourCards"
-	_colour_track.custom_minimum_size = Vector2(COLOUR_CARD_SIZE.x * 5.0 \
-		+ COLOUR_CARD_GAP * 4.0, COLOUR_CARD_SIZE.y)
+	_colour_track.custom_minimum_size = Vector2(COLOUR_CARD_SIZE.x * 9.0 \
+		+ COLOUR_CARD_GAP * 8.0, COLOUR_CARD_SIZE.y)
 	_colour_host.add_child(_colour_track)
-	_colour_far_prev = _colour_card()
-	_colour_far_prev.focus_mode = Control.FOCUS_NONE
-	_colour_far_prev.pressed.connect(func() -> void: _select_visible_colour(-2))
-	_colour_track.add_child(_colour_far_prev)
-
-	_colour_prev = _colour_card()
-	_colour_prev.pressed.connect(func() -> void: _select_visible_colour(-1))
-	_colour_track.add_child(_colour_prev)
-
-	_colour_swatch = _colour_card()
-	_colour_swatch.pressed.connect(_confirm_colour)
-	_colour_track.add_child(_colour_swatch)
-
-	_colour_next = _colour_card()
-	_colour_next.pressed.connect(func() -> void: _select_visible_colour(1))
-	_colour_track.add_child(_colour_next)
-
-	_colour_far_next = _colour_card()
-	_colour_far_next.focus_mode = Control.FOCUS_NONE
-	_colour_far_next.pressed.connect(func() -> void: _select_visible_colour(2))
-	_colour_track.add_child(_colour_far_next)
-	_colour_base_x = COLOUR_PEEK + COLOUR_CARD_GAP - COLOUR_STRIDE * 2.0
+	for offset in range(-4, 5):
+		var card := _colour_card()
+		if offset == 0:
+			card.pressed.connect(_confirm_colour)
+		else:
+			card.pressed.connect(_select_visible_colour.bind(offset))
+			if absi(offset) > 2:
+				card.focus_mode = Control.FOCUS_NONE
+		_colour_track_cards[offset] = card
+		_colour_track.add_child(card)
+	_colour_far_prev = _colour_track_cards[-2]
+	_colour_prev = _colour_track_cards[-1]
+	_colour_swatch = _colour_track_cards[0]
+	_colour_next = _colour_track_cards[1]
+	_colour_far_next = _colour_track_cards[2]
+	_colour_base_x = -COLOUR_STRIDE * 2.0
 	_colour_track.position = Vector2(_colour_base_x, 0.0)
-	_colour_left_fade = _edge_fade(false)
+	_colour_left_fade = _edge_fade(false, COLOUR_EDGE_FADE_WIDTH)
 	_colour_host.add_child(_colour_left_fade)
-	_colour_right_fade = _edge_fade(true)
+	_colour_right_fade = _edge_fade(true, COLOUR_EDGE_FADE_WIDTH)
 	_colour_host.add_child(_colour_right_fade)
 
 	row.add_child(_colour_gap(COLOUR_ARROW_GAP))
@@ -547,15 +538,9 @@ func _sync_colour() -> void:
 		_now_index = _next_colour_index(_now_index, 1, true)
 	var active_index := _was_index if _colour_step == ColourStep.BEFORE else _now_index
 	var skip_before := _colour_step == ColourStep.AFTER
-	var far_previous := _colour_offset_index(active_index, -2, skip_before)
-	var previous := _colour_offset_index(active_index, -1, skip_before)
-	var following := _colour_offset_index(active_index, 1, skip_before)
-	var far_following := _colour_offset_index(active_index, 2, skip_before)
-	_paint(_colour_far_prev, colours[far_previous])
-	_paint(_colour_prev, colours[previous])
-	_paint(_colour_swatch, colours[active_index])
-	_paint(_colour_next, colours[following])
-	_paint(_colour_far_next, colours[far_following])
+	for offset in range(-4, 5):
+		var colour_index := _colour_offset_index(active_index, offset, skip_before)
+		_paint(_colour_track_cards[offset], colours[colour_index])
 	_colour_heading.text = "へんしん前" if _colour_step == ColourStep.BEFORE else "いま"
 	_colour_feedback.text = ""
 	_colour_feedback.visible = false
@@ -805,7 +790,8 @@ func _step_active_carousel(direction: int, drag_offset := NAN) -> void:
 
 func _tap_active_carousel(position: Vector2) -> void:
 	if _view == View.CATEGORY:
-		for entry in [[_prev_card, -1], [_word_cards[0], 0], [_next_card, 1]]:
+		for entry in [[_far_prev_card, -2], [_prev_card, -1], [_word_cards[0], 0],
+				[_next_card, 1], [_far_next_card, 2]]:
 			var card := entry[0] as Button
 			if card != null and card.get_global_rect().has_point(position):
 				card.grab_focus()
@@ -815,7 +801,8 @@ func _tap_active_carousel(position: Vector2) -> void:
 					_select_visible_word(int(entry[1]))
 				return
 	else:
-		for entry in [[_colour_prev, -1], [_colour_swatch, 0], [_colour_next, 1]]:
+		for entry in [[_colour_far_prev, -2], [_colour_prev, -1], [_colour_swatch, 0],
+				[_colour_next, 1], [_colour_far_next, 2]]:
 			var card := entry[0] as Button
 			if card != null and card.get_global_rect().has_point(position):
 				card.grab_focus()
@@ -940,14 +927,13 @@ func _refresh() -> void:
 	var done: bool = _used.has(category)
 	var blocked := _blocked(category)
 
-	for card in _word_cards:
-		card.visible = true
-		_paint_word_card(card, slot)
-
-	_side(_prev_card, wrapi(_index - 1, 0, _slots.size()))
-	_side(_next_card, wrapi(_index + 1, 0, _slots.size()))
-	_side(_far_prev_card, wrapi(_index - 2, 0, _slots.size()))
-	_side(_far_next_card, wrapi(_index + 2, 0, _slots.size()))
+	for offset in range(-4, 5):
+		var card := _word_track_cards[offset] as Button
+		if offset == 0:
+			card.visible = true
+			_paint_word_card(card, slot)
+		else:
+			_side(card, wrapi(_index + offset, 0, _slots.size()))
 	var single := _slots.size() < 2
 	_left_arrow.disabled = _locked or single or not _restriction.is_empty()
 	_right_arrow.disabled = _left_arrow.disabled

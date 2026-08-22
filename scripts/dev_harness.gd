@@ -1534,8 +1534,8 @@ static func _carousel_checks(failures: Array[String], main: Node) -> void:
 	_check(failures, car._slot_category(car._slots[car._slots.size() - 1]) == Content.COLOR_CATEGORY,
 		"carousel: colours are not the last card")
 
-	# The clipped host never moves. Five full-size cards slide beneath it, but only the
-	# centred card and a 15-25% peek of each immediate neighbour are visible at rest.
+	# The clipped host never moves. Five full-size cards are visible at rest: the middle
+	# three are unobscured, and only the outermost 10% of the far pair is edge-faded.
 	var host_position := car._main_host.position
 	car._step(1)
 	_check(failures, car._main_host.position.is_equal_approx(host_position),
@@ -1544,12 +1544,22 @@ static func _carousel_checks(failures: Array[String], main: Node) -> void:
 		"carousel: stepping hid a chevron")
 	_check(failures, car._main_host.clip_contents and car._colour_host.clip_contents,
 		"carousel: a peek viewport does not clip offscreen cards")
-	var word_peek_ratio := DescriptorCarousel.WORD_PEEK / DescriptorCarousel.WORD_CARD_SIZE.x
-	var colour_peek_ratio := DescriptorCarousel.COLOUR_PEEK \
+	var word_clear_ratio := 1.0 - DescriptorCarousel.WORD_EDGE_FADE_WIDTH \
+		/ DescriptorCarousel.WORD_CARD_SIZE.x
+	var colour_clear_ratio := 1.0 - DescriptorCarousel.COLOUR_EDGE_FADE_WIDTH \
 		/ DescriptorCarousel.COLOUR_CARD_SIZE.x
-	_check(failures, word_peek_ratio >= 0.15 and word_peek_ratio <= 0.25
-		and colour_peek_ratio >= 0.15 and colour_peek_ratio <= 0.25,
-		"carousel: neighbour peeks are outside the requested 15-25%% range")
+	_check(failures, is_equal_approx(word_clear_ratio, 0.90)
+		and is_equal_approx(colour_clear_ratio, 0.90),
+		"carousel: outer cards do not retain the requested 90%% clear area")
+	_check(failures, is_equal_approx(DescriptorCarousel.WORD_VIEWPORT_WIDTH,
+		DescriptorCarousel.WORD_CARD_SIZE.x * 5.0 + DescriptorCarousel.WORD_GAP * 4.0)
+		and is_equal_approx(DescriptorCarousel.COLOUR_VIEWPORT_WIDTH,
+		DescriptorCarousel.COLOUR_CARD_SIZE.x * 5.0
+			+ DescriptorCarousel.COLOUR_CARD_GAP * 4.0),
+		"carousel: viewport does not expose five complete card positions")
+	_check(failures, car._word_track_cards.size() == 9
+		and car._colour_track_cards.size() == 9,
+		"carousel: sliding buffers cannot cover a two-card snap")
 	_check(failures, car._category_left_fade != null and car._category_right_fade != null
 		and car._colour_left_fade != null and car._colour_right_fade != null,
 		"carousel: two-sided edge fades are missing")
