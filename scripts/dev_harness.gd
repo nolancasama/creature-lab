@@ -7,6 +7,8 @@ extends RefCounted
 ##                                         into res://animations, so the meshes that carry
 ##                                         them never have to ship. A build step, not a
 ##                                         test: run it again only if the source changes.
+##   godot --path . -- --runtest           a running animal aims at clear ground, not at
+##                                         whatever the crowd happens to be standing on
 ##   godot --path . -- --stancetest        every foot of every animal, under every shape
 ##                                         adjective, measured against the platform
 ##   godot --path . -- --gaittest          walks every animal and measures foot slide
@@ -51,7 +53,7 @@ static func is_requested() -> bool:
 		var text := str(arg)
 		if text in ["--selftest", "--autoplay", "--backtest", "--splittest", "--youngflowtest",
 				"--tallflowtest", "--bones", "--gaittest", "--reverttest", "--stancetest",
-				"--extractanims"] \
+				"--extractanims", "--runtest"] \
 				or text.begins_with("--shot=") or text.begins_with("--phase=") or text.begins_with("--look="):
 			return true
 	return false
@@ -97,6 +99,8 @@ static func run_if_requested(main: Node) -> void:
 		_stancetest(main)
 	elif args.has("--extractanims"):
 		_extractanims(main)
+	elif args.has("--runtest"):
+		_runtest(main)
 
 	elif not look.is_empty():
 		_look(main, look)
@@ -1148,6 +1152,64 @@ static func _deformer_owned_bones() -> Dictionary:
 			for bone in leg.get("bones", PackedStringArray()):
 				owned[str(bone)] = true
 	return owned
+
+
+## A running animal has to pick somewhere empty to run to.
+##
+## The steering already shoves creatures apart on contact, but that is a correction after
+## the fact: an animal whose destination sits behind three others still charges through
+## them. At walking pace that reads as mingling; at a run it reads as barging.
+##
+## So this crowds one half of the yard, asks a runner for destinations, and checks it does
+## better than chance. Compared against random picks from the same reachable ring rather
+## than against a fixed number, because the yard's size and the crowd's density both move -
+## the claim is "better than not trying", and that is what is measured.
+static func _runtest(main: Node) -> void:
+	var tree := main.get_tree()
+	var failures: Array[String] = []
+	var yard := Node3D.new()
+	main.add_child(yard)
+
+	# One runner at the origin, six residents packed into the +X half.
+	var ids := Content.animal_ids()
+	var runner: CreatureBrain = null
+	for i in 7:
+		var state := CreatureState.create(str(ids[i % ids.size()]))
+		state.generated_name = "resident%d" % i
+		var spawn := Vector3.ZERO if i == 0 else Vector3(4.0 + float(i), 0.0, -3.0 + float(i))
+		var brain := CreatureBrain.create(state, spawn)
+		yard.add_child(brain)
+		if i == 0:
+			runner = brain
+	await tree.process_frame
+	await tree.process_frame
+
+	var reach := 9.0
+	var chosen := 0.0
+	var random := 0.0
+	var trials := 40
+	for i in trials:
+		chosen += runner._clearance_at(runner._open_point(reach))
+		random += runner._clearance_at(runner._reachable_point(reach))
+	chosen /= float(trials)
+	random /= float(trials)
+	print("[runtest] mean clearance: chosen %.2f, random %.2f" % [chosen, random])
+	_check(failures, chosen > random,
+		"a running animal aims no better than chance (chosen %.2f vs random %.2f)"
+			% [chosen, random])
+	# Not merely better - clear of the crowd. A destination inside somebody is the failure
+	# this exists to stop.
+	_check(failures, chosen > 0.0,
+		"the chosen destination is inside another animal (clearance %.2f)" % chosen)
+	yard.queue_free()
+
+	if failures.is_empty():
+		print("[runtest] PASS")
+	else:
+		printerr("[runtest] %d FAILURE(S):" % failures.size())
+		for f in failures:
+			printerr("  - %s" % f)
+	tree.quit(0 if failures.is_empty() else 1)
 
 
 static func _bones(main: Node) -> void:

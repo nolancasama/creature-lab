@@ -38,6 +38,9 @@ const RUN_TIME := Vector2(1.5, 4.0)
 ## walk-run-walk-run, which reads as a glitch rather than as a burst of energy.
 const RUN_COOLDOWN := Vector2(9.0, 18.0)
 const RUN_SPEED := 2.4 ## Multiplier on walk_speed. The animator matches the clip to it.
+## How many destinations a run considers before committing to the clearest. Eight is plenty
+## for a yard this size and costs nothing - it runs once per run, not per frame.
+const OPEN_SPACE_SAMPLES := 8
 ## Runs end in a walk, not a stop. An animal that sprints and then freezes looks switched
 ## off; one that slows to a walk looks like it finished doing something.
 const WALK_AFTER_RUN := 0.82
@@ -311,6 +314,10 @@ func _enter(next: State) -> void:
 		State.RUN:
 			_timer = _rng.randf_range(RUN_TIME.x, RUN_TIME.y) * _pace
 			_run_block = _rng.randf_range(RUN_COOLDOWN.x, RUN_COOLDOWN.y)
+			# A run gets its own destination, chosen for clear ground - see _open_point().
+			# It also carries further than a walk in the same time, so the reach it picks
+			# within is its own.
+			_target = _open_point(_base_speed * RUN_SPEED * _timer)
 		State.OBSERVE:
 			_timer = _rng.randf_range(1.5, 3.0)
 		State.TRAIT_ACTION:
@@ -328,8 +335,9 @@ func _enter(next: State) -> void:
 ## few seconds, stops a fifth of the way there, and the arrival behaviour never happens.
 ## Picking within reach of one walk means animals actually arrive somewhere and settle,
 ## which is the whole shape the behaviour brief asks for.
-func _reachable_point() -> Vector3:
-	var reach: float = _base_speed * WALK_TIME.y * _pace
+func _reachable_point(reach := -1.0) -> Vector3:
+	if reach < 0.0:
+		reach = _base_speed * WALK_TIME.y * _pace
 	var angle := _rng.randf_range(0.0, TAU)
 	var distance := _rng.randf_range(reach * 0.35, reach)
 	var wanted := position + Vector3(cos(angle), 0.0, sin(angle)) * distance
@@ -397,6 +405,42 @@ static func resolve_group_overlaps(parent: Node, passes := 8) -> float:
 			maximum_penetration = maxf(maximum_penetration,
 				first.spacing_radius() + second.spacing_radius() + NEIGHBOUR_GAP - distance)
 	return maxf(maximum_penetration, 0.0)
+
+
+## Somewhere to run that has nobody in it.
+##
+## The steering already pushes creatures apart when they get close, but that is a correction
+## applied after the fact - an animal that picks a destination on the far side of three
+## others still charges through them and spends the whole run being shoved sideways. At a
+## walk that reads as mingling. At a run it reads as barging, and a tiger galloping through
+## a penguin is the single worst thing the yard can show a class.
+##
+## So a run samples several candidate destinations and takes the one whose nearest neighbour
+## is furthest away. Sampling rather than solving because there is nothing to solve: any
+## reasonably clear direction will do, and eight guesses find one.
+func _open_point(reach: float) -> Vector3:
+	var best := _reachable_point(reach)
+	var best_clearance := -1.0
+	for attempt in OPEN_SPACE_SAMPLES:
+		var candidate := _reachable_point(reach)
+		var clearance := _clearance_at(candidate)
+		if clearance > best_clearance:
+			best_clearance = clearance
+			best = candidate
+	return best
+
+
+## Distance from a point to the nearest other resident, minus the room that resident needs.
+## Negative means the point is inside somebody.
+func _clearance_at(point: Vector3) -> float:
+	var nearest := INF
+	for sibling in get_parent().get_children():
+		if sibling == self or not (sibling is CreatureBrain):
+			continue
+		var other := sibling as CreatureBrain
+		var flat := Vector2(point.x - other.position.x, point.z - other.position.z)
+		nearest = minf(nearest, flat.length() - other.spacing_radius() - _spacing_radius)
+	return nearest
 
 
 func _neighbour_separation() -> Vector3:
