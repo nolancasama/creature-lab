@@ -1037,6 +1037,13 @@ static func _selftest(main: Node) -> void:
 		# never a muzzle-length out in space on horses or birds.
 		rig.reset_modifiers()
 		OldKit.apply(rig)
+		var expected_dark_grey := def.old_value("grey", "dark", 0.0)
+		_check(failures, is_equal_approx(
+			float(rig.material.get_shader_parameter("grey_dark_amount")), expected_dark_grey),
+			"%s: OLD dark-marking greying does not match its species configuration" % def.id)
+		if def.id == "tiger":
+			_check(failures, expected_dark_grey > 0.99,
+				"tiger: OLD does not turn the stripes grey")
 		var spectacles := rig.find_accessory("OldSpectacles")
 		_check(failures, spectacles != null, "%s: OLD spectacles were not built" % def.id)
 		if spectacles != null:
@@ -1089,6 +1096,9 @@ static func _selftest(main: Node) -> void:
 						.is_equal_approx(beard_relative),
 					"%s: OLD beard did not follow the head through SHORT" % def.id)
 		rig.reset_modifiers()
+		_check(failures,
+			float(rig.material.get_shader_parameter("grey_dark_amount")) < 0.001,
+			"%s: OLD dark-marking greying survived a reset" % def.id)
 
 		# YOUNG's rigid pacifier starts at the scaled mouth surface. Its two meshes are
 		# entirely on local +Z, so the teat touches the animal without floating and neither

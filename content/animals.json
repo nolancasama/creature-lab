@@ -714,6 +714,9 @@
         }
       },
       "old": {
+        "grey": {
+          "dark": 1.0
+        },
         "specs": {
           "size": 0.3,
           "spacing": 0.85

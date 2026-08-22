@@ -79,6 +79,12 @@ static func _paint_grey(rig: CreatureRig, def: AnimalDefinition, a: Dictionary) 
 		{"at": Vector3(-temple.x, temple.y, temple.z), "radius": temple_size},
 		{"at": Vector3(temple.x, temple.y, temple.z), "radius": temple_size},
 	], def.old_tint(), 1.0)
+	# Some patterned species also grey their naturally dark markings. This uses the base
+	# texture's luminance mask, so the tiger's stripes turn silver without washing out its
+	# orange coat or overriding a colour adjective applied earlier in the trait stack.
+	rig.set_greying(
+		def.old_value("grey", "dark", 0.0),
+		def.old_value("grey", "coat", 0.0))
 
 
 ## Two rings and a bridge. TorusMesh is the one primitive that gives a real lens hole -
