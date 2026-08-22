@@ -3,6 +3,10 @@ extends RefCounted
 ## Command-line hooks for checking the build without clicking through it.
 ##
 ##   godot --path . -- --selftest          content, assembly and grammar checks, then quit
+##   godot --path . -- --extractanims      lift the walk/idle clips off the source FBXs
+##                                         into res://animations, so the meshes that carry
+##                                         them never have to ship. A build step, not a
+##                                         test: run it again only if the source changes.
 ##   godot --path . -- --stancetest        every foot of every animal, under every shape
 ##                                         adjective, measured against the platform
 ##   godot --path . -- --gaittest          walks every animal and measures foot slide
@@ -46,7 +50,8 @@ static func is_requested() -> bool:
 	for arg in OS.get_cmdline_user_args():
 		var text := str(arg)
 		if text in ["--selftest", "--autoplay", "--backtest", "--splittest", "--youngflowtest",
-				"--tallflowtest", "--bones", "--gaittest", "--reverttest", "--stancetest"] \
+				"--tallflowtest", "--bones", "--gaittest", "--reverttest", "--stancetest",
+				"--extractanims"] \
 				or text.begins_with("--shot=") or text.begins_with("--phase=") or text.begins_with("--look="):
 			return true
 	return false
@@ -90,6 +95,9 @@ static func run_if_requested(main: Node) -> void:
 		_reverttest(main)
 	elif args.has("--stancetest"):
 		_stancetest(main)
+	elif args.has("--extractanims"):
+		_extractanims(main)
+
 	elif not look.is_empty():
 		_look(main, look)
 	elif not shot.is_empty():
@@ -1045,6 +1053,89 @@ static func _pair_containing(word: String) -> TraitDefinition:
 		if pair.word_a == word or pair.word_b == word:
 			return pair
 	return null
+
+
+## Lifts the animation off the source FBXs and saves it on its own.
+##
+## The models in models/_anim_source are the same seven animals as animals.glb, from the
+## same pack, with the same bone names - so their clips drive the game's existing rigs
+## directly, with no retargeting. What we do NOT want is their meshes: animals.glb is
+## already normalised to stand height and wired into the trait system, and importing the
+## FBXs whole would ship a second 5.8MB copy of every animal to use nothing but the
+## keyframes. So the clips come out as standalone resources and the FBXs are deleted.
+##
+## Position tracks on bones the trait system owns are dropped. LONG and TALL stretch this
+## animal by writing bone POSITIONS, and a clip that keys the same bone would overwrite that
+## every frame - a long dog would snap back to normal length as soon as it walked. Rotation
+## on those bones is fine and is where nearly all the motion lives: of the dog walk's 46
+## tracks, 34 are rotation and only one position track touches a bone the deformer owns.
+static func _extractanims(main: Node) -> void:
+	var dir := DirAccess.open("res://models/_anim_source")
+	if dir == null:
+		printerr("[extractanims] FAIL: models/_anim_source is missing")
+		main.get_tree().quit(1)
+		return
+	DirAccess.make_dir_recursive_absolute("res://animations")
+	var owned := _deformer_owned_bones()
+	var saved := 0
+	var dropped := 0
+	for file in dir.get_files():
+		if not file.get_extension().to_lower() in ["fbx"]:
+			continue
+		var packed: PackedScene = load("res://models/_anim_source/%s" % file)
+		if packed == null:
+			printerr("[extractanims] could not load %s" % file)
+			continue
+		var scene := packed.instantiate()
+		var players: Array[Node] = []
+		_collect_class(scene, "AnimationPlayer", players)
+		for node in players:
+			var player := node as AnimationPlayer
+			for clip_name in player.get_animation_list():
+				var clip: Animation = player.get_animation(clip_name).duplicate(true)
+				# Walk backwards: removing a track renumbers everything after it.
+				for track in range(clip.get_track_count() - 1, -1, -1):
+					if clip.track_get_type(track) != Animation.TYPE_POSITION_3D:
+						continue
+					var bone := str(clip.track_get_path(track)).get_slice(":", 1)
+					if owned.has(bone):
+						clip.remove_track(track)
+						dropped += 1
+				# Repoint every track at the skeleton alone. The source paths are relative to
+				# the FBX's own root ("Dog_001_rig/Skeleton3D:spine.004"), which does not
+				# exist in this game - the rigs keep their skeleton at Body/Model/Skeleton3D.
+				# Stripping the prefix here means the runtime only has to park an
+				# AnimationPlayer beside the skeleton, instead of rewriting every path of
+				# every clip on every creature build.
+				for track in clip.get_track_count():
+					var raw := str(clip.track_get_path(track))
+					var bone := raw.get_slice(":", 1)
+					clip.track_set_path(track, NodePath("%s:%s" % ["Skeleton3D", bone]))
+				# Every one of these is a cycle or a settled idle.
+				clip.loop_mode = Animation.LOOP_LINEAR
+				var path := "res://animations/%s.res" % clip_name
+				if ResourceSaver.save(clip, path) == OK:
+					saved += 1
+					print("[extractanims] %-24s %.2fs, %d tracks -> %s"
+						% [clip_name, clip.length, clip.get_track_count(), path])
+				else:
+					printerr("[extractanims] could not save %s" % path)
+		scene.free()
+	print("[extractanims] %d clip(s) saved, %d conflicting position track(s) dropped"
+		% [saved, dropped])
+	main.get_tree().quit(0 if saved > 0 else 1)
+
+
+## Bones the trait system moves by position, and which an animation therefore must not.
+static func _deformer_owned_bones() -> Dictionary:
+	var owned := {}
+	for def in Content.animals:
+		for bone in def.body_bones:
+			owned[str(bone)] = true
+		for leg in def.legs:
+			for bone in leg.get("bones", PackedStringArray()):
+				owned[str(bone)] = true
+	return owned
 
 
 static func _bones(main: Node) -> void:
