@@ -34,12 +34,12 @@ enum ColourStep { BEFORE, AFTER }
 ## Sized to fit the panel it is mounted in. Five cards, four internal gaps, two arrow gaps
 ## and two chevrons total 750px, just inside the fixed 760px selection console.
 ## Five adjective cards occupy the viewport: the middle three remain completely clear,
-## while only the outermost 10% of the far-left and far-right cards sits under an edge fade.
+## while the outer third of the far-left and far-right cards dissolves at the edge.
 const WORD_CARD_SIZE := Vector2(112, 78)
 const WORD_TEXT_SIZE := UiKit.BODY ## Uniform across the deck, and big enough to read.
 const WORD_GAP := 8
 const WORD_VIEWPORT_WIDTH := WORD_CARD_SIZE.x * 5.0 + WORD_GAP * 4.0
-const WORD_EDGE_FADE_WIDTH := WORD_CARD_SIZE.x * 0.10
+const WORD_EDGE_FADE_WIDTH := WORD_CARD_SIZE.x * 0.33
 const WORD_STRIDE := WORD_CARD_SIZE.x + WORD_GAP
 const ARROW_SIZE := 55 ## 25% larger than the former 44px chevron controls.
 const CATEGORY_ARROW_FONT := 38 ## 25% larger than the former 30px glyphs.
@@ -47,10 +47,10 @@ const COLOUR_ARROW_FONT := 28 ## 25% larger than the former 22px glyphs.
 const CAROUSEL_ARROW_GAP := 24 ## Three times the word-to-word gap, only beside the chevrons.
 const COLOUR_CARD_GAP := 10
 const COLOUR_ARROW_GAP := 30 ## Triple the card gap so the chevrons read as navigation.
-## The colour deck follows the same five-card presentation and 10% outer-edge fade.
+## The colour deck follows the same five-card presentation and outer-third edge fade.
 const COLOUR_CARD_SIZE := Vector2(108, 86)
 const COLOUR_VIEWPORT_WIDTH := COLOUR_CARD_SIZE.x * 5.0 + COLOUR_CARD_GAP * 4.0
-const COLOUR_EDGE_FADE_WIDTH := COLOUR_CARD_SIZE.x * 0.10
+const COLOUR_EDGE_FADE_WIDTH := COLOUR_CARD_SIZE.x * 0.33
 const COLOUR_STRIDE := COLOUR_CARD_SIZE.x + COLOUR_CARD_GAP
 const COLOUR_TEXT_SIZE := UiKit.H3 ## Uniform across the colour deck.
 const ACTION_SIZE := Vector2(160, 52)
@@ -58,7 +58,46 @@ const SLIDE_TIME := 0.16 ## Long enough to see which way the deck moved, short e
 const COLOUR_CONFIRM_TIME := 0.32
 const DRAG_START_DISTANCE := 8.0
 const SWIPE_TRIGGER := 34.0
-const EDGE_FADE_ALPHA := 0.22 ## Subtle enough that the peeking cards still look selectable.
+## The edge treatment: each card fades its own alpha out as it reaches the edge of the
+## window.
+##
+## Two earlier versions of this were wrong in instructive ways.
+##
+## A dark gradient laid over the outer cards read as a smudge, because darkening is the
+## wrong operation here - these cards are DARKER than the lab behind them, a #16233a face
+## against a backdrop nearer #343840, so adding black to a card's edge makes it stand out
+## like a drop shadow instead of receding. No width or opacity fixes that; widening it only
+## makes a bigger smudge. Fading alpha is what actually recedes, whatever is behind.
+##
+## Compositing the row through a CanvasGroup and fading that in one pass is the tidier way
+## to reach alpha, and it does not work here: the group drew as a flat white block with the
+## ramp correctly applied to it, children and all. So the fade lives on each card instead,
+## where COLOR is simply that card's own stylebox and text and multiplying its alpha does
+## exactly what it says.
+##
+## The ramp is measured in the VIEWPORT's coordinates, not the card's, which is the whole
+## reason for the card_origin uniform: the fade has to stay welded to the edge of the
+## window while the cards slide underneath it, rather than travelling with any one card.
+const EDGE_FADE_SHADER := """
+shader_type canvas_item;
+
+uniform float viewport_width = 592.0;
+uniform float fade_width = 37.0;
+uniform float card_origin = 0.0;
+
+varying float local_x;
+
+void vertex() {
+	local_x = VERTEX.x;
+}
+
+void fragment() {
+	float span = max(fade_width, 0.001);
+	float x = card_origin + local_x;
+	float inner = min(x / span, (viewport_width - x) / span);
+	COLOR.a *= smoothstep(0.0, 1.0, clamp(inner, 0.0, 1.0));
+}
+"""
 
 var _view := View.CATEGORY
 var _index := 0 ## Which slot the carousel is centred on.
@@ -78,8 +117,7 @@ var _prev_card: Button = null
 var _main_host: Control = null ## Fixed layout cell; only its child slides.
 var _main_card: HBoxContainer = null
 var _category_base_x := 0.0
-var _category_left_fade: TextureRect = null
-var _category_right_fade: TextureRect = null
+var _category_fade_width := WORD_EDGE_FADE_WIDTH
 var _word_cards: Array[Button] = []
 var _word_track_cards := {} ## Relative slot (-4..4) -> Button; five are visible at rest.
 var _next_card: Button = null
@@ -97,8 +135,7 @@ var _colour_far_next: Button = null
 var _colour_host: Control = null
 var _colour_track: HBoxContainer = null
 var _colour_base_x := 0.0
-var _colour_left_fade: TextureRect = null
-var _colour_right_fade: TextureRect = null
+var _colour_fade_width := COLOUR_EDGE_FADE_WIDTH
 var _colour_track_cards := {} ## Relative colour offset (-4..4) -> Button.
 var _colour_feedback: Label = null
 var _colour_cancel: Button = null
@@ -111,6 +148,10 @@ var _drag_start_x := 0.0
 var _drag_offset := 0.0
 var _drag_view := View.CATEGORY
 var _drag_pointer := -2 ## -1 mouse; non-negative values are touch indices.
+
+
+func _process(_delta: float) -> void:
+	_sync_edge_fades()
 
 
 func _ready() -> void:
@@ -196,6 +237,7 @@ func _build_category_view(page: VBoxContainer) -> void:
 			card = _side_card(offset)
 			if absi(offset) > 2:
 				card.focus_mode = Control.FOCUS_NONE
+		card.material = _fade_material(WORD_VIEWPORT_WIDTH)
 		_word_track_cards[offset] = card
 		_main_card.add_child(card)
 	_far_prev_card = _word_track_cards[-2]
@@ -204,11 +246,6 @@ func _build_category_view(page: VBoxContainer) -> void:
 	_far_next_card = _word_track_cards[2]
 	_category_base_x = -WORD_STRIDE * 2.0
 	_main_card.position = Vector2(_category_base_x, 0.0)
-	_category_left_fade = _edge_fade(false, WORD_EDGE_FADE_WIDTH)
-	_main_host.add_child(_category_left_fade)
-	_category_right_fade = _edge_fade(true, WORD_EDGE_FADE_WIDTH)
-	_main_host.add_child(_category_right_fade)
-
 	row.add_child(_carousel_gap(CAROUSEL_ARROW_GAP))
 	_right_arrow = _arrow(">", 1)
 	row.add_child(_right_arrow)
@@ -243,31 +280,47 @@ func _carousel_gap(width: float) -> Control:
 	return gap
 
 
-func _edge_fade(right_edge: bool, width: float) -> TextureRect:
-	var gradient := Gradient.new()
-	var shade := Color(0.02, 0.035, 0.06, EDGE_FADE_ALPHA)
-	gradient.offsets = PackedFloat32Array([0.0, 1.0])
-	gradient.colors = PackedColorArray(
-		[Color.TRANSPARENT, shade] if right_edge else [shade, Color.TRANSPARENT])
-	var texture := GradientTexture2D.new()
-	texture.gradient = gradient
-	texture.width = 64
-	texture.height = 1
-	texture.fill_from = Vector2.ZERO
-	texture.fill_to = Vector2.RIGHT
-	var fade := TextureRect.new()
-	fade.name = "RightEdgeFade" if right_edge else "LeftEdgeFade"
-	fade.texture = texture
-	fade.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	fade.stretch_mode = TextureRect.STRETCH_SCALE
-	fade.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	fade.anchor_left = 1.0 if right_edge else 0.0
-	fade.anchor_right = 1.0 if right_edge else 0.0
-	fade.anchor_top = 0.0
-	fade.anchor_bottom = 1.0
-	fade.offset_left = -width if right_edge else 0.0
-	fade.offset_right = 0.0 if right_edge else width
-	return fade
+## Holds the sliding track and fades whatever reaches the edge of the window. Sits at the
+## viewport's origin and never moves, so the ramp measures from the edge the player sees
+## rather than from the track, which is under it and travelling.
+## One Shader compiled once and shared; every card gets its own ShaderMaterial pointing at
+## it, because card_origin differs per card.
+static var _fade_shader: Shader = null
+
+
+func _fade_material(viewport_width: float) -> ShaderMaterial:
+	if _fade_shader == null:
+		_fade_shader = Shader.new()
+		_fade_shader.code = EDGE_FADE_SHADER
+	var material := ShaderMaterial.new()
+	material.shader = _fade_shader
+	material.set_shader_parameter("viewport_width", viewport_width)
+	material.set_shader_parameter("fade_width", 0.0)
+	material.set_shader_parameter("card_origin", 0.0)
+	return material
+
+
+## Tell every card where it currently sits inside its window, so the ramp stays put while
+## the track slides. Runs every frame because the slide is a tween on the track's position
+## and there is no cheaper moment that catches every value it passes through.
+func _sync_edge_fades() -> void:
+	_sync_track_fade(_main_card, _word_track_cards, _category_fade_width)
+	_sync_track_fade(_colour_track, _colour_track_cards, _colour_fade_width)
+
+
+func _sync_track_fade(track: Control, cards: Dictionary, width: float) -> void:
+	if track == null:
+		return
+	var base := track.position.x
+	for offset in cards:
+		var card := cards[offset] as Control
+		if card == null:
+			continue
+		var material := card.material as ShaderMaterial
+		if material == null:
+			continue
+		material.set_shader_parameter("card_origin", base + card.position.x)
+		material.set_shader_parameter("fade_width", width)
 
 
 ## A Button, exactly like the middle one. It used to be a panel wrapping a label, which
@@ -410,6 +463,7 @@ func _build_colour_view(page: VBoxContainer) -> void:
 			card.pressed.connect(_select_visible_colour.bind(offset))
 			if absi(offset) > 2:
 				card.focus_mode = Control.FOCUS_NONE
+		card.material = _fade_material(COLOUR_VIEWPORT_WIDTH)
 		_colour_track_cards[offset] = card
 		_colour_track.add_child(card)
 	_colour_far_prev = _colour_track_cards[-2]
@@ -419,11 +473,6 @@ func _build_colour_view(page: VBoxContainer) -> void:
 	_colour_far_next = _colour_track_cards[2]
 	_colour_base_x = -COLOUR_STRIDE * 2.0
 	_colour_track.position = Vector2(_colour_base_x, 0.0)
-	_colour_left_fade = _edge_fade(false, COLOUR_EDGE_FADE_WIDTH)
-	_colour_host.add_child(_colour_left_fade)
-	_colour_right_fade = _edge_fade(true, COLOUR_EDGE_FADE_WIDTH)
-	_colour_host.add_child(_colour_right_fade)
-
 	row.add_child(_colour_gap(COLOUR_ARROW_GAP))
 	var right := UiKit.button(">", COLOUR_ARROW_FONT)
 	right.custom_minimum_size = Vector2(ARROW_SIZE, ARROW_SIZE)
@@ -550,10 +599,7 @@ func _sync_colour() -> void:
 	if _colour_track != null:
 		_colour_track.position.x = _colour_base_x
 	var show_peeks := colours.size() >= 2
-	if _colour_left_fade != null:
-		_colour_left_fade.visible = show_peeks
-	if _colour_right_fade != null:
-		_colour_right_fade.visible = show_peeks
+	_colour_fade_width = COLOUR_EDGE_FADE_WIDTH if show_peeks else 0.0
 
 
 ## The swatch wears the colour it names, so the word and the thing agree even for a
@@ -938,10 +984,7 @@ func _refresh() -> void:
 	_left_arrow.disabled = _locked or single or not _restriction.is_empty()
 	_right_arrow.disabled = _left_arrow.disabled
 	_main_card.position.x = _category_base_x
-	if _category_left_fade != null:
-		_category_left_fade.visible = not single
-	if _category_right_fade != null:
-		_category_right_fade.visible = not single
+	_category_fade_width = 0.0 if single else WORD_EDGE_FADE_WIDTH
 
 	if _status != null:
 		if _locked:

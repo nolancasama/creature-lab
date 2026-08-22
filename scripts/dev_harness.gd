@@ -1548,9 +1548,9 @@ static func _carousel_checks(failures: Array[String], main: Node) -> void:
 		/ DescriptorCarousel.WORD_CARD_SIZE.x
 	var colour_clear_ratio := 1.0 - DescriptorCarousel.COLOUR_EDGE_FADE_WIDTH \
 		/ DescriptorCarousel.COLOUR_CARD_SIZE.x
-	_check(failures, is_equal_approx(word_clear_ratio, 0.90)
-		and is_equal_approx(colour_clear_ratio, 0.90),
-		"carousel: outer cards do not retain the requested 90%% clear area")
+	_check(failures, is_equal_approx(word_clear_ratio, 0.67)
+		and is_equal_approx(colour_clear_ratio, 0.67),
+		"carousel: outer cards do not retain the requested 67%% clear area")
 	_check(failures, is_equal_approx(DescriptorCarousel.WORD_VIEWPORT_WIDTH,
 		DescriptorCarousel.WORD_CARD_SIZE.x * 5.0 + DescriptorCarousel.WORD_GAP * 4.0)
 		and is_equal_approx(DescriptorCarousel.COLOUR_VIEWPORT_WIDTH,
@@ -1560,9 +1560,37 @@ static func _carousel_checks(failures: Array[String], main: Node) -> void:
 	_check(failures, car._word_track_cards.size() == 9
 		and car._colour_track_cards.size() == 9,
 		"carousel: sliding buffers cannot cover a two-card snap")
-	_check(failures, car._category_left_fade != null and car._category_right_fade != null
-		and car._colour_left_fade != null and car._colour_right_fade != null,
-		"carousel: two-sided edge fades are missing")
+	# The fade has to reduce alpha, not paint a dark gradient over the cards: these cards are
+	# darker than the lab behind them, so adding black to an edge reads as a drop shadow
+	# rather than a fade. And the ramp is anchored to the window, not to any card, so it must
+	# be fed each card's live position - a fade that travels with a card is not an edge.
+	# _process drives this in game; call it directly so the check does not depend on whether a
+	# frame happened to run between building the deck and looking at it.
+	_check(failures, car.is_processing(),
+		"carousel: nothing updates the edge fade as the track slides")
+	car._sync_edge_fades()
+	for deck in [[car._word_track_cards, DescriptorCarousel.WORD_VIEWPORT_WIDTH,
+			DescriptorCarousel.WORD_EDGE_FADE_WIDTH, car._main_card],
+			[car._colour_track_cards, DescriptorCarousel.COLOUR_VIEWPORT_WIDTH,
+			DescriptorCarousel.COLOUR_EDGE_FADE_WIDTH, car._colour_track]]:
+		var cards: Dictionary = deck[0]
+		var track := deck[3] as Control
+		for offset in cards:
+			var card := cards[offset] as Control
+			var material := card.material as ShaderMaterial if card != null else null
+			_check(failures, material != null,
+				"carousel: a card has no edge-fade material, so it cannot fade at the edge")
+			if material == null:
+				break
+			_check(failures, is_equal_approx(
+				float(material.get_shader_parameter("viewport_width")), float(deck[1])),
+				"carousel: a card fades against the wrong window width")
+			_check(failures, is_equal_approx(
+				float(material.get_shader_parameter("card_origin")),
+				track.position.x + card.position.x),
+				"carousel: a card's fade is not tracking its live position")
+		_check(failures, float(deck[2]) > 0.0,
+			"carousel: the edge fade has no width")
 	_check(failures, absf(car._main_card.position.x - car._category_base_x) \
 		<= DescriptorCarousel.WORD_STRIDE + 0.01,
 		"carousel: slide escaped the clipped word track")
