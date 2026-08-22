@@ -9,10 +9,41 @@ extends Node3D
 
 signal clicked(brain: CreatureBrain)
 
-enum State { IDLE, WALK, OBSERVE, TRAIT_ACTION, INTERACT }
+enum State { IDLE, WALK, RUN, OBSERVE, TRAIT_ACTION, INTERACT }
+
+## How each species divides its time, roughly. Not rolled per frame: a state is chosen, then
+## committed to for a duration or until its destination is reached. The whole point is that
+## the yard should read as calm and alive rather than as seven animals pacing in circles.
+const TENDENCY := {
+	"dog": {"idle": 0.30, "walk": 0.55, "run": 0.15},
+	"cat": {"idle": 0.45, "walk": 0.45, "run": 0.10},
+	"deer": {"idle": 0.30, "walk": 0.55, "run": 0.15},
+	"horse": {"idle": 0.25, "walk": 0.60, "run": 0.15},
+	"chicken": {"idle": 0.30, "walk": 0.60, "run": 0.10},
+	"penguin": {"idle": 0.40, "walk": 0.55, "run": 0.05},
+	"tiger": {"idle": 0.55, "walk": 0.40, "run": 0.05},
+}
+const DEFAULT_TENDENCY := {"idle": 0.35, "walk": 0.55, "run": 0.10}
+## Species that settle rather than fidget. Their idles run half again as long.
+const LINGERERS := ["tiger", "cat", "penguin"]
+## Species happy to keep walking once they have started.
+const RAMBLERS := ["horse", "deer", "chicken", "dog"]
+const IDLE_TIME := Vector2(2.0, 7.0)
+const LONG_IDLE_TIME := Vector2(8.0, 12.0)
+const LONG_IDLE_CHANCE := 0.22 ## Occasionally settle properly rather than pausing.
+const WALK_TIME := Vector2(4.0, 10.0)
+const RAMBLE_BONUS := 4.0 ## Extra seconds a rambler may keep walking for.
+const RUN_TIME := Vector2(1.5, 4.0)
+## After a run, no more running for this long. Without it a creature ping-pongs
+## walk-run-walk-run, which reads as a glitch rather than as a burst of energy.
+const RUN_COOLDOWN := Vector2(9.0, 18.0)
+const RUN_SPEED := 2.4 ## Multiplier on walk_speed. The animator matches the clip to it.
+## Runs end in a walk, not a stop. An animal that sprints and then freezes looks switched
+## off; one that slows to a walk looks like it finished doing something.
+const WALK_AFTER_RUN := 0.82
 
 ## Usable grass inside the rectangular fence (ZooScene.YARD minus its inner margin).
-const YARD_HALF_EXTENTS := Vector2(12.0, 8.0)
+const YARD_HALF_EXTENTS := Vector2(17.0, 11.3)
 const ARRIVE_DISTANCE := 0.35
 const NEIGHBOUR_GAP := 0.32
 const SEPARATION_RANGE := 1.35
@@ -30,6 +61,9 @@ var _action_word := ""
 var _area: Area3D = null
 var _focused := false
 var _spacing_radius := 1.0
+var _base_speed := 1.2 ## Before the run multiplier and this individual's own variation.
+var _run_block := 0.0 ## Seconds until this creature may run again.
+var _pace := 1.0 ## Per-creature timing variation, so two dogs never move in lockstep.
 
 
 static func create(state: CreatureState, spawn: Vector3) -> CreatureBrain:
@@ -73,8 +107,25 @@ func _ready() -> void:
 		return
 	add_child(rig)
 
+	# The authored idle, walk and run clips, which exist only out here. Everywhere else an
+	# animal is a specimen being measured and stretched, and a breathing idle would move the
+	# feet the stance solver is trying to place.
+	rig.enable_authored_animation()
+
 	var def := Content.animal(state_data.animal_id)
-	_speed = def.walk_speed * _trait_speed_scale()
+	# The animation sets the pace, not the other way round - see natural_speed(). Falls back
+	# to the authored walk_speed for anything without clips.
+	var clip_speed := rig.animator.natural_speed() if rig.animator != null else 0.0
+	_base_speed = (clip_speed if clip_speed > 0.01 else def.walk_speed) * _trait_speed_scale()
+	# Individual variation, so two dogs in the same yard never pace in step: each creature
+	# gets its own slightly different sense of time and its own slightly different speed.
+	# Seeded from the creature's fingerprint, so it is stable across a reload.
+	_pace = _rng.randf_range(0.82, 1.22)
+	_base_speed *= _rng.randf_range(0.9, 1.12)
+	_speed = _base_speed
+	# Stagger the first decision too. Without this every resident spawns into idle on the
+	# same frame and the whole yard starts walking at once.
+	_run_block = _rng.randf_range(0.0, RUN_COOLDOWN.x)
 	_hover = def.hover
 	_spacing_radius = spacing_radius_for(state_data)
 	_spacing_radius = maxf(_spacing_radius, rig.horizontal_footprint_radius())
@@ -152,8 +203,9 @@ func _physics_process(delta: float) -> void:
 	if _focused:
 		return
 	_timer -= delta
+	_run_block = maxf(_run_block - delta, 0.0)
 	match _state:
-		State.WALK:
+		State.WALK, State.RUN:
 			_walk(delta)
 		State.OBSERVE:
 			rotation.y += delta * 0.6
@@ -165,7 +217,11 @@ func _walk(delta: float) -> void:
 	var flat_target := Vector3(_target.x, position.y, _target.z)
 	var to_target := flat_target - position
 	if to_target.length() < ARRIVE_DISTANCE:
-		_enter(State.IDLE)
+		# Arrived. Stand here and look at things for a while; do NOT immediately pick
+		# somewhere else to be. A run that reaches its destination hands over to a walk
+		# first, for the same reason it does when it times out.
+		_enter(State.WALK if _state == State.RUN and _rng.randf() < WALK_AFTER_RUN \
+			else State.IDLE)
 		return
 	var direction := to_target.normalized()
 	var separation := _neighbour_separation()
@@ -184,30 +240,77 @@ func _walk(delta: float) -> void:
 	position.y = _hover * (0.6 + sin(Time.get_ticks_msec() * 0.002) * 0.12)
 
 
+## Pick what to do next, weighted by species and constrained by what just happened.
+##
+## Two rules shape this more than the weights do. A run may only follow a walk - an animal
+## that bolts from standing looks startled, and nothing startles it here. And a run is
+## followed by a walk almost always, so the burst tails off instead of stopping dead.
 func _choose_next() -> void:
-	var roll := _rng.randf()
-	if roll < 0.42:
+	if _state == State.RUN:
+		_enter(State.WALK if _rng.randf() < WALK_AFTER_RUN else State.IDLE)
+		return
+
+	var weights: Dictionary = TENDENCY.get(_animal_id(), DEFAULT_TENDENCY)
+	var idle_weight := float(weights.get("idle", 0.35))
+	var walk_weight := float(weights.get("walk", 0.55))
+	var run_weight := float(weights.get("run", 0.10))
+	# Running is only reachable from a walk, and only once the last one has worn off.
+	if _state != State.WALK or _run_block > 0.0:
+		walk_weight += run_weight
+		run_weight = 0.0
+
+	var roll := _rng.randf() * (idle_weight + walk_weight + run_weight)
+	if roll < run_weight:
+		_enter(State.RUN)
+		return
+	roll -= run_weight
+	if roll < walk_weight:
 		_enter(State.WALK)
-	elif roll < 0.6:
-		_enter(State.OBSERVE)
-	elif roll < 0.78:
-		_enter(State.TRAIT_ACTION)
-	elif roll < 0.88:
-		_enter(State.INTERACT)
-	else:
+		return
+	# The idle share, spent standing still - but not always doing nothing. Observing, a
+	# trait flourish and greeting a neighbour are all things done from a standstill, so
+	# they come out of this budget rather than competing with it.
+	var flavour := _rng.randf()
+	if flavour < 0.62:
 		_enter(State.IDLE)
+	elif flavour < 0.78:
+		_enter(State.OBSERVE)
+	elif flavour < 0.92:
+		_enter(State.TRAIT_ACTION)
+	else:
+		_enter(State.INTERACT)
+
+
+func _animal_id() -> String:
+	return str(state_data.animal_id) if state_data != null else ""
 
 
 func _enter(next: State) -> void:
 	_state = next
+	var travelling := next == State.WALK or next == State.RUN
 	if rig != null:
-		rig.moving = next == State.WALK
+		rig.moving = travelling
+		rig.motion_state = "run" if next == State.RUN \
+			else ("walk" if next == State.WALK else "idle")
+	_speed = _base_speed * (RUN_SPEED if next == State.RUN else 1.0)
 	match next:
 		State.IDLE:
-			_timer = _rng.randf_range(1.2, 3.4)
+			# Occasionally settle properly instead of just pausing, and let the animals that
+			# should look unhurried hold it longer.
+			var span: Vector2 = LONG_IDLE_TIME if _rng.randf() < LONG_IDLE_CHANCE \
+				else IDLE_TIME
+			_timer = _rng.randf_range(span.x, span.y) * _pace
+			if _animal_id() in LINGERERS:
+				_timer *= 1.5
 		State.WALK:
-			_target = _random_point()
-			_timer = _rng.randf_range(3.0, 6.5)
+			# A destination is chosen once, here, and kept until it is reached. Picking a new
+			# one mid-walk is what makes a creature wander aimlessly on the spot.
+			_target = _reachable_point()
+			var walk_span := WALK_TIME.y + (RAMBLE_BONUS if _animal_id() in RAMBLERS else 0.0)
+			_timer = _rng.randf_range(WALK_TIME.x, walk_span) * _pace
+		State.RUN:
+			_timer = _rng.randf_range(RUN_TIME.x, RUN_TIME.y) * _pace
+			_run_block = _rng.randf_range(RUN_COOLDOWN.x, RUN_COOLDOWN.y)
 		State.OBSERVE:
 			_timer = _rng.randf_range(1.5, 3.0)
 		State.TRAIT_ACTION:
@@ -216,6 +319,24 @@ func _enter(next: State) -> void:
 		State.INTERACT:
 			_timer = 2.0
 			_greet_neighbour()
+
+
+## Somewhere this animal can plausibly get to, not just anywhere in the yard.
+##
+## The yard is large and these walks are short and slow, so a destination chosen uniformly
+## across the grass is one the creature will almost never reach - it walks for its allotted
+## few seconds, stops a fifth of the way there, and the arrival behaviour never happens.
+## Picking within reach of one walk means animals actually arrive somewhere and settle,
+## which is the whole shape the behaviour brief asks for.
+func _reachable_point() -> Vector3:
+	var reach: float = _base_speed * WALK_TIME.y * _pace
+	var angle := _rng.randf_range(0.0, TAU)
+	var distance := _rng.randf_range(reach * 0.35, reach)
+	var wanted := position + Vector3(cos(angle), 0.0, sin(angle)) * distance
+	var x_limit := maxf(YARD_HALF_EXTENTS.x - _spacing_radius, 1.0)
+	var z_limit := maxf(YARD_HALF_EXTENTS.y - _spacing_radius, 1.0)
+	return Vector3(clampf(wanted.x, -x_limit, x_limit), position.y,
+		clampf(wanted.z, -z_limit, z_limit))
 
 
 func _random_point() -> Vector3:

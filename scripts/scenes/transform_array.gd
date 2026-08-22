@@ -141,9 +141,13 @@ func _build_prongs() -> void:
 		var angle := TAU * float(i) / float(PRONG_COUNT)
 		var out := Vector3(cos(angle), 0.0, sin(angle))
 		var arm := MeshInstance3D.new()
+		# Cones, not cylinders: a zero bottom radius tapers each prong to a point, and the
+		# arms are already pitched outward and down, so every point ends up aimed at the
+		# animal on the platform below. Wider at the hub than the old cylinder was, so the
+		# taper is a shape rather than a slight narrowing.
 		var mesh := CylinderMesh.new()
-		mesh.top_radius = 0.09
-		mesh.bottom_radius = 0.06
+		mesh.top_radius = 0.13
+		mesh.bottom_radius = 0.0
 		mesh.height = PRONG_REACH
 		arm.mesh = mesh
 		arm.material_override = _metal(Color("#33465f"))

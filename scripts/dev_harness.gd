@@ -629,10 +629,17 @@ static func _gaittest(main: Node) -> void:
 		var carrier := Node3D.new() ## Stands in for the zoo brain that normally moves a rig.
 		main.add_child(carrier)
 		carrier.add_child(rig)
+		# The authored clips, the way the zoo runs them. An imported walk cycle skates just
+		# as badly as a hand-written one if it is played at its own rate while the body
+		# travels at a different speed - the whole reason CreatureAnimator measures the
+		# clip's stride - so it has to face the same measurement.
 		rig.moving = true
+		# The speed the zoo actually walks this animal at: its clip's own pace, not the
+		# authored walk_speed number, which the clips turned out to disagree with.
 		var speed: float = def.walk_speed
 		var contacts: Dictionary = rig.gait.contact_bones()
 		print("[gaittest] %s speed %.2f %s" % [def.id, speed, rig.gait.describe()])
+
 		var samples: Array[Dictionary] = []
 		# Long enough to cover several strides whatever the species cadence.
 		for frame in 700:

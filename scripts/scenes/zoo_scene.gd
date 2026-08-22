@@ -9,7 +9,11 @@ const INFO_VIEWPORT_MARGIN := 48.0
 
 ## Half-extents of the yard, X by Z. A rectangle rather than a disc: a zoo enclosure is a
 ## fenced field, and a round one with no corners read as an arena.
-const YARD := Vector2(13.0, 9.0)
+## Half-extents, so the yard is twice these across. Doubled in AREA from 13x9: each side
+## carries a factor of root two, which is what doubling an area costs. Doubling each side
+## instead would have quadrupled it, and seven animals in four times the grass reads as an
+## empty field rather than a bigger zoo.
+const YARD := Vector2(18.4, 12.7)
 const FENCE_MARGIN := 1.0 ## How far the fence stands outside the grass.
 const POST_SPACING := 1.7
 const RAIL_HEIGHTS := [0.42, 0.82]
@@ -23,7 +27,7 @@ const PINCH_ZOOM_SCALE := 0.018
 var _camera: Camera3D = null
 var _yaw := 0.4
 var _pitch := 0.42
-var _distance := 24.0 ## Far enough back that the whole rectangle is in frame at rest.
+var _distance := 34.0 ## Far enough back that the whole rectangle is in frame at rest.
 var _camera_target := YARD_CAMERA_TARGET
 var _dragging := false
 var _info: PanelContainer = null
@@ -31,7 +35,7 @@ var _info_body: VBoxContainer = null
 var _hint: Label = null
 var _creatures: Node3D = null
 var _focused_brain: CreatureBrain = null
-var _distance_before_focus := 24.0
+var _distance_before_focus := 34.0
 var _touch_points := {}
 var _pinching := false
 var _pinch_distance := 0.0
@@ -66,7 +70,7 @@ func _build_stage() -> void:
 	_creatures.name = "Creatures"
 	add_child(_creatures)
 
-	_camera = StageKit.camera(Vector3(0, 8, 17), Vector3.ZERO, 55.0)
+	_camera = StageKit.camera(Vector3(0, 11, 24), Vector3.ZERO, 55.0)
 	add_child(_camera)
 	_update_camera()
 

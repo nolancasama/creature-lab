@@ -927,6 +927,13 @@ func _build_rig(animal_id: String) -> void:
 	_rig_animal = animal_id
 	if _rig != null:
 		_preview_root.add_child(_rig)
+		# The authored idle, so the animal on the platform breathes and looks around instead
+		# of standing frozen while the student decides. Only on this screen and in the zoo:
+		# the recording and transformation screens measure this creature's height and solve
+		# its stance against the platform, and an idle that moves its feet moves the thing
+		# they are solving for.
+		_rig.enable_authored_animation()
+		_rig.motion_state = "idle" 
 
 
 func _is_deform_category(category: String) -> bool:

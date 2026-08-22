@@ -80,7 +80,26 @@ var deformer: CreatureDeformer = null ## Body length and per-leg lengths.
 var muscle: MuscleDeformer = null ## STRONG/WEAK one-for-one forelimb morphs.
 var feel: FeelDeformer = null ## HARD/SOFT shine, puff, squash and jiggle.
 var pace: PaceDeformer = null ## FAST/SLOW dashes, twitches and drawn-out actions.
-var gait: Gait = null ## The species walk cycle.
+var gait: Gait = null ## The procedural walk, used when a species has no authored clips.
+var animator: CreatureAnimator = null ## The authored walk and idle. Zoo only - see below.
+## Which authored clip the zoo brain wants: "idle", "walk" or "run". Ignored everywhere the
+## animator is not enabled.
+var motion_state := "idle"
+
+
+## Hand this creature over to the authored clips. Called by the zoo brain and nowhere else.
+##
+## Deliberately opt-in rather than automatic. Everywhere except the zoo, the animal is a
+## specimen on a platform: the stance solver puts its feet exactly on the plane, the trait
+## system stretches it from a known rest pose, and the transformation measures its height to
+## decide where to hang the machine. An idle clip breathing underneath all of that moves the
+## feet it is trying to solve for - it cost 23 grounding failures the first time this was
+## wired in unconditionally. The zoo has no such requirements: nothing measures a resident,
+## it just has to look alive.
+func enable_authored_animation() -> void:
+	if animator != null or definition == null:
+		return
+	animator = CreatureAnimator.new(self, definition)
 
 ## Written by Gait each frame and read below when the body transform is assembled. Kept as
 ## fields rather than returned, because the body transform is the sum of six contributors
@@ -1213,7 +1232,15 @@ func _process(delta: float) -> void:
 	# The walk runs before the body transform is assembled, because it contributes to it:
 	# the bob, roll and pitch of a walking animal belong in the same sum as the breathing
 	# lift and the shiver, not layered on top afterwards where they would fight.
-	if gait != null:
+	if animator != null and animator.active():
+		# Authored clips pose the whole body themselves, so the procedural bob, roll and
+		# pitch are left at zero rather than added on top of motion that already has them.
+		animator.tick(delta, global_position,
+			"idle" if movement_locked else motion_state)
+		gait_body_offset = Vector3.ZERO
+		gait_body_roll = 0.0
+		gait_body_pitch = 0.0
+	elif gait != null:
 		gait.tick(delta, global_position, moving and not movement_locked, motion)
 	body.position = offset + shiver_offset + gait_body_offset + Vector3(0.0, lift
 		+ sin(_clock * 1.1) * 0.05 * definition.hover, 0.0)
