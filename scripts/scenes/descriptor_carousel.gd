@@ -35,13 +35,14 @@ enum ColourStep { BEFORE, AFTER }
 ## arrow + side + main + side + arrow plus four gaps. Keep the total within the fixed
 ## selection console or the far arrow lands outside it, which is exactly how the first
 ## build shipped its right arrow off the edge.
-## One card per adjective. Every card in the deck is this size, middle one included - there
-## is no separate side-card size, because there is no separate side card. A larger centre card says
-## "this is the selection" - but any visible word can be tapped, so there is no selection
-## to point at, and the odd one out only made the row read as a scroller.
+## Every adjective card keeps the established size. The clipped track exposes only a small
+## part of each neighbour, while the focused card remains centred and full size.
 const WORD_CARD_SIZE := Vector2(112, 78)
 const WORD_TEXT_SIZE := UiKit.BODY ## Uniform across the deck, and big enough to read.
 const WORD_GAP := 8
+const WORD_PEEK := 24.0 ## 21% of a neighbouring word card remains visible at each edge.
+const WORD_VIEWPORT_WIDTH := WORD_CARD_SIZE.x + WORD_GAP * 2.0 + WORD_PEEK * 2.0
+const WORD_STRIDE := WORD_CARD_SIZE.x + WORD_GAP
 const ARROW_SIZE := 55 ## 25% larger than the former 44px chevron controls.
 const CATEGORY_ARROW_FONT := 38 ## 25% larger than the former 30px glyphs.
 const COLOUR_ARROW_FONT := 28 ## 25% larger than the former 22px glyphs.
@@ -49,14 +50,21 @@ const CAROUSEL_GAP := 8
 const CAROUSEL_ARROW_GAP := 24 ## Three times the word-to-word gap, only beside the chevrons.
 const COLOUR_CARD_GAP := 10
 const COLOUR_ARROW_GAP := 30 ## Triple the card gap so the chevrons read as navigation.
-## One size for every visible colour card, centre included, for the same reason the word
-## deck has one: all five can be tapped, so a bigger middle swatch pointed at a selection
-## that does not exist. Five cards, their gaps and the chevrons fit the fixed console.
+## Every colour card keeps the established size; the viewport, rather than smaller cards,
+## creates the two neighbouring peeks.
 const COLOUR_CARD_SIZE := Vector2(108, 86)
+const COLOUR_PEEK := 22.0 ## 20% of each neighbouring colour card.
+const COLOUR_VIEWPORT_WIDTH := COLOUR_CARD_SIZE.x + COLOUR_CARD_GAP * 2.0 \
+	+ COLOUR_PEEK * 2.0
+const COLOUR_STRIDE := COLOUR_CARD_SIZE.x + COLOUR_CARD_GAP
 const COLOUR_TEXT_SIZE := UiKit.H3 ## Uniform across the colour deck.
 const ACTION_SIZE := Vector2(160, 52)
 const SLIDE_TIME := 0.16 ## Long enough to see which way the deck moved, short enough to spam.
 const COLOUR_CONFIRM_TIME := 0.32
+const DRAG_START_DISTANCE := 8.0
+const SWIPE_TRIGGER := 34.0
+const EDGE_FADE_WIDTH := 34.0
+const EDGE_FADE_ALPHA := 0.22 ## Subtle enough that the peeking cards still look selectable.
 
 var _view := View.CATEGORY
 var _index := 0 ## Which slot the carousel is centred on.
@@ -75,6 +83,9 @@ var _far_prev_card: Button = null
 var _prev_card: Button = null
 var _main_host: Control = null ## Fixed layout cell; only its child slides.
 var _main_card: HBoxContainer = null
+var _category_base_x := 0.0
+var _category_left_fade: TextureRect = null
+var _category_right_fade: TextureRect = null
 var _word_cards: Array[Button] = []
 var _next_card: Button = null
 var _far_next_card: Button = null
@@ -88,11 +99,22 @@ var _colour_prev: Button = null
 var _colour_swatch: Button = null
 var _colour_next: Button = null
 var _colour_far_next: Button = null
+var _colour_host: Control = null
+var _colour_track: HBoxContainer = null
+var _colour_base_x := 0.0
+var _colour_left_fade: TextureRect = null
+var _colour_right_fade: TextureRect = null
 var _colour_feedback: Label = null
 var _colour_cancel: Button = null
 var _colour_committing := false
 var _reference: Window = null
 var _slide: Tween = null
+var _drag_candidate := false
+var _dragging := false
+var _drag_start_x := 0.0
+var _drag_offset := 0.0
+var _drag_view := View.CATEGORY
+var _drag_pointer := -2 ## -1 mouse; non-negative values are touch indices.
 
 
 func _ready() -> void:
@@ -150,34 +172,26 @@ func _build_category_view(page: VBoxContainer) -> void:
 	row.add_child(_left_arrow)
 	row.add_child(_carousel_gap(CAROUSEL_ARROW_GAP))
 
-	_far_prev_card = _side_card(-2)
-	row.add_child(_far_prev_card)
-	row.add_child(_carousel_gap(CAROUSEL_GAP))
-
-	_prev_card = _side_card(-1)
-	row.add_child(_prev_card)
-	row.add_child(_carousel_gap(CAROUSEL_GAP))
-
-	# The row's Container must own a fixed cell, not the card that animates. Moving a
-	# Container-managed child by setting position.x corrupts its layout offsets: after the
-	# first click the pair was pulled toward x=0 and overlapped one chevron. The host never
-	# moves; the card slides locally inside it and is clipped at the cell edges.
+	# One clipped viewport contains five full-size cards. At rest, only the centre card and
+	# about one fifth of its immediate neighbours are visible; the far pair exists just
+	# beyond the mask so a drag can reveal continuous content instead of an empty edge.
 	_main_host = Control.new()
-	_main_host.name = "MainCardHost"
-	# Kept at the old two-card width so the console's centre column did not narrow when the
-	# deck went to one word at a time - the surrounding layout is fixed, and a card that
-	# suddenly occupied half of it would leave the row looking unbalanced.
-	_main_host.custom_minimum_size = WORD_CARD_SIZE
+	_main_host.name = "WordCarouselViewport"
+	_main_host.custom_minimum_size = Vector2(WORD_VIEWPORT_WIDTH, WORD_CARD_SIZE.y)
 	_main_host.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_main_host.clip_contents = true
 	row.add_child(_main_host)
-	row.add_child(_carousel_gap(CAROUSEL_GAP))
 
 	_main_card = UiKit.hbox(WORD_GAP)
 	_main_card.name = "SlidingWordCards"
-	_main_card.alignment = BoxContainer.ALIGNMENT_CENTER
+	_main_card.custom_minimum_size = Vector2(WORD_CARD_SIZE.x * 5.0 + WORD_GAP * 4.0,
+		WORD_CARD_SIZE.y)
 	_main_host.add_child(_main_card)
-	_main_card.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_far_prev_card = _side_card(-2)
+	_far_prev_card.focus_mode = Control.FOCUS_NONE
+	_main_card.add_child(_far_prev_card)
+	_prev_card = _side_card(-1)
+	_main_card.add_child(_prev_card)
 	var word_card := Button.new()
 	word_card.custom_minimum_size = WORD_CARD_SIZE
 	word_card.focus_mode = Control.FOCUS_ALL
@@ -186,15 +200,19 @@ func _build_category_view(page: VBoxContainer) -> void:
 	word_card.pressed.connect(_activate)
 	_main_card.add_child(word_card)
 	_word_cards.append(word_card)
-
 	_next_card = _side_card(1)
-	row.add_child(_next_card)
-	row.add_child(_carousel_gap(CAROUSEL_GAP))
-
+	_main_card.add_child(_next_card)
 	_far_next_card = _side_card(2)
-	row.add_child(_far_next_card)
-	row.add_child(_carousel_gap(CAROUSEL_ARROW_GAP))
+	_far_next_card.focus_mode = Control.FOCUS_NONE
+	_main_card.add_child(_far_next_card)
+	_category_base_x = WORD_PEEK + WORD_GAP - WORD_STRIDE * 2.0
+	_main_card.position = Vector2(_category_base_x, 0.0)
+	_category_left_fade = _edge_fade(false)
+	_main_host.add_child(_category_left_fade)
+	_category_right_fade = _edge_fade(true)
+	_main_host.add_child(_category_right_fade)
 
+	row.add_child(_carousel_gap(CAROUSEL_ARROW_GAP))
 	_right_arrow = _arrow(">", 1)
 	row.add_child(_right_arrow)
 
@@ -228,6 +246,33 @@ func _carousel_gap(width: float) -> Control:
 	return gap
 
 
+func _edge_fade(right_edge: bool) -> TextureRect:
+	var gradient := Gradient.new()
+	var shade := Color(0.02, 0.035, 0.06, EDGE_FADE_ALPHA)
+	gradient.offsets = PackedFloat32Array([0.0, 1.0])
+	gradient.colors = PackedColorArray(
+		[Color.TRANSPARENT, shade] if right_edge else [shade, Color.TRANSPARENT])
+	var texture := GradientTexture2D.new()
+	texture.gradient = gradient
+	texture.width = 64
+	texture.height = 1
+	texture.fill_from = Vector2.ZERO
+	texture.fill_to = Vector2.RIGHT
+	var fade := TextureRect.new()
+	fade.name = "RightEdgeFade" if right_edge else "LeftEdgeFade"
+	fade.texture = texture
+	fade.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	fade.stretch_mode = TextureRect.STRETCH_SCALE
+	fade.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	fade.anchor_left = 1.0 if right_edge else 0.0
+	fade.anchor_right = 1.0 if right_edge else 0.0
+	fade.anchor_top = 0.0
+	fade.anchor_bottom = 1.0
+	fade.offset_left = -EDGE_FADE_WIDTH if right_edge else 0.0
+	fade.offset_right = 0.0 if right_edge else EDGE_FADE_WIDTH
+	return fade
+
+
 ## A Button, exactly like the middle one. It used to be a panel wrapping a label, which
 ## looked close enough at rest but behaved differently the moment a finger or a cursor
 ## touched it: no hover, no press, no held state. Every visible word is equally pressable,
@@ -243,21 +288,28 @@ func _side_card(direction: int) -> Button:
 
 
 ## Wraps, so the deck has no dead ends to hunt for the one remaining category in.
-func _step(direction: int) -> void:
+func _step(direction: int, drag_offset := NAN) -> void:
 	if _slots.is_empty() or _locked or not _restriction.is_empty():
 		return
 	Audio.play("click")
 	_index = wrapi(_index + direction, 0, _slots.size())
 	_refresh()
+	var arrival_offset := float(direction) * WORD_STRIDE
+	if not is_nan(drag_offset):
+		# Preserve the finger's partial travel when the refreshed deck changes which card
+		# owns the centre slot; this prevents a jump at release before the snap begins.
+		arrival_offset += drag_offset
+	_animate_track_to_center(_main_card, _category_base_x, arrival_offset)
+
+
+func _animate_track_to_center(track: Control, base_x: float, start_offset: float) -> void:
+	if track == null:
+		return
 	if _slide != null and _slide.is_valid():
 		_slide.kill()
-	# The card arrives from the side it came from, so the movement itself says which way
-	# the deck went - a card that only fades leaves that ambiguous.
-	# Local to MainCardHost. The arrows, side previews and host retain the positions the
-	# outer HBox assigned them throughout the animation.
-	_main_card.position.x = -direction * 26.0
+	track.position.x = base_x + start_offset
 	_slide = create_tween()
-	_slide.tween_property(_main_card, "position:x", 0.0, SLIDE_TIME) \
+	_slide.tween_property(track, "position:x", base_x, SLIDE_TIME) \
 		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 
 
@@ -314,8 +366,7 @@ func _select_visible_word(direction: int) -> void:
 	if _blocked(_slot_category(_slots[target_index])):
 		Audio.play("fail", 0.9)
 		return
-	_index = target_index
-	_refresh()
+	_step(direction)
 	_activate()
 
 
@@ -343,31 +394,46 @@ func _build_colour_view(page: VBoxContainer) -> void:
 	row.add_child(left)
 	row.add_child(_colour_gap(COLOUR_ARROW_GAP))
 
+	_colour_host = Control.new()
+	_colour_host.name = "ColourCarouselViewport"
+	_colour_host.custom_minimum_size = Vector2(COLOUR_VIEWPORT_WIDTH, COLOUR_CARD_SIZE.y)
+	_colour_host.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_colour_host.clip_contents = true
+	row.add_child(_colour_host)
+	_colour_track = UiKit.hbox(COLOUR_CARD_GAP)
+	_colour_track.name = "SlidingColourCards"
+	_colour_track.custom_minimum_size = Vector2(COLOUR_CARD_SIZE.x * 5.0 \
+		+ COLOUR_CARD_GAP * 4.0, COLOUR_CARD_SIZE.y)
+	_colour_host.add_child(_colour_track)
 	_colour_far_prev = _colour_card()
+	_colour_far_prev.focus_mode = Control.FOCUS_NONE
 	_colour_far_prev.pressed.connect(func() -> void: _select_visible_colour(-2))
-	row.add_child(_colour_far_prev)
-	row.add_child(_colour_gap(COLOUR_CARD_GAP))
+	_colour_track.add_child(_colour_far_prev)
 
 	_colour_prev = _colour_card()
 	_colour_prev.pressed.connect(func() -> void: _select_visible_colour(-1))
-	row.add_child(_colour_prev)
-	row.add_child(_colour_gap(COLOUR_CARD_GAP))
+	_colour_track.add_child(_colour_prev)
 
 	_colour_swatch = _colour_card()
 	_colour_swatch.pressed.connect(_confirm_colour)
-	row.add_child(_colour_swatch)
-	row.add_child(_colour_gap(COLOUR_CARD_GAP))
+	_colour_track.add_child(_colour_swatch)
 
 	_colour_next = _colour_card()
 	_colour_next.pressed.connect(func() -> void: _select_visible_colour(1))
-	row.add_child(_colour_next)
-	row.add_child(_colour_gap(COLOUR_CARD_GAP))
+	_colour_track.add_child(_colour_next)
 
 	_colour_far_next = _colour_card()
+	_colour_far_next.focus_mode = Control.FOCUS_NONE
 	_colour_far_next.pressed.connect(func() -> void: _select_visible_colour(2))
-	row.add_child(_colour_far_next)
-	row.add_child(_colour_gap(COLOUR_ARROW_GAP))
+	_colour_track.add_child(_colour_far_next)
+	_colour_base_x = COLOUR_PEEK + COLOUR_CARD_GAP - COLOUR_STRIDE * 2.0
+	_colour_track.position = Vector2(_colour_base_x, 0.0)
+	_colour_left_fade = _edge_fade(false)
+	_colour_host.add_child(_colour_left_fade)
+	_colour_right_fade = _edge_fade(true)
+	_colour_host.add_child(_colour_right_fade)
 
+	row.add_child(_colour_gap(COLOUR_ARROW_GAP))
 	var right := UiKit.button(">", COLOUR_ARROW_FONT)
 	right.custom_minimum_size = Vector2(ARROW_SIZE, ARROW_SIZE)
 	right.focus_mode = Control.FOCUS_ALL
@@ -398,9 +464,8 @@ func _colour_gap(width: float) -> Control:
 
 
 ## No size or alpha argument: there is one kind of colour card. The centre used to be more
-## than twice the area of its neighbours and the neighbours were half faded, which said
-## "browse to the middle to pick" - but all five are pressable, and the outer ones are
-## the fastest way to choose.
+## than twice the area of its neighbours; now the clipped viewport communicates scrolling
+## without changing the established card design.
 func _colour_card() -> Button:
 	var card := Button.new()
 	card.custom_minimum_size = COLOUR_CARD_SIZE
@@ -415,7 +480,7 @@ func _colour_card() -> Button:
 ## so "It was red. Now it is red." is not something the student can even land on, let
 ## alone submit. Stepping "was" onto "now" pushes the other wheel along for the same
 ## reason - whichever one the student is turning stays under their control.
-func _step_colour(direction: int) -> void:
+func _step_colour(direction: int, drag_offset := NAN) -> void:
 	var colours := Content.enabled_colors()
 	if colours.size() < 2 or _locked or _colour_committing:
 		return
@@ -427,6 +492,10 @@ func _step_colour(direction: int) -> void:
 		# remains on the animal, but can never land on a sentence that changes nothing.
 		_now_index = _next_colour_index(_now_index, direction, true)
 	_sync_colour()
+	var arrival_offset := float(direction) * COLOUR_STRIDE
+	if not is_nan(drag_offset):
+		arrival_offset += drag_offset
+	_animate_track_to_center(_colour_track, _colour_base_x, arrival_offset)
 
 
 ## Any visible colour card is a choice. Side cards use the same direction as their
@@ -443,6 +512,8 @@ func _select_visible_colour(direction: int) -> void:
 	else:
 		_now_index = selected_index
 	_sync_colour()
+	_animate_track_to_center(_colour_track, _colour_base_x,
+		float(direction) * COLOUR_STRIDE)
 	_confirm_colour()
 
 
@@ -491,6 +562,13 @@ func _sync_colour() -> void:
 	_colour_feedback.add_theme_color_override("font_color", UiKit.MUTED)
 	_colour_cancel.text = "キャンセル"
 	_colour_picker.visible = true
+	if _colour_track != null:
+		_colour_track.position.x = _colour_base_x
+	var show_peeks := colours.size() >= 2
+	if _colour_left_fade != null:
+		_colour_left_fade.visible = show_peeks
+	if _colour_right_fade != null:
+		_colour_right_fade.visible = show_peeks
 
 
 ## The swatch wears the colour it names, so the word and the thing agree even for a
@@ -503,8 +581,7 @@ func _paint(swatch: Button, colour: ColorDefinition) -> void:
 	for state in ["normal", "disabled"]:
 		swatch.add_theme_stylebox_override(state,
 			UiKit.stylebox(shade, 12, 2, shade.lightened(0.25), 6))
-	# The press feedback the word deck has, on all five cards rather than none of them:
-	# tapping a side swatch chooses it, so it has to answer the finger.
+	# Tapping either visible side peek chooses it, so it has to answer the finger.
 	swatch.add_theme_stylebox_override("hover",
 		UiKit.stylebox(shade.lightened(0.14), 12, 2, UiKit.ACCENT, 6))
 	swatch.add_theme_stylebox_override("pressed",
@@ -597,6 +674,169 @@ func _cancel_colour() -> void:
 	_show_view(View.CATEGORY)
 
 
+# --- Pointer, touch and wheel navigation -------------------------------------
+
+func _input(event: InputEvent) -> void:
+	if not is_visible_in_tree():
+		return
+	var host := _active_carousel_host()
+	if host == null or not host.is_visible_in_tree():
+		return
+
+	if event is InputEventMouseButton:
+		var mouse := event as InputEventMouseButton
+		if mouse.pressed and mouse.button_index in [MOUSE_BUTTON_WHEEL_UP,
+				MOUSE_BUTTON_WHEEL_LEFT, MOUSE_BUTTON_WHEEL_DOWN, MOUSE_BUTTON_WHEEL_RIGHT] \
+				and host.get_global_rect().has_point(mouse.position):
+			var direction := -1 if mouse.button_index in [MOUSE_BUTTON_WHEEL_UP,
+				MOUSE_BUTTON_WHEEL_LEFT] else 1
+			_step_active_carousel(direction)
+			get_viewport().set_input_as_handled()
+			return
+		if mouse.button_index != MOUSE_BUTTON_LEFT:
+			return
+		if mouse.pressed:
+			if host.get_global_rect().has_point(mouse.position) and _carousel_can_move_or_tap():
+				_begin_drag(mouse.position.x, -1)
+				# We reproduce a tap on release. Handling the press here prevents the Button
+				# underneath from also firing after a swipe.
+				get_viewport().set_input_as_handled()
+		elif _drag_candidate and _drag_pointer == -1:
+			_finish_drag(mouse.position)
+			get_viewport().set_input_as_handled()
+		return
+
+	if event is InputEventMouseMotion and _drag_candidate and _drag_pointer == -1:
+		_update_drag((event as InputEventMouseMotion).position.x)
+		if _dragging:
+			get_viewport().set_input_as_handled()
+		return
+
+	if event is InputEventScreenTouch:
+		var touch := event as InputEventScreenTouch
+		if touch.pressed:
+			if host.get_global_rect().has_point(touch.position) and _carousel_can_move_or_tap():
+				_begin_drag(touch.position.x, touch.index)
+				get_viewport().set_input_as_handled()
+		elif _drag_candidate and _drag_pointer == touch.index:
+			_finish_drag(touch.position)
+			get_viewport().set_input_as_handled()
+		return
+
+	if event is InputEventScreenDrag and _drag_candidate \
+			and _drag_pointer == (event as InputEventScreenDrag).index:
+		_update_drag((event as InputEventScreenDrag).position.x)
+		get_viewport().set_input_as_handled()
+
+
+func _active_carousel_host() -> Control:
+	return _main_host if _view == View.CATEGORY else _colour_host
+
+
+func _active_carousel_track() -> Control:
+	return _main_card if _view == View.CATEGORY else _colour_track
+
+
+func _active_carousel_base_x() -> float:
+	return _category_base_x if _view == View.CATEGORY else _colour_base_x
+
+
+func _active_carousel_stride() -> float:
+	return WORD_STRIDE if _view == View.CATEGORY else COLOUR_STRIDE
+
+
+func _carousel_can_move_or_tap() -> bool:
+	if _locked:
+		return false
+	if _view == View.CATEGORY:
+		return _slots.size() >= 1 and _restriction.is_empty()
+	return Content.enabled_colors().size() >= 2 and not _colour_committing
+
+
+func _begin_drag(x: float, pointer: int) -> void:
+	_drag_candidate = true
+	_dragging = false
+	_drag_start_x = x
+	_drag_offset = 0.0
+	_drag_view = _view
+	_drag_pointer = pointer
+
+
+func _update_drag(x: float) -> void:
+	if _view != _drag_view:
+		_cancel_drag()
+		return
+	var raw_offset := x - _drag_start_x
+	if not _dragging and absf(raw_offset) >= DRAG_START_DISTANCE:
+		_dragging = true
+		if _slide != null and _slide.is_valid():
+			_slide.kill()
+	if not _dragging:
+		return
+	var limit := _active_carousel_stride() * 0.86
+	_drag_offset = clampf(raw_offset, -limit, limit)
+	var track := _active_carousel_track()
+	if track != null:
+		track.position.x = _active_carousel_base_x() + _drag_offset
+
+
+func _finish_drag(position: Vector2) -> void:
+	if _view != _drag_view:
+		_cancel_drag()
+		return
+	if _dragging:
+		if absf(_drag_offset) >= SWIPE_TRIGGER:
+			# Dragging left asks for the next card; dragging right asks for the previous.
+			_step_active_carousel(-signi(_drag_offset), _drag_offset)
+		else:
+			_animate_track_to_center(_active_carousel_track(),
+				_active_carousel_base_x(), _drag_offset)
+	else:
+		_tap_active_carousel(position)
+	_cancel_drag(false)
+
+
+func _step_active_carousel(direction: int, drag_offset := NAN) -> void:
+	if _view == View.CATEGORY:
+		_step(direction, drag_offset)
+	else:
+		_step_colour(direction, drag_offset)
+
+
+func _tap_active_carousel(position: Vector2) -> void:
+	if _view == View.CATEGORY:
+		for entry in [[_prev_card, -1], [_word_cards[0], 0], [_next_card, 1]]:
+			var card := entry[0] as Button
+			if card != null and card.get_global_rect().has_point(position):
+				card.grab_focus()
+				if int(entry[1]) == 0:
+					_activate()
+				else:
+					_select_visible_word(int(entry[1]))
+				return
+	else:
+		for entry in [[_colour_prev, -1], [_colour_swatch, 0], [_colour_next, 1]]:
+			var card := entry[0] as Button
+			if card != null and card.get_global_rect().has_point(position):
+				card.grab_focus()
+				if int(entry[1]) == 0:
+					_confirm_colour()
+				else:
+					_select_visible_colour(int(entry[1]))
+				return
+
+
+func _cancel_drag(reset_track := true) -> void:
+	if reset_track:
+		var track := _active_carousel_track()
+		if track != null:
+			track.position.x = _active_carousel_base_x()
+	_drag_candidate = false
+	_dragging = false
+	_drag_offset = 0.0
+	_drag_pointer = -2
+
+
 # --- Shared ------------------------------------------------------------------
 
 func _back_button() -> Button:
@@ -612,6 +852,7 @@ func _back_button() -> Button:
 
 
 func _show_view(view: int) -> void:
+	_cancel_drag()
 	_view = view
 	for key in _views:
 		(_views[key] as Control).visible = key == view
@@ -710,6 +951,11 @@ func _refresh() -> void:
 	var single := _slots.size() < 2
 	_left_arrow.disabled = _locked or single or not _restriction.is_empty()
 	_right_arrow.disabled = _left_arrow.disabled
+	_main_card.position.x = _category_base_x
+	if _category_left_fade != null:
+		_category_left_fade.visible = not single
+	if _category_right_fade != null:
+		_category_right_fade.visible = not single
 
 	if _status != null:
 		if _locked:

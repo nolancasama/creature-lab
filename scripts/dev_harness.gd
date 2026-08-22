@@ -1524,31 +1524,65 @@ static func _carousel_checks(failures: Array[String], main: Node) -> void:
 	_check(failures, car._slot_category(car._slots[car._slots.size() - 1]) == Content.COLOR_CATEGORY,
 		"carousel: colours are not the last card")
 
-	# Sliding a selection must move only the contents of the fixed centre cell. Moving the
-	# HBox-managed cell itself changes the whole row's layout, which previously shifted the
-	# selected words left and covered one chevron after the first click.
+	# The clipped host never moves. Five full-size cards slide beneath it, but only the
+	# centred card and a 15-25% peek of each immediate neighbour are visible at rest.
 	var host_position := car._main_host.position
 	car._step(1)
 	_check(failures, car._main_host.position.is_equal_approx(host_position),
-		"carousel: stepping moved the centre layout cell")
+		"carousel: stepping moved the clipped layout cell")
 	_check(failures, car._left_arrow.visible and car._right_arrow.visible,
 		"carousel: stepping hid a chevron")
-	_check(failures, absf(car._main_card.position.x) <= 26.01,
-		"carousel: slide escaped its fixed centre cell")
+	_check(failures, car._main_host.clip_contents and car._colour_host.clip_contents,
+		"carousel: a peek viewport does not clip offscreen cards")
+	var word_peek_ratio := DescriptorCarousel.WORD_PEEK / DescriptorCarousel.WORD_CARD_SIZE.x
+	var colour_peek_ratio := DescriptorCarousel.COLOUR_PEEK \
+		/ DescriptorCarousel.COLOUR_CARD_SIZE.x
+	_check(failures, word_peek_ratio >= 0.15 and word_peek_ratio <= 0.25
+		and colour_peek_ratio >= 0.15 and colour_peek_ratio <= 0.25,
+		"carousel: neighbour peeks are outside the requested 15-25%% range")
+	_check(failures, car._category_left_fade != null and car._category_right_fade != null
+		and car._colour_left_fade != null and car._colour_right_fade != null,
+		"carousel: two-sided edge fades are missing")
+	_check(failures, absf(car._main_card.position.x - car._category_base_x) \
+		<= DescriptorCarousel.WORD_STRIDE + 0.01,
+		"carousel: slide escaped the clipped word track")
 	if car._slide != null and car._slide.is_valid():
 		car._slide.kill()
-	car._main_card.position.x = 0.0
+	car._main_card.position.x = car._category_base_x
 	car._index = 0
 	car._step(-1) ## Wrap backward onto the one-card COLOURS slot.
 	_check(failures, car._main_host.position.is_equal_approx(host_position),
-		"carousel: backward wrap moved the centre layout cell")
+		"carousel: backward wrap moved the clipped layout cell")
 	_check(failures, car._left_arrow.visible and car._right_arrow.visible,
 		"carousel: backward wrap hid a chevron")
 	_check(failures, car._word_cards.size() == 1 and car._word_cards[0].visible,
 		"carousel: colour slot did not settle into one centred card")
 	if car._slide != null and car._slide.is_valid():
 		car._slide.kill()
-	car._main_card.position.x = 0.0
+	car._main_card.position.x = car._category_base_x
+
+	# A leftward drag advances one card, and release keeps the partial travel as the start
+	# of the snap instead of teleporting the refreshed deck.
+	var drag_start_index := car._index
+	car._begin_drag(100.0, -1)
+	car._update_drag(45.0)
+	car._finish_drag(Vector2(45.0, 0.0))
+	_check(failures, car._index == wrapi(drag_start_index + 1, 0, car._slots.size()),
+		"carousel: left drag did not advance to the next centred card")
+	_check(failures, not car._drag_candidate and not car._dragging,
+		"carousel: drag state remained armed after snapping")
+	if car._slide != null and car._slide.is_valid():
+		car._slide.kill()
+	car._main_card.position.x = car._category_base_x
+	var right_drag_start := car._index
+	car._begin_drag(45.0, -1)
+	car._update_drag(100.0)
+	car._finish_drag(Vector2(100.0, 0.0))
+	_check(failures, car._index == wrapi(right_drag_start - 1, 0, car._slots.size()),
+		"carousel: right drag did not return to the previous centred card")
+	if car._slide != null and car._slide.is_valid():
+		car._slide.kill()
+	car._main_card.position.x = car._category_base_x
 
 	# Colours are sequential: BEFORE browsing is visual only, and the first explicit
 	# colour press emits the preview before entering AFTER. AFTER always skips the
@@ -1602,6 +1636,15 @@ static func _carousel_checks(failures: Array[String], main: Node) -> void:
 				"carousel: a visible card uses a different text size")
 	_check(failures, car._colour_feedback.text.is_empty() and not car._colour_feedback.visible,
 		"carousel: obsolete colour instruction is still visible")
+	var colour_drag_start := car._was_index
+	car._begin_drag(100.0, -1)
+	car._update_drag(45.0)
+	car._finish_drag(Vector2(45.0, 0.0))
+	_check(failures, car._was_index == car._next_colour_index(colour_drag_start, 1, false),
+		"carousel: left drag did not advance to the next centred colour")
+	if car._slide != null and car._slide.is_valid():
+		car._slide.kill()
+	car._colour_track.position.x = car._colour_base_x
 	car._step_colour(1)
 	_check(failures, previews.is_empty(),
 		"carousel: BEFORE browsing recoloured the live animal preview")
