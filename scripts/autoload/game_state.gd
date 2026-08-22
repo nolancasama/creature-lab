@@ -115,6 +115,22 @@ func take_transformation_handoff() -> Dictionary:
 	return handoff
 
 
+## Take one creature out of the zoo, because the student asked.
+##
+## Until now a creature could only leave two ways: reset_zoo() threw away all of them, or
+## the capacity cap silently dropped the OLDEST once there were more than thirty - which in
+## a classroom is very likely the one a child was proudest of. Neither was a decision the
+## person who made it got to make.
+func release_from_zoo(state: CreatureState) -> bool:
+	var index := zoo.find(state)
+	if index == -1:
+		return false
+	zoo.remove_at(index)
+	SaveService.save_zoo(zoo)
+	zoo_changed.emit()
+	return true
+
+
 func reset_zoo() -> void:
 	zoo.clear()
 	SaveService.clear_zoo()

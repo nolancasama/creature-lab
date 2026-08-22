@@ -761,6 +761,39 @@ static func _report_profile(id: String, samples: Array[Dictionary], speed: float
 const UI_CHARACTERS := "×…✓、。「」あいうえおかがきぎくぐけげこさしじすずせぜそただちっつてでとどなにのはひびふぶへべぼまみめもやよらりるれろわをんァアィイウェエオカガキクグゲコゴサザジスセタダチッデトドニネハバビフプベペボマムメモャヤュユラリルレロンー一上下中了人今代伝体使保停備元先入全判利前力効化半単厳去古合同名向回在地場塔境声変夕夜大天太失妻存学安完定密少山岩嵐巨常度形影後怪扱承押指文新方明星春晶期木果根桜楽欄次止正残毛水氷河法流海準火灼炎焼熱牙珠現環生用由画番異疾目真短確示稲空立粉紅終組綿羽習老者聞自色花苔若英草葉蛇表見言設話認語説読識豆象送進過量鉄鋼長陽難雪雲霜霧青非面音順風鹿！（）－："
 
 
+## Taking one creature out of the zoo takes exactly that one out, and it stays out.
+##
+## The data half of a destructive action is worth pinning down: removing the wrong index
+## would delete a creature the student did not choose, and forgetting to save would put it
+## back on the next launch, which is worse than not offering the button at all.
+static func _zoo_release_checks(failures: Array[String]) -> void:
+	var restore := Game.zoo.duplicate()
+	Game.zoo.clear()
+	var ids := Content.animal_ids()
+	var made: Array[CreatureState] = []
+	for i in 3:
+		var state := CreatureState.create(str(ids[i % ids.size()]))
+		state.generated_name = "resident%d" % i
+		Game.zoo.append(state)
+		made.append(state)
+
+	var released := Game.release_from_zoo(made[1])
+	_check(failures, released, "releasing a resident reported failure")
+	_check(failures, Game.zoo.size() == 2, "releasing removed %d residents, not one"
+		% (3 - Game.zoo.size()))
+	_check(failures, not Game.zoo.has(made[1]), "the released resident is still in the zoo")
+	_check(failures, Game.zoo.has(made[0]) and Game.zoo.has(made[2]),
+		"releasing one resident took another with it")
+	# It must not come back on the next launch.
+	_check(failures, SaveService.load_zoo().size() == 2,
+		"the release was not saved, so the creature returns on the next launch")
+	_check(failures, not Game.release_from_zoo(made[1]),
+		"releasing an absent resident reported success")
+
+	Game.zoo.assign(restore)
+	SaveService.save_zoo(Game.zoo)
+
+
 ## The word the chamber throws back at the end of the last sentence.
 ##
 ## Worth its own check because it fails quietly and wrongly: the echo is spoken and printed
@@ -1922,6 +1955,7 @@ static func _selftest(main: Node) -> void:
 			_check(failures, rig != null, "%s/%s failed to apply" % [pair.category, word])
 			rig.free()
 
+	_zoo_release_checks(failures)
 	_echo_checks(failures)
 	_music_checks(failures)
 	_font_checks(failures)

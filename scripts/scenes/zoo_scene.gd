@@ -322,10 +322,69 @@ func _show_info(brain: CreatureBrain) -> void:
 	var box_width := minf(desired_head_width + INFO_PANEL_MARGIN, max_box_width)
 	var head_width := box_width - INFO_PANEL_MARGIN
 	head.custom_minimum_size = Vector2(head_width, 56)
+	_build_release_row(state, head_width)
 	_info.offset_left = -box_width * 0.5
 	_info.offset_right = box_width * 0.5
-	_info.offset_top = -112
+	# Tall enough for the name row AND the release row beneath it. This was -112, sized for
+	# a card that held nothing but a name, and the new row was being cut off by the panel's
+	# own bottom edge.
+	_info.offset_top = -168
 	_info.visible = true
+
+
+## Letting a student take a creature back out of the zoo.
+##
+## Two taps, never one. This is the only destructive thing in the game and the people using
+## it are six; a single mis-tap on a card they opened to read a name should not be able to
+## delete the animal they made. The first tap only asks.
+##
+## Worded as sending it home rather than as deleting it. Same outcome, and for this audience
+## the difference between "your creature is gone" and "your creature went home" is the
+## difference between a mistake and an ending.
+func _build_release_row(state: CreatureState, width: float) -> void:
+	var ask := UiKit.button("おうちにかえす", UiKit.SMALL)
+	ask.custom_minimum_size = Vector2(width, 40)
+	ask.focus_mode = Control.FOCUS_NONE
+	UiKit.style_navigation(ask)
+	_info_body.add_child(ask)
+
+	var confirm := UiKit.hbox(8)
+	confirm.alignment = BoxContainer.ALIGNMENT_CENTER
+	confirm.visible = false
+	confirm.custom_minimum_size = Vector2(width, 40)
+	_info_body.add_child(confirm)
+
+	var question := UiKit.label("ほんとうに?", UiKit.SMALL, UiKit.TEXT)
+	question.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	confirm.add_child(question)
+	var yes := UiKit.button("はい", UiKit.SMALL)
+	yes.custom_minimum_size = Vector2(76, 40)
+	yes.focus_mode = Control.FOCUS_NONE
+	UiKit.style_navigation(yes)
+	confirm.add_child(yes)
+	var no := UiKit.button("いいえ", UiKit.SMALL)
+	no.custom_minimum_size = Vector2(76, 40)
+	no.focus_mode = Control.FOCUS_NONE
+	UiKit.style_navigation(no)
+	confirm.add_child(no)
+
+	ask.pressed.connect(func() -> void:
+		Audio.play("click")
+		ask.visible = false
+		confirm.visible = true)
+	no.pressed.connect(func() -> void:
+		Audio.play("click")
+		confirm.visible = false
+		ask.visible = true)
+	yes.pressed.connect(_release.bind(state))
+
+
+func _release(state: CreatureState) -> void:
+	Audio.play("pop")
+	# Close the card FIRST. Releasing repopulates the yard, which frees every brain including
+	# the focused one, and the card holds a reference to it.
+	_dismiss_info()
+	Game.release_from_zoo(state)
 
 
 func _dismiss_info() -> void:
