@@ -562,11 +562,32 @@ static func _screenshot(main: Node, phase: String) -> void:
 	elif phase == "select-side":
 		var selection_scene := Router.current_scene
 		var cards: Array = selection_scene.get("_animal_cards") if selection_scene != null else []
-		if cards.size() >= 4:
+		if cards.size() >= 5:
+			var fade_ok := true
+			for slot in cards.size():
+				var material := (cards[slot] as CanvasItem).material as ShaderMaterial
+				fade_ok = fade_ok and material != null
+				if material != null:
+					fade_ok = fade_ok and is_equal_approx(float(
+						material.get_shader_parameter("viewport_width")),
+						float(selection_scene.ANIMAL_CAROUSEL_WIDTH))
+					fade_ok = fade_ok and is_equal_approx(float(
+						material.get_shader_parameter("fade_width")),
+						float(selection_scene.ANIMAL_EDGE_FADE_WIDTH))
+					fade_ok = fade_ok and is_equal_approx(float(
+						material.get_shader_parameter("card_origin")),
+						float(slot) * (selection_scene.ANIMAL_CARD_SIZE.x
+							+ selection_scene.ANIMAL_CARD_GAP))
+			if not fade_ok:
+				printerr("[shot] FAIL: animal cards do not share the descriptor edge fade")
+				main.get_tree().quit(1)
+				return
 			var labels_before: Array[String] = []
 			for card in cards:
 				labels_before.append(str(card.text))
-			(cards[3] as Button).pressed.emit()
+			# Select the outermost visible card: its badge must share the fade, and tapping it
+			# must still leave the five labels in place rather than recentering the strip.
+			(cards[4] as Button).pressed.emit()
 			await main.get_tree().create_timer(0.6).timeout
 			var labels_after: Array[String] = []
 			for card in cards:

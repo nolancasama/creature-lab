@@ -68,6 +68,8 @@ const CAMERA_SHIFT := 0.0 ## The picker has no side panel; the animal owns the s
 const ANIMAL_CARD_SIZE := Vector2(112, 78)
 const ANIMAL_CARD_GAP := 8
 const ANIMAL_ARROW_GAP := 24
+const ANIMAL_CAROUSEL_WIDTH := ANIMAL_CARD_SIZE.x * 5.0 + ANIMAL_CARD_GAP * 4.0
+const ANIMAL_EDGE_FADE_WIDTH := ANIMAL_CARD_SIZE.x * 0.33
 const SELECT_BUTTON_SIZE := Vector2(280, 58)
 
 enum Mode { PICKING, RECORDING, PRESENT, PRE_TRANSFORMATION }
@@ -86,6 +88,9 @@ var _camera_shift := CAMERA_SHIFT
 # Picking UI
 var _picking_panel: Control = null
 var _animal_cards: Array[Button] = []
+var _animal_carousel_host: Control = null
+var _animal_carousel_track: HBoxContainer = null
+var _animal_fade_shader: Shader = null
 var _selected := ""
 var _animal_carousel_center := "" ## Moves only with chevrons, never when a card is tapped.
 var _rig_animal := "" ## Which animal the live rig was built for.
@@ -310,12 +315,23 @@ func _build_picking_panel() -> void:
 	column.add_child(carousel)
 	carousel.add_child(_animal_carousel_arrow("<", -1))
 	carousel.add_child(UiKit.spacer(ANIMAL_ARROW_GAP))
+	_animal_carousel_host = Control.new()
+	_animal_carousel_host.name = "AnimalCarouselViewport"
+	_animal_carousel_host.custom_minimum_size = Vector2(
+		ANIMAL_CAROUSEL_WIDTH, ANIMAL_CARD_SIZE.y)
+	_animal_carousel_host.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_animal_carousel_host.clip_contents = true
+	carousel.add_child(_animal_carousel_host)
+	_animal_carousel_track = UiKit.hbox(ANIMAL_CARD_GAP)
+	_animal_carousel_track.name = "AnimalCarouselCards"
+	_animal_carousel_track.custom_minimum_size = Vector2(
+		ANIMAL_CAROUSEL_WIDTH, ANIMAL_CARD_SIZE.y)
+	_animal_carousel_host.add_child(_animal_carousel_track)
 	for slot in 5:
-		if slot > 0:
-			carousel.add_child(UiKit.spacer(ANIMAL_CARD_GAP))
 		var card := _animal_name_card()
-		carousel.add_child(card)
+		_animal_carousel_track.add_child(card)
 		_animal_cards.append(card)
+		_apply_animal_edge_fade(card, slot)
 	carousel.add_child(UiKit.spacer(ANIMAL_ARROW_GAP))
 	carousel.add_child(_animal_carousel_arrow(">", 1))
 
@@ -425,6 +441,35 @@ func _animal_name_card() -> Button:
 	card.add_child(check_badge)
 	_style_animal_card(card, false)
 	return card
+
+
+## Use the same real-alpha edge dissolve as the adjective and colour carousels. The animal
+## strip itself never moves when a card is selected, so each card's origin is fixed by its
+## slot. The selected badge and its check glyph draw separately from the Button and need
+## their own correctly offset material or they would remain floating at a faded edge.
+func _apply_animal_edge_fade(card: Button, slot: int) -> void:
+	var card_origin := float(slot) * (ANIMAL_CARD_SIZE.x + ANIMAL_CARD_GAP)
+	card.material = _animal_edge_fade_material(card_origin)
+	var badge := card.get_node_or_null("SelectedCheck") as Control
+	if badge == null:
+		return
+	var badge_origin := card_origin + ANIMAL_CARD_SIZE.x + badge.offset_left
+	badge.material = _animal_edge_fade_material(badge_origin)
+	for child in badge.get_children():
+		if child is CanvasItem:
+			(child as CanvasItem).material = _animal_edge_fade_material(badge_origin)
+
+
+func _animal_edge_fade_material(origin: float) -> ShaderMaterial:
+	if _animal_fade_shader == null:
+		_animal_fade_shader = Shader.new()
+		_animal_fade_shader.code = DescriptorCarousel.EDGE_FADE_SHADER
+	var material := ShaderMaterial.new()
+	material.shader = _animal_fade_shader
+	material.set_shader_parameter("viewport_width", ANIMAL_CAROUSEL_WIDTH)
+	material.set_shader_parameter("fade_width", ANIMAL_EDGE_FADE_WIDTH)
+	material.set_shader_parameter("card_origin", origin)
+	return material
 
 
 func _style_animal_card(card: Button, selected: bool) -> void:
