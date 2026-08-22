@@ -331,6 +331,8 @@ func _build_picking_panel() -> void:
 
 
 func _browse_animal(direction: int) -> void:
+	if _confirming_selection:
+		return ## See _confirm(): the flourish is part of committing, not a chance to browse.
 	var ids := Content.animal_ids()
 	if ids.is_empty():
 		return
@@ -346,6 +348,9 @@ func _browse_animal(direction: int) -> void:
 
 func _animal_carousel_arrow(glyph: String, direction: int) -> Button:
 	var arrow := UiKit.button(glyph, 38)
+	# Named so the harness can press the real control rather than a caption: "<" and ">"
+	# also appear on the adjective carousel.
+	arrow.name = "PreviousAnimal" if direction < 0 else "NextAnimal"
 	arrow.custom_minimum_size = Vector2(55, 55)
 	arrow.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	UiKit.style_navigation(arrow)
@@ -360,6 +365,8 @@ func _animal_name_card() -> Button:
 	card.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	card.add_theme_font_size_override("font_size", UiKit.BODY)
 	card.pressed.connect(func() -> void:
+		if _confirming_selection:
+			return ## As with the chevrons - see _confirm().
 		var animal_id := str(card.get_meta("animal_id", ""))
 		if not animal_id.is_empty():
 			_preview(animal_id))
@@ -498,9 +505,16 @@ func _preview(animal_id: String) -> void:
 func _confirm() -> void:
 	if _selected.is_empty() or _mode != Mode.PICKING:
 		return
-	# Confirmation is a flourish, not a modal: arrows, name cards, settings, and Select all
-	# remain live while this awaits. Browsing increments the serial and safely abandons the
-	# old confirmation instead of carrying the wrong animal into the adjective phase.
+	# SELECT commits. The flourish that follows it - the turn, the animal's reaction - is
+	# part of confirming, not a window to change your mind in, so browsing is refused while
+	# it plays rather than quietly cancelling it.
+	#
+	# It used to work the other way: an arrow press during the flourish moved _selected, the
+	# check below then saw a different animal and abandoned the whole confirmation. Tapping
+	# SELECT and then a chevron therefore did nothing at all - no next screen, no message,
+	# and SELECT looking broken. Silently discarding the one irreversible action on the
+	# screen is the worst of the available behaviours; the serial guard stays for the paths
+	# that really do invalidate a confirmation, like leaving the picker.
 	_confirmation_serial += 1
 	var serial := _confirmation_serial
 	var chosen := _selected

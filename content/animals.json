@@ -972,11 +972,11 @@
       },
       "old": {
         "beard": {
-          "normal": {"down": 0.30},
-          "small": {"down": 0.26},
-          "big": {"down": 0.34},
-          "long": {"down": 0.36},
-          "short": {"down": 0.25}
+          "normal": {"down": 0.16},
+          "small": {"down": 0.14},
+          "big": {"down": 0.18},
+          "long": {"down": 0.19},
+          "short": {"down": 0.13}
         }
       }
     },

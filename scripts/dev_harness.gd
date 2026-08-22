@@ -3,6 +3,8 @@ extends RefCounted
 ## Command-line hooks for checking the build without clicking through it.
 ##
 ##   godot --path . -- --selftest          content, assembly and grammar checks, then quit
+##   godot --path . -- --stancetest        every foot of every animal, under every shape
+##                                         adjective, measured against the platform
 ##   godot --path . -- --gaittest          walks every animal and measures foot slide
 ##   godot --path . -- --reverttest        the "was" shape is applied AND readable
 ##                                         when the transformation cinematic opens
@@ -44,7 +46,7 @@ static func is_requested() -> bool:
 	for arg in OS.get_cmdline_user_args():
 		var text := str(arg)
 		if text in ["--selftest", "--autoplay", "--backtest", "--splittest", "--youngflowtest",
-				"--tallflowtest", "--bones", "--gaittest", "--reverttest"] \
+				"--tallflowtest", "--bones", "--gaittest", "--reverttest", "--stancetest"] \
 				or text.begins_with("--shot=") or text.begins_with("--phase=") or text.begins_with("--look="):
 			return true
 	return false
@@ -86,6 +88,8 @@ static func run_if_requested(main: Node) -> void:
 		_gaittest(main)
 	elif args.has("--reverttest"):
 		_reverttest(main)
+	elif args.has("--stancetest"):
+		_stancetest(main)
 	elif not look.is_empty():
 		_look(main, look)
 	elif not shot.is_empty():
@@ -205,6 +209,27 @@ static func _backtest(main: Node) -> void:
 		tree.quit(1)
 		return
 	print("[backtest] back returned to picking")
+
+	# Pressing a chevron during the confirmation flourish used to move _selected, which made
+	# _confirm() decide its animal had changed and abandon the round silently: no next
+	# screen, no message, SELECT apparently dead. Browsing is refused during the flourish
+	# now, so the sequence below has to reach the recording screen.
+	var select_button := Router.current_scene.find_child("SelectAnimal", true, false) as Button
+	var chevron := Router.current_scene.find_child("NextAnimal", true, false) as Button
+	if select_button != null and chevron != null:
+		select_button.pressed.emit()
+		await tree.create_timer(0.1).timeout
+		chevron.pressed.emit() ## The impatient tap that used to eat the confirmation.
+		await tree.create_timer(2.6).timeout
+		if _find_word_lab(Router.current_scene) == null:
+			printerr("[backtest] FAIL: a chevron during confirmation cancelled the round")
+			tree.quit(1)
+			return
+		print("[backtest] confirmation survived a chevron press")
+		var back_again := Router.current_scene.find_child("BackToPicking", true, false) as Button
+		if back_again != null:
+			back_again.pressed.emit()
+			await tree.create_timer(1.0).timeout
 
 	# The regression itself: start over and check a card still registers.
 	var go := Router.current_scene.find_child("SelectAnimal", true, false) as Button
@@ -910,6 +935,116 @@ static func _reverttest(main: Node) -> void:
 		for f in failures:
 			printerr("  - %s" % f)
 	tree.quit(0 if failures.is_empty() else 1)
+
+
+## How far each foot sits above the platform, per animal, per shape-changing adjective.
+##
+## The existing TALL check compares how much each LEG GREW, which is not the same question
+## and can pass while an animal hovers: legs that grow by matching amounts still leave the
+## front pair short if they started shorter, and the body only drops as far as its LOWEST
+## contact. So this measures the thing a player actually sees - the gap under each foot -
+## after the grounding pass has settled.
+##
+## Everything is in stand-height units, so a cat and a horse are held to the same standard.
+static func _stancetest(main: Node) -> void:
+	var tree := main.get_tree()
+	var failures: Array[String] = []
+	# The adjectives that move feet. COLOUR and the rest cannot lift a paw.
+	var shapes := ["", "tall", "short", "big", "small", "long"]
+	for def in Content.animals:
+		for shape in shapes:
+			var rig := CreatureFactory.build_plain(def.id)
+			main.add_child(rig)
+			if not shape.is_empty():
+				var pair := _pair_containing(shape)
+				if pair == null:
+					rig.queue_free()
+					continue
+				TraitVisuals.apply_all(rig, {pair.category: shape})
+			# Let the stance solver run to rest, the way it has by the time anyone looks.
+			for i in 20:
+				await tree.process_frame
+			rig.solve_idle_grounding_immediately()
+			await tree.process_frame
+
+			var contacts := rig.foot_contact_positions()
+			var height: float = maxf(def.stand_height, 0.001)
+			var worst := 0.0
+			var worst_leg := ""
+			var report := ""
+			for i in mini(contacts.size(), def.legs.size()):
+				if not is_finite(contacts[i].y):
+					continue
+				var gap: float = contacts[i].y / height
+				report += " %s=%+.3f" % [str(def.legs[i].get("id", i)), gap]
+				if gap > worst:
+					worst = gap
+					worst_leg = str(def.legs[i].get("id", i))
+			print("[stancetest] %-8s %-6s%s" % [def.id, shape if not shape.is_empty()
+				else "plain", report])
+			# 1.5% of stand height. Below that the gap is thinner than the sole itself and
+			# nobody can see it; above it the foot reads as hanging in the air.
+			_check(failures, worst <= 0.015,
+				"%s/%s: %s foot hovers %.1f%% of stand height above the platform"
+					% [def.id, shape if not shape.is_empty() else "plain", worst_leg,
+					worst * 100.0])
+			rig.queue_free()
+			await tree.process_frame
+	# Walking, not just standing. Standing uses the full stance solver; walking does not -
+	# it only drops the body onto its LOWEST contact and lets the rest fall where they may.
+	# So a pair that is short by even a little never touches the floor for the whole walk,
+	# which is the "front paws hover while the rear ones touch" report. Over a full cycle
+	# every foot must reach the ground at some point; a foot that never does is hovering.
+	for def in Content.animals:
+		for shape in ["", "tall"]:
+			var rig := CreatureFactory.build_plain(def.id)
+			main.add_child(rig)
+			if not shape.is_empty():
+				var pair := _pair_containing(shape)
+				if pair != null:
+					TraitVisuals.apply_all(rig, {pair.category: shape})
+			rig.moving = true
+			var lowest := {}
+			for frame in 260:
+				await tree.process_frame
+				var contacts := rig.foot_contact_positions()
+				for i in mini(contacts.size(), def.legs.size()):
+					if not is_finite(contacts[i].y):
+						continue
+					var id := str(def.legs[i].get("id", i))
+					var gap: float = contacts[i].y / maxf(def.stand_height, 0.001)
+					lowest[id] = gap if not lowest.has(id) else minf(float(lowest[id]), gap)
+			var line := ""
+			var worst := 0.0
+			var worst_leg := ""
+			for id in lowest:
+				line += " %s=%+.3f" % [id, lowest[id]]
+				if float(lowest[id]) > worst:
+					worst = float(lowest[id])
+					worst_leg = str(id)
+			print("[stancetest] %-8s %-6s walking, closest each foot gets:%s"
+				% [def.id, shape if not shape.is_empty() else "plain", line])
+			_check(failures, worst <= 0.015,
+				"%s/%s walking: %s foot never reaches the platform (closest %.1f%%)"
+					% [def.id, shape if not shape.is_empty() else "plain", worst_leg,
+					worst * 100.0])
+			rig.queue_free()
+			await tree.process_frame
+
+	if failures.is_empty():
+		print("[stancetest] PASS")
+	else:
+		printerr("[stancetest] %d FAILURE(S):" % failures.size())
+		for f in failures:
+			printerr("  - %s" % f)
+	tree.quit(0 if failures.is_empty() else 1)
+
+
+static func _pair_containing(word: String) -> TraitDefinition:
+	for pair in Content.pairs:
+		if pair.word_a == word or pair.word_b == word:
+			return pair
+	return null
 
 
 static func _bones(main: Node) -> void:

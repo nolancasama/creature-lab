@@ -157,11 +157,7 @@ func apply() -> void:
 		_rig.mark_posed(idx)
 
 	for i in _def.legs.size():
-		var factor: float = leg_lengths[i] if i < leg_lengths.size() else 1.0
-		if i < _ground_extensions.size() and i < _leg_vertical_reach.size():
-			var response := _leg_vertical_reach[i] * _rig.normal_scale()
-			if response > 0.0001:
-				factor += _ground_extensions[i] / response
+		var factor := leg_scale(i)
 		for bone in _def.legs[i]["bones"] as PackedStringArray:
 			var idx := _skeleton.find_bone(bone)
 			if idx == -1:
@@ -202,6 +198,19 @@ func clear_ground_extensions(instant := true, delta := 0.0) -> void:
 
 func ground_extension(index: int) -> float:
 	return _ground_extensions[index] if index >= 0 and index < _ground_extensions.size() else 0.0
+
+
+## How far leg `index` is currently stretched, counting both the adjective and any ground
+## extension. The single source of truth for it: apply() poses the bones by this, and the
+## sole marker has to travel by exactly the same amount or the two disagree about where the
+## foot is.
+func leg_scale(index: int) -> float:
+	var factor: float = leg_lengths[index] if index < leg_lengths.size() else 1.0
+	if index < _ground_extensions.size() and index < _leg_vertical_reach.size():
+		var response := _leg_vertical_reach[index] * _rig.normal_scale()
+		if response > 0.0001:
+			factor += _ground_extensions[index] / response
+	return factor
 
 
 func leg_vertical_response(index: int) -> float:
