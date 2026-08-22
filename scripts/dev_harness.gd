@@ -1048,6 +1048,27 @@ static func _pair_containing(word: String) -> TraitDefinition:
 
 
 static func _bones(main: Node) -> void:
+	# What the imported model actually contains, asked of Godot rather than of the file.
+	# The walk, the idle and every reaction in this game are posed in code, and the reason
+	# is simply that the source GLB ships no animation data - worth recording here, because
+	# "surely the models come with a walk cycle" is the first thing anyone asks.
+	var packed: PackedScene = load(CreatureRig.MODEL_PATH)
+	var scene := packed.instantiate() if packed != null else null
+	if scene != null:
+		var players: Array[Node] = []
+		_collect_class(scene, "AnimationPlayer", players)
+		print("[bones] %s: %d AnimationPlayer(s)" % [CreatureRig.MODEL_PATH, players.size()])
+		for player in players:
+			var animation_player := player as AnimationPlayer
+			var names := animation_player.get_animation_list()
+			print("[bones]   %s -> %d animation(s)%s" % [animation_player.name, names.size(),
+				": " + ", ".join(names) if names.size() > 0 else ""])
+		var libraries: Array[Node] = []
+		_collect_class(scene, "AnimationMixer", libraries)
+		print("[bones] %d AnimationMixer(s), %d Skeleton3D(s) in the imported scene"
+			% [libraries.size(), _count_class(scene, "Skeleton3D")])
+		scene.free()
+
 	for def in Content.animals:
 		var rig := CreatureFactory.build_plain(def.id)
 		var skeleton: Skeleton3D = rig.skeleton
@@ -1075,6 +1096,19 @@ static func _bones(main: Node) -> void:
 
 ## One line per descendant, depth-first, with the rest-pose distance from its parent so a
 ## zero-length placeholder bone is obvious rather than looking like a usable joint.
+static func _collect_class(node: Node, cls: String, into: Array[Node]) -> void:
+	if node.is_class(cls):
+		into.append(node)
+	for child in node.get_children():
+		_collect_class(child, cls, into)
+
+
+static func _count_class(node: Node, cls: String) -> int:
+	var found: Array[Node] = []
+	_collect_class(node, cls, found)
+	return found.size()
+
+
 static func _describe_chain(skeleton: Skeleton3D, idx: int, depth: int) -> String:
 	var out := ""
 	for child in skeleton.get_bone_children(idx):
