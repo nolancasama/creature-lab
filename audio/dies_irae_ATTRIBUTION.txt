@@ -1,0 +1,18 @@
+dies_irae.mp3
+
+The transformation music. The first 75 seconds of "dies irae.mp3", supplied by
+the project owner, cut at MP3 frame boundaries so it is not re-encoded and loses
+no quality. The source ID3 tag (artwork and metadata the game never reads) was
+dropped with it.
+
+Why trimmed: the source is 9 minutes 55 seconds and 9.5MB, against a whole game
+that packs to about 2MB. Nothing plays past the naming screen, and the clip
+loops, so the extra 8 minutes would have quadrupled the download for audio no
+student ever reaches.
+
+LICENCE: NOT ESTABLISHED. This file came from a download folder with no licence
+alongside it. "Dies Irae" as a melody is a 13th-century plainchant and is in the
+public domain, but any particular RECORDING or arrangement of it carries its own
+copyright. The game is published publicly at creature-lab-esl.vercel.app, so
+confirm the rights on this specific recording, or replace it with one whose
+licence is known, before treating the deployment as settled.

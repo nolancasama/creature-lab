@@ -23,6 +23,14 @@ var _before_caption: Label = null
 var _now_caption: Label = null
 
 
+## The music started during the transformation and carries into this screen. Stopping it
+## here, rather than in the two button handlers, covers every way out - both buttons, a
+## teacher jumping phases from the settings menu, and the harness driving the scene - and
+## there is no path that leaves the tree without this running.
+func _exit_tree() -> void:
+	Audio.stop_music()
+
+
 func _ready() -> void:
 	if Game.current == null:
 		Game.set_phase(Game.Phase.ANIMAL_SELECTION)

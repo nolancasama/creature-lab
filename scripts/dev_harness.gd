@@ -136,6 +136,23 @@ static func _autoplay(main: Node) -> void:
 
 	var ok := Game.phase == Game.Phase.NAMING
 	print("[autoplay] ended in phase %s" % Game.Phase.keys()[Game.phase])
+
+	# The music starts inside the transformation and is meant to carry across the scene
+	# change into the naming screen, then stop when the student leaves it. Both halves are
+	# easy to get wrong in ways nothing else notices: an autoload that keeps playing after
+	# its scene is gone is silent in every test and obvious in a classroom.
+	if ok and Settings.music_volume > 0.001:
+		if not Audio.music_playing():
+			printerr("[autoplay] FAIL: music did not carry into the naming screen")
+			ok = false
+		else:
+			Game.set_phase(Game.Phase.ZOO)
+			await tree.create_timer(1.6).timeout
+			if Audio.music_playing():
+				printerr("[autoplay] FAIL: music kept playing after leaving the naming screen")
+				ok = false
+			else:
+				print("[autoplay] music carried into the naming screen and stopped on exit")
 	if ok:
 		await RenderingServer.frame_post_draw
 		main.get_viewport().get_texture().get_image().save_png("user://shot_autoplay.png")
@@ -688,6 +705,43 @@ static func _report_profile(id: String, samples: Array[Dictionary], speed: float
 ## the project, regenerated whenever this check is updated. Comments are excluded: a kanji
 ## in a comment is never drawn.
 const UI_CHARACTERS := "×…✓、。「」あいうえおかがきぎくぐけげこさしじすずせぜそただちっつてでとどなにのはひびふぶへべぼまみめもやよらりるれろわをんァアィイウェエオカガキクグゲコゴサザジスセタダチッデトドニネハバビフプベペボマムメモャヤュユラリルレロンー一上下中了人今代伝体使保停備元先入全判利前力効化半単厳去古合同名向回在地場塔境声変夕夜大天太失妻存学安完定密少山岩嵐巨常度形影後怪扱承押指文新方明星春晶期木果根桜楽欄次止正残毛水氷河法流海準火灼炎焼熱牙珠現環生用由画番異疾目真短確示稲空立粉紅終組綿羽習老者聞自色花苔若英草葉蛇表見言設話認語説読識豆象送進過量鉄鋼長陽難雪雲霜霧青非面音順風鹿！（）－："
+
+
+## The music asset and the volume control that rides over it.
+##
+## Worth asserting because every part of it fails quietly: a missing file plays nothing, a
+## track that does not loop stops halfway through the naming screen, and a level that does
+## not move leaves the music sitting on top of the student's own recorded voice.
+static func _music_checks(failures: Array[String]) -> void:
+	for track in Audio.MUSIC:
+		var path := str(Audio.MUSIC[track])
+		_check(failures, ResourceLoader.exists(path),
+			"music track '%s' is missing from the export at %s" % [track, path])
+		if not ResourceLoader.exists(path):
+			continue
+		var stream: AudioStream = load(path)
+		_check(failures, stream != null, "music track '%s' failed to load" % track)
+		if stream == null:
+			continue
+		# A student can sit on the naming screen indefinitely, so the bed has to loop.
+		_check(failures, stream.get_length() > 10.0,
+			"music track '%s' is too short to carry a scene" % track)
+
+	var restore := Settings.music_volume
+	Settings.music_volume = 0.5
+	Audio.play_music("transformation", TransformationDirector.MUSIC_UNDER)
+	_check(failures, Audio.music_playing(), "music did not start")
+	var under := Audio._music_player.volume_db
+	Audio.set_music_level(TransformationDirector.MUSIC_PEAK, 0.0)
+	var peak := Audio._music_player.volume_db
+	_check(failures, peak > under,
+		"the peak is not louder than the bed under the speech, so the swell does nothing")
+	Audio.set_music_level(TransformationDirector.MUSIC_AFTER, 0.0)
+	_check(failures, Audio._music_player.volume_db < peak,
+		"the music does not come back down after the transformation")
+	Audio.stop_music(0.0)
+	_check(failures, not Audio.music_playing(), "music did not stop")
+	Settings.music_volume = restore
 
 
 static func _font_checks(failures: Array[String]) -> void:
@@ -1385,6 +1439,7 @@ static func _selftest(main: Node) -> void:
 			_check(failures, rig != null, "%s/%s failed to apply" % [pair.category, word])
 			rig.free()
 
+	_music_checks(failures)
 	_font_checks(failures)
 	_speed_checks(failures)
 	await _carousel_checks(failures, main)

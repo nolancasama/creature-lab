@@ -1,15 +1,31 @@
 extends Node
-## Every sound in the game is synthesised at startup, so the project ships with no audio
-## files. Swap `_build_library()` for streamed assets later without touching callers.
+## Every sound EFFECT in the game is synthesised at startup. Swap `_build_library()` for
+## streamed assets later without touching callers.
+##
+## Music is the one exception and is a real file, because a synthesised approximation of a
+## piece of music is not a piece of music. It gets its own player rather than joining the
+## effect voices: it is long, it outlives the scene that starts it, and its volume is
+## tweened underneath dialogue instead of being set once at trigger time.
 
 const MIX_RATE := 22050
 const VOICES := 8
+
+## The transformation music. Trimmed to 75s at frame boundaries from the source recording
+## and looped, rather than shipped whole: the full 9m55s is 9.5MB against a 2MB game, and
+## nothing plays past the naming screen anyway. See audio/dies_irae_ATTRIBUTION.txt.
+const MUSIC := {
+	"transformation": "res://audio/dies_irae.mp3",
+}
 
 var _library := {}
 var _players: Array[AudioStreamPlayer] = []
 var _next := 0
 var _ambience: AudioStreamPlayer = null
 var _animal_player: AudioStreamPlayer = null ## Exclusive: rapid browsing never layers calls.
+var _music_player: AudioStreamPlayer = null
+var _music_track := ""
+var _music_level := 0.0 ## 0-1, before Settings.music_volume is applied.
+var _music_tween: Tween = null
 
 
 func _ready() -> void:
@@ -24,6 +40,10 @@ func _ready() -> void:
 	_animal_player = AudioStreamPlayer.new()
 	_animal_player.bus = "Master"
 	add_child(_animal_player)
+	_music_player = AudioStreamPlayer.new()
+	_music_player.name = "Music"
+	_music_player.bus = "Master"
+	add_child(_music_player)
 	_build_library()
 
 
@@ -68,6 +88,77 @@ func has_sound(sound: String) -> bool:
 func play_ambience(_on: bool) -> void:
 	if _ambience != null:
 		_ambience.stop()
+
+
+# --- Music -------------------------------------------------------------------
+
+## Start a track at `level` (0-1), or just change the level if it is already playing.
+##
+## Idempotent on purpose: the transformation can reach this from more than one path - the
+## normal run and the skipped one - and restarting a piece of music from the top halfway
+## through a scene is worse than either.
+func play_music(track: String, level: float) -> void:
+	if _music_player == null or not MUSIC.has(track):
+		return
+	if Settings.music_volume <= 0.001:
+		return
+	if _music_track == track and _music_player.playing:
+		set_music_level(level, 0.0)
+		return
+	var stream: AudioStream = load(str(MUSIC[track]))
+	if stream == null:
+		return
+	# Looping in code rather than in the .import file: the loop belongs to how the game uses
+	# the track, and a student can sit on the naming screen for as long as they like.
+	if stream is AudioStreamMP3:
+		(stream as AudioStreamMP3).loop = true
+	_music_track = track
+	_music_player.stream = stream
+	set_music_level(level, 0.0)
+	_music_player.play()
+
+
+## Ease the music to a new level. `seconds` of 0 sets it immediately.
+func set_music_level(level: float, seconds := 0.0) -> void:
+	if _music_player == null:
+		return
+	_music_level = clampf(level, 0.0, 1.0)
+	var target := _music_db(_music_level)
+	if _music_tween != null and _music_tween.is_valid():
+		_music_tween.kill()
+	if seconds <= 0.0:
+		_music_player.volume_db = target
+		return
+	_music_tween = create_tween()
+	_music_tween.tween_property(_music_player, "volume_db", target, seconds)
+
+
+## Fade out and stop. Called when the screen the music belongs to goes away, so it must be
+## safe to call when nothing is playing.
+func stop_music(seconds := 0.6) -> void:
+	if _music_player == null or not _music_player.playing:
+		_music_track = ""
+		return
+	_music_track = ""
+	if _music_tween != null and _music_tween.is_valid():
+		_music_tween.kill()
+	if seconds <= 0.0:
+		_music_player.stop()
+		return
+	_music_tween = create_tween()
+	_music_tween.tween_property(_music_player, "volume_db", _music_db(0.0), seconds)
+	_music_tween.tween_callback(_music_player.stop)
+
+
+func music_playing() -> bool:
+	return _music_player != null and _music_player.playing
+
+
+## Silence is -80dB rather than a linear zero, because volume_db is what the tween moves and
+## linear_to_db(0) is negative infinity, which a tween cannot travel to.
+func _music_db(level: float) -> float:
+	var linear := clampf(level, 0.0, 1.0) * clampf(Settings.music_volume, 0.0, 1.0)
+	return -80.0 if linear <= 0.0001 else linear_to_db(linear)
 
 
 func _build_library() -> void:

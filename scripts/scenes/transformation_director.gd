@@ -27,6 +27,25 @@ extends RefCounted
 const BEAT_SPEAK := 1.9
 const MAX_BEAT := 6.0 ## A runaway recording must not hold the whole sequence open.
 const REVEAL_HOLD := 1.1
+
+## The music, and the three levels it moves between.
+##
+## It starts on the LAST sentence rather than at a measured countdown, because there is no
+## way to know in advance when the sequence will end: each beat waits for however long the
+## student actually took to say their line. Starting on the final beat puts it roughly seven
+## and a half seconds ahead of the finished creature - the last sentence, its surge, the
+## trait settling, then the peak - and, more usefully, it always lands on the same BEAT
+## whatever the pacing, which a stopwatch could not do.
+##
+## MUSIC_UNDER is deliberately far down. The student's own recorded voice plays over it, and
+## a bed that competes with a six-year-old saying "It was small" has defeated the point of
+## recording them.
+const MUSIC_TRACK := "transformation"
+const MUSIC_UNDER := 0.22 ## Beneath the speech, through the final sentence.
+const MUSIC_PEAK := 1.0 ## The transformation itself.
+const MUSIC_AFTER := 0.34 ## Under the before-and-after screen that follows.
+const MUSIC_RISE := 1.2 ## Seconds to swell into the peak.
+const MUSIC_SETTLE := 1.6 ## Seconds to come back down afterwards.
 const FRONT_CAMERA_MOVE := 0.42 ## A quick orbit replaces the old instant animal swivel.
 const FRONT_CAMERA_DISTANCE := 7.05 ## Matches the final pull-back shot's subject scale.
 const FRONT_CAMERA_HEIGHT := 1.75
@@ -140,6 +159,9 @@ func run(state: CreatureState) -> void:
 		return
 	await _reveal()
 
+	# Down, not off: the naming screen is the same moment continuing, and it stops the
+	# music itself when the student leaves it.
+	Audio.set_music_level(MUSIC_AFTER, MUSIC_SETTLE)
 	if _alive():
 		_banner.text = _banner_text
 		_banner.visible = false
@@ -150,6 +172,9 @@ func run(state: CreatureState) -> void:
 func _beat(index: int, total: int, sentence: String, entry: Dictionary,
 		staged_traits: Dictionary) -> void:
 	var rising := float(index + 1) / float(total)
+	# The last sentence is where the music comes in, under the speech.
+	if index == total - 1:
+		Audio.play_music(MUSIC_TRACK, MUSIC_UNDER)
 	_banner.text = sentence
 	# The student's own voice if it was captured, the lab's if it was not. Either way the
 	# words are on the banner, because a classroom with the sound off still gets the beat.
@@ -211,6 +236,10 @@ func _beat(index: int, total: int, sentence: String, entry: Dictionary,
 ## The final machine flourish. Ease closer along the third shot's front-facing line so the
 ## impact grows without teleporting the camera or suddenly exposing the animal's backside.
 func _peak() -> void:
+	# Covers the skipped path too, where no beat ran to start it: a teacher who skips still
+	# gets the reveal and the screen after it, so they should still get the music.
+	Audio.play_music(MUSIC_TRACK, MUSIC_UNDER)
+	Audio.set_music_level(MUSIC_PEAK, MUSIC_RISE)
 	if _skip:
 		_stage.vent_steam(1.0)
 		return
