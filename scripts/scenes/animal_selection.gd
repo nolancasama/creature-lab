@@ -812,6 +812,10 @@ func _enter_recording() -> void:
 	_colour_past_assisted = false
 	if _preview_root != null:
 		_preview_root.rotation.y = RECORDING_FACING
+	# The idle belongs to the picker only. From here on the animal is a specimen being
+	# measured and stretched, and a breathing idle moves the feet the stance solver places.
+	if _rig != null:
+		_rig.disable_authored_animation()
 	_clear_overlays()
 	_build_recording_ui()
 	# A freshly confirmed animal is already the correct neutral live rig. Reapplying an

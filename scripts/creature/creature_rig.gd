@@ -101,6 +101,27 @@ func enable_authored_animation() -> void:
 		return
 	animator = CreatureAnimator.new(self, definition)
 
+
+## Hand the creature back to the trait system, and put its bones where it left them.
+##
+## The picker gives its rig straight to the recording screen instead of rebuilding it - that
+## is deliberate, it stops the animal visibly popping at the moment of selection - so an idle
+## enabled for the picker is still breathing when the recording screen starts stretching the
+## animal. The stance solver is then solving for feet the animation keeps moving, and a TALL
+## cat ends up standing 9% of its own height above the platform.
+##
+## Stopping the player is not enough: it leaves the skeleton in whatever pose it stopped on.
+## The poses go back to rest and the deformer reapplies, so the trait shape is exact again.
+func disable_authored_animation() -> void:
+	if animator == null:
+		return
+	animator.stop()
+	animator = null
+	if skeleton != null:
+		skeleton.reset_bone_poses()
+	if deformer != null:
+		deformer.apply()
+
 ## Written by Gait each frame and read below when the body transform is assembled. Kept as
 ## fields rather than returned, because the body transform is the sum of six contributors
 ## and the walk is only one of them - a creature can be big, cold, dashing and walking at

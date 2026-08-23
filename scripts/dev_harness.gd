@@ -1068,6 +1068,51 @@ static func _stancetest(main: Node) -> void:
 					worst * 100.0])
 			rig.queue_free()
 			await tree.process_frame
+	# The picker's idle clip, still running while a trait stretches the animal.
+	#
+	# The picker hands its rig straight to the recording screen rather than rebuilding it, so
+	# an idle enabled for the picker is still posing the legs when TALL lengthens them - and
+	# the stance solver is then solving for feet the animation keeps moving.
+	for def in Content.animals:
+		for shape in ["", "tall"]:
+			var rig := CreatureFactory.build_plain(def.id)
+			main.add_child(rig)
+			# The real sequence: the picker idles the animal, then hands it to the recording
+			# screen, which takes the animation back before any trait is applied. Letting the
+			# idle keep running through the trait is what put a TALL cat 9% of its own height
+			# into the air, so this walks the same handover rather than a hypothetical.
+			rig.enable_authored_animation()
+			rig.motion_state = "idle"
+			for i in 10:
+				await tree.process_frame
+			rig.disable_authored_animation()
+			if not shape.is_empty():
+				var pair := _pair_containing(shape)
+				if pair != null:
+					TraitVisuals.apply_all(rig, {pair.category: shape})
+			for i in 30:
+				await tree.process_frame
+			rig.solve_idle_grounding_immediately()
+			await tree.process_frame
+			var contacts := rig.foot_contact_positions()
+			var worst := 0.0
+			var worst_leg := ""
+			for i in mini(contacts.size(), def.legs.size()):
+				if not is_finite(contacts[i].y):
+					continue
+				var gap: float = contacts[i].y / maxf(def.stand_height, 0.001)
+				if gap > worst:
+					worst = gap
+					worst_leg = str(def.legs[i].get("id", i))
+			print("[stancetest] %-8s %-6s after idling, worst foot %+.3f (%s)"
+				% [def.id, shape if not shape.is_empty() else "plain", worst, worst_leg])
+			_check(failures, worst <= 0.015,
+				"%s/%s: the picker's idle left its %s foot %.1f%% off the platform"
+					% [def.id, shape if not shape.is_empty() else "plain", worst_leg,
+					worst * 100.0])
+			rig.queue_free()
+			await tree.process_frame
+
 	# Walking, not just standing. Standing uses the full stance solver; walking does not -
 	# it only drops the body onto its LOWEST contact and lets the rest fall where they may.
 	# So a pair that is short by even a little never touches the floor for the whole walk,
