@@ -37,7 +37,23 @@ const RUN_TIME := Vector2(1.5, 4.0)
 ## After a run, no more running for this long. Without it a creature ping-pongs
 ## walk-run-walk-run, which reads as a glitch rather than as a burst of energy.
 const RUN_COOLDOWN := Vector2(9.0, 18.0)
-const RUN_SPEED := 2.4 ## Multiplier on walk_speed. The animator matches the clip to it.
+## How much brisker than its authored pace an animal actually walks.
+##
+## The clips are sedate - 0.4 to 0.6 units per second - and pinning the body to exactly that
+## made the yard look like seven animals marching on the spot: at 0.5 u/s, a four-second walk
+## crosses two units of a yard thirty-four units wide, which is below what the eye reads as
+## travel at all.
+##
+## Playing a cycle faster does NOT unlock the feet. The lock comes from matching playback
+## rate to travel speed, so both can rise together and the planted foot stays planted; all
+## that changes is that the legs cycle briskly rather than languidly. That is why this is a
+## multiplier on the clip's pace and not a speed of its own - whatever it is set to, the
+## animator follows it and the feet keep up.
+##
+## 2.2 puts the animals back at roughly the walk_speed values the game used before, which
+## looked right, while keeping playback inside SPEED_RANGE.
+const WALK_BRISK := 2.2
+const RUN_SPEED := 2.4 ## Multiplier on walk speed. The animator matches the clip to it.
 ## How many destinations a run considers before committing to the clearest. Eight is plenty
 ## for a yard this size and costs nothing - it runs once per run, not per frame.
 const OPEN_SPACE_SAMPLES := 8
@@ -119,7 +135,7 @@ func _ready() -> void:
 	# The animation sets the pace, not the other way round - see natural_speed(). Falls back
 	# to the authored walk_speed for anything without clips.
 	var clip_speed := rig.animator.natural_speed() if rig.animator != null else 0.0
-	_base_speed = (clip_speed if clip_speed > 0.01 else def.walk_speed) * _trait_speed_scale()
+	_base_speed = (clip_speed * WALK_BRISK if clip_speed > 0.01 else def.walk_speed) 		* _trait_speed_scale()
 	# Individual variation, so two dogs in the same yard never pace in step: each creature
 	# gets its own slightly different sense of time and its own slightly different speed.
 	# Seeded from the creature's fingerprint, so it is stable across a reload.

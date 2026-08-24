@@ -53,7 +53,7 @@ static func is_requested() -> bool:
 		var text := str(arg)
 		if text in ["--selftest", "--autoplay", "--backtest", "--splittest", "--youngflowtest",
 				"--tallflowtest", "--bones", "--gaittest", "--reverttest", "--stancetest",
-				"--extractanims", "--runtest"] \
+				"--extractanims", "--runtest", "--stridecheck"] \
 				or text.begins_with("--shot=") or text.begins_with("--phase=") or text.begins_with("--look="):
 			return true
 	return false
@@ -97,6 +97,8 @@ static func run_if_requested(main: Node) -> void:
 		_reverttest(main)
 	elif args.has("--stancetest"):
 		_stancetest(main)
+	elif args.has("--stridecheck"):
+		_stridecheck(main)
 	elif args.has("--extractanims"):
 		_extractanims(main)
 	elif args.has("--runtest"):
@@ -1242,6 +1244,50 @@ static func _extractanims(main: Node) -> void:
 
 
 ## Bones the trait system moves by position, and which an animation therefore must not.
+static func _stridecheck(main: Node) -> void:
+	var tree := main.get_tree()
+	for def in Content.animals:
+		var rig := CreatureFactory.build_plain(def.id)
+		main.add_child(rig)
+		rig.enable_authored_animation()
+		await tree.process_frame
+		var player: AnimationPlayer = rig.skeleton.get_parent().get_node_or_null("ClipPlayer")
+		if player == null:
+			rig.queue_free()
+			continue
+		var clip_name := ""
+		for name in player.get_animation_list():
+			if name.ends_with("walk"):
+				clip_name = name
+		if clip_name.is_empty():
+			rig.queue_free()
+			continue
+		var clip := player.get_animation(clip_name)
+		player.play(clip_name)
+		var spans := {}
+		for i in mini(def.legs.size(), 4):
+			var bones: PackedStringArray = def.legs[i].get("bones", PackedStringArray())
+			var idx := rig.skeleton.find_bone(bones[bones.size() - 1])
+			var lo := Vector3(INF, INF, INF)
+			var hi := Vector3(-INF, -INF, -INF)
+			for step in 48:
+				player.seek(clip.length * float(step) / 48.0, true)
+				rig.skeleton.force_update_all_bone_transforms()
+				var p: Vector3 = rig.skeleton.global_transform 					* rig.skeleton.get_bone_global_pose(idx).origin
+				lo = lo.min(p)
+				hi = hi.max(p)
+			spans[str(def.legs[i].get("id", i))] = hi - lo
+		var line := ""
+		for leg_id in spans:
+			var v: Vector3 = spans[leg_id]
+			line += " %s(x%.2f z%.2f)" % [leg_id, v.x, v.z]
+		print("[stridecheck] %-8s len %.2fs used=%.3f |%s" % [def.id, clip.length,
+			rig.animator.natural_speed() * clip.length, line])
+		rig.queue_free()
+		await tree.process_frame
+	tree.quit()
+
+
 static func _deformer_owned_bones() -> Dictionary:
 	var owned := {}
 	for def in Content.animals:
@@ -1293,6 +1339,27 @@ static func _runtest(main: Node) -> void:
 	chosen /= float(trials)
 	random /= float(trials)
 	print("[runtest] mean clearance: chosen %.2f, random %.2f" % [chosen, random])
+
+	# A walk has to visibly cross the yard, which is the failure this misses most easily:
+	# every foot can be perfectly planted while the animal advances two units of a yard
+	# thirty-four wide and reads as marching on the spot. Measured as the fraction of the
+	# yard one ordinary walk covers.
+	for def in Content.animals:
+		var probe := CreatureFactory.build_plain(def.id)
+		yard.add_child(probe)
+		probe.enable_authored_animation()
+		await tree.process_frame
+		var pace: float = probe.animator.natural_speed() * CreatureBrain.WALK_BRISK
+		var span: float = CreatureBrain.WALK_TIME.y
+		var covered: float = pace * span
+		var across: float = CreatureBrain.YARD_HALF_EXTENTS.x * 2.0
+		print("[runtest] %-8s walks %.2f u/s, %.1f units per walk (%.0f%% of the yard)"
+			% [def.id, pace, covered, covered / across * 100.0])
+		_check(failures, covered / across > 0.12,
+			"%s covers only %.0f%% of the yard in a full walk - it reads as marching on"
+				% [def.id, covered / across * 100.0] + " the spot")
+		probe.queue_free()
+		await tree.process_frame
 	_check(failures, chosen > random,
 		"a running animal aims no better than chance (chosen %.2f vs random %.2f)"
 			% [chosen, random])
