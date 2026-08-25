@@ -65,7 +65,13 @@ func close_settings() -> void:
 
 # --- Creature lifecycle ------------------------------------------------------
 
+## Cleared when a round starts, so kept_slots describes this creature only.
+func _clear_voice_log() -> void:
+	Voice.kept_slots.clear()
+
+
 func begin_creature(animal_id: String) -> void:
+	_clear_voice_log()
 	current = CreatureState.create(animal_id)
 	_transformation_handoff = {}
 	# One child's recorded voice must never surface in the next child's transformation.

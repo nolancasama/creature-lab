@@ -35,6 +35,13 @@ const PRESENT_SLOT := 100
 
 var _supported := false
 var _armed := false
+## Every slot filed this round, recorded whether or not a browser is present.
+##
+## The recorder itself only exists in the web build, so nothing about it can be observed by
+## running the game on a desktop - which makes "is the present half being filed at all?" a
+## question no local test could answer. This list is the part that CAN be checked anywhere:
+## it says what the game asked the recorder to do, even when there is no recorder listening.
+var kept_slots: Array[int] = []
 
 
 func _ready() -> void:
@@ -95,6 +102,12 @@ func _install() -> void:
 	    },
 	    stop: function () { if (rec && rec.state !== 'inactive') { try { rec.stop(); } catch (e) {} } },
 	    keep: function (slot) {
+	      // Which branch this takes is the answer to "was the present half captured?":
+	      // "now" means a finished take was waiting, "on stop" means the sentence was
+	      // accepted while still recording, and either is fine. Nothing logged at all
+	      // means keep() was never reached for that slot.
+	      console.log('[creature-voice] keep slot=' + slot
+	        + (pending ? ' filing now' : ' filing on stop'));
 	      if (pending) { assign(slot, pending, lastLen); pending = null; pendingSlot = -1; }
 	      else { pendingSlot = slot; }
 	    },
@@ -110,6 +123,8 @@ func _install() -> void:
 	    },
 	    playPair: function (a, b) {
 	      var first = lens[a] || 0, second = lens[b] || 0;
+	      console.log('[creature-voice] playPair past=' + a + '(' + first.toFixed(2) + 's)'
+	        + ' present=' + b + '(' + second.toFixed(2) + 's)');
 	      if (!first && !second) return 0;
 	      var self = this;
 	      if (!first) { self.play(b); return second; }
@@ -156,15 +171,23 @@ func _on_listening_changed(is_listening: bool) -> void:
 	if is_listening:
 		_armed = true
 		JavaScriptBridge.eval("%s.start()" % BRIDGE, true)
+		# Reported because the whole question of "was this half recorded?" starts here: a
+		# pass that never arms can never file a take, and nothing outside the browser can
+		# see whether it armed.
+		report("armed")
 	elif _armed:
 		_armed = false
 		JavaScriptBridge.eval("%s.stop()" % BRIDGE, true)
+		report("stopped")
 
 
 ## Called when a sentence is accepted, so the take that is kept is the one that passed
 ## rather than whatever was said last.
 func keep_for(slot: int) -> void:
-	if not _supported or slot < 0:
+	if slot < 0:
+		return
+	kept_slots.append(slot)
+	if not _supported:
 		return
 	JavaScriptBridge.eval("%s.keep(%d)" % [BRIDGE, slot], true)
 	if slot < PRESENT_SLOT:

@@ -333,6 +333,23 @@ static func _splittest(main: Node) -> void:
 	await tree.create_timer(30.0).timeout
 	var ok := Game.phase == Game.Phase.NAMING
 	print("[splittest] ended in phase %s" % Game.Phase.keys()[Game.phase])
+	# Both halves of every sentence must have been filed. The past halves land in slots 0..n
+	# and the present halves at PRESENT_SLOT + n; a round that files only the low slots has
+	# recorded the student saying "It was small" three times and thrown away every "Now it
+	# is big", which is the half the transformation is built around.
+	var past_slots := 0
+	var present_slots := 0
+	for slot in Voice.kept_slots:
+		if slot >= Voice.PRESENT_SLOT:
+			present_slots += 1
+		else:
+			past_slots += 1
+	print("[splittest] voice slots filed: %d past, %d present %s"
+		% [past_slots, present_slots, Voice.kept_slots])
+	if present_slots != past_slots:
+		printerr("[splittest] FAIL: %d past halves filed but %d present halves"
+			% [past_slots, present_slots])
+		ok = false
 	print("[splittest] PASS" if ok else "[splittest] FAIL: expected NAMING")
 	tree.quit(0 if ok else 1)
 
