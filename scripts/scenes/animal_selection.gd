@@ -119,7 +119,7 @@ var _confirmation_serial := 0 ## Cancels a pending confirm if browsing changes t
 var _confirming_selection := false ## Stops the turntable while the chosen animal responds.
 var _facing_tween: Tween = null
 
-# Present-tense pass (Settings.SAY_SPLIT)
+# Present-tense pass
 var _present_index := 0
 
 
@@ -254,7 +254,9 @@ func _clause() -> int:
 		return GrammarValidator.CLAUSE_PRESENT
 	if _mode == Mode.PRESENT:
 		return GrammarValidator.CLAUSE_PRESENT
-	return GrammarValidator.CLAUSE_PAST if Settings.past_only() else GrammarValidator.CLAUSE_BOTH
+	# Always the past half here. The present half is collected in its own pass afterwards,
+	# for every round - there is no longer a mode where it is skipped.
+	return GrammarValidator.CLAUSE_PAST
 
 
 func _build_root() -> void:
@@ -699,7 +701,7 @@ func _enter_picking() -> void:
 
 # --- Present-tense pass ------------------------------------------------------------
 
-## Settings.SAY_SPLIT collects the three "Now it is ___" sentences here, after every past
+## Collects the three "Now it is ___" sentences here, after every past
 ## sentence is recorded and before the chamber runs. The creature is still in its BEFORE
 ## state throughout - it transforms once, on all three traits at once, exactly as it does
 ## without this pass. This is a modal over that creature rather than another side panel:
@@ -1048,11 +1050,9 @@ func _on_pair_selected(category: String, before: String, after: String) -> void:
 	if category == Content.COLOR_CATEGORY and _colour_past_accepted:
 		_word_lab.set_locked(true)
 		_word_lab.visible = false
-		if Settings.say_mode == Settings.SAY_FULL:
-			_colour_speech_stage = ColourSpeechStage.PRESENT
-			_speech.show_target(before, after, GrammarValidator.CLAUSE_PRESENT)
-		else:
-			_complete_colour_without_present()
+		# The colour's present half is gathered with everything else in the pass that
+		# follows, so nothing extra is asked for here.
+		_complete_colour_without_present()
 		return
 	_apply_traits(true)
 	# Body and leg changes stage their own cartoon transition; a scale punch on top
@@ -1255,18 +1255,16 @@ func _complete_colour_without_present() -> void:
 
 
 func _finish_sentence() -> void:
-	var ready_for_cinematic := Game.current != null and Game.current.is_complete() \
-		and not Settings.needs_present_pass(Speech.uses_microphone())
+	# Never straight to the cinematic: a finished set of past sentences is always followed
+	# by the present-tense pass.
+	var ready_for_cinematic := false
 	await get_tree().create_timer(
 		PRE_TRANSFORM_PAUSE if ready_for_cinematic else SUCCESS_PAUSE).timeout
 	if not is_inside_tree():
 		return
 	_busy = false
 	if Game.current != null and Game.current.is_complete():
-		if Settings.needs_present_pass(Speech.uses_microphone()):
-			_enter_present()
-		else:
-			await _begin_pre_transformation()
+		_enter_present()
 	else:
 		_word_lab.set_locked(false)
 		_word_lab.visible = true

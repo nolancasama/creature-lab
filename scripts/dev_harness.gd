@@ -23,7 +23,7 @@ extends RefCounted
 ##   godot --path . -- --shot=zoo-name     open a resident's measured name card
 ##   godot --path . -- --shot=say          the recording screen with a card chosen
 ##   godot --path . -- --backtest          abandon a half-finished round, then restart it
-##   godot --path . -- --splittest         the SAY_SPLIT present-tense pass, end to end
+##   godot --path . -- --splittest         the present-tense pass, end to end
 ##   godot --path . -- --youngflowtest     SHORT + YOUNG through transformation/comparison
 ##   godot --path . -- --tallflowtest      tiger SHORT -> TALL machine-clearance regression
 ##   godot --path . -- --shot=present      the centred present-tense panel
@@ -137,9 +137,8 @@ static func _autoplay(main: Node) -> void:
 
 	# The default asks for the three present-tense sentences in a pass of their own once
 	# the past tense is done, so a run through the real signal path has to answer those
-	# too. Reading the mode rather than assuming it: this is the check that is supposed to
-	# notice when the default changes.
-	if Settings.needs_present_pass(Speech.uses_microphone()):
+	# Unconditional now: every round collects the present half, whatever the input.
+	if true:
 		await tree.create_timer(1.0).timeout
 		if Game.phase != Game.Phase.ANIMAL_SELECTION:
 			printerr("[autoplay] FAIL: no present-tense pass in split mode")
@@ -279,9 +278,7 @@ static func _backtest(main: Node) -> void:
 ## What a correct answer sounds like under the current teacher settings - past-only is
 ## the default, so submitting the full sentence would be testing a mode nobody is in.
 static func _expected(before: String, after: String) -> String:
-	if Settings.past_only():
-		return GrammarValidator.expected_past(before)
-	return GrammarValidator.expected_sentence(before, after)
+	return GrammarValidator.expected_past(before)
 
 
 ## Records the three past sentences, which is the way in to everything after them.
@@ -300,13 +297,12 @@ static func _drive_past_pass(tree: SceneTree, tag: String) -> bool:
 	return true
 
 
-## Settings.SAY_SPLIT: three past sentences, then three more in the present before
+## Three past sentences, then three more in the present before
 ## anything transforms. The assertion that matters is the middle one - after the third
 ## past sentence the game must still be on the selection screen, because in every other
 ## mode that is exactly when it leaves for the chamber.
 static func _splittest(main: Node) -> void:
 	var tree := main.get_tree()
-	Settings.say_mode = Settings.SAY_SPLIT
 	_goto("lab")
 	await tree.create_timer(1.4).timeout
 
@@ -561,13 +557,10 @@ static func _screenshot(main: Node, phase: String) -> void:
 	# "say" is the recording screen with a card already chosen. Worth its own target
 	# because Say It is hidden entirely until armed - it, the mic, and Cancel cannot be
 	# seen from --shot=lab, which only ever shows the idle screen.
-	if phase == "present":
-		Settings.say_mode = Settings.SAY_SPLIT
 	if phase == "speechlog":
 		# The on-screen diagnostic panel, which is off by default and has no console to
 		# stand in for it on the machines that need it.
 		Settings.speech_log = true
-		Settings.say_mode = Settings.SAY_SPLIT
 	# The zoo shortcut on the picker only appears once the zoo has a resident, so
 	# seeing it at all means putting one there first.
 	if phase == "select-zoo":
@@ -958,7 +951,7 @@ static func _reverttest(main: Node) -> void:
 		await tree.create_timer(0.7).timeout
 		Speech.submit_typed(_expected(str(pick[1]), str(pick[2])))
 		await tree.create_timer(2.6).timeout
-	if Settings.needs_present_pass(Speech.uses_microphone()):
+	if true: ## Every round collects the present half now.
 		await tree.create_timer(1.0).timeout
 		for entry in Game.current.entries:
 			Speech.submit_typed(GrammarValidator.expected_present(str(entry["after"])))
@@ -2207,7 +2200,7 @@ static func _voice_checks(failures: Array[String]) -> void:
 		"voice: playing a missing clip did not report itself as missing")
 	_check(failures, Voice.play(-1) <= 0.0 and Voice.clip_length(99) <= 0.0,
 		"voice: an out-of-range slot was not handled")
-	# SAY_SPLIT records "It was small." and "Now it is big." as two takes minutes apart, so
+	# The round records "It was small." and "Now it is big." as two takes minutes apart, so
 	# the present halves are filed above PRESENT_SLOT and played after their own past half.
 	Voice.keep_present_for(0)
 	_check(failures, not Voice.has_clip(Voice.PRESENT_SLOT),
@@ -2233,20 +2226,18 @@ static func _voice_checks(failures: Array[String]) -> void:
 
 ## Past-only remains a useful microphone option, but typing must still practise the
 ## present half. Full-sentence mode already contains it and must never duplicate it.
+## The present-tense pass used to be conditional, and one branch of that condition made it
+## depend on the INPUT: past-only rounds collected the "Now it is ___" half when typed and
+## silently skipped it when spoken. A student on a microphone therefore never said half the
+## grammar the game exists to teach, with nothing on screen to say so.
+##
+## The setting is gone and every round now collects both halves. What is worth asserting is
+## that nothing has crept back in that makes the lesson depend on the input backend.
 static func _present_pass_checks(failures: Array[String]) -> void:
-	var original := Settings.say_mode
-	Settings.say_mode = Settings.SAY_PAST
-	_check(failures, Settings.needs_present_pass(false),
-		"typing: Past-only skipped the present-tense pass")
-	_check(failures, not Settings.needs_present_pass(true),
-		"speech: Past-only unexpectedly added a present-tense pass")
-	Settings.say_mode = Settings.SAY_SPLIT
-	_check(failures, Settings.needs_present_pass(false) and Settings.needs_present_pass(true),
-		"split: present-tense pass depends on the input backend")
-	Settings.say_mode = Settings.SAY_FULL
-	_check(failures, not Settings.needs_present_pass(false),
-		"typing: full sentence duplicated the present-tense pass")
-	Settings.say_mode = original
+	_check(failures, not Settings.has_method("needs_present_pass"),
+		"the present-tense pass is conditional again - it must not depend on the input")
+	_check(failures, not Settings.has_method("past_only"),
+		"say-mode branching is back; the round has one shape")
 
 
 ## The carousel replaced a grid that could not promise its own size. These assert the two

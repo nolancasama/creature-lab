@@ -43,15 +43,6 @@ func _build() -> void:
 	scroll.add_child(column)
 
 	column.add_child(_choice_section(
-		"学習者が言う文の長さ",
-		"過去形だけなら短く、音声認識がより安定します。クリーチャーの変化は同じです。",
-		[["過去形だけ（It was small.）", Settings.SAY_PAST],
-			["過去形のあと、現在形を3文", Settings.SAY_SPLIT],
-			["文をすべて言う", Settings.SAY_FULL]],
-		func() -> String: return Settings.say_mode,
-		func(value: String) -> void: Settings.say_mode = value))
-
-	column.add_child(_choice_section(
 		"単語をえらぶ人", "元のデザインの「かんたんモード」です。",
 		[["学習者が自由にえらぶ", Settings.CHOICE_FREE], ["ゲームが組み合わせを指定", Settings.CHOICE_GUIDED]],
 		func() -> String: return Settings.choice_mode,

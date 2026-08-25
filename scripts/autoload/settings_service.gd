@@ -23,9 +23,6 @@ const CHOICE_GUIDED := "guided"
 ## beginner can produce and a recogniser handles far more reliably than the full compound
 ## sentence - while still asking for the present tense, which is half the grammar the game
 ## exists to teach and which past-only never asks a student to say at all.
-const SAY_PAST := "past" ## "It was small."
-const SAY_SPLIT := "split" ## Past for each card, then all three "Now it is ___" together.
-const SAY_FULL := "full" ## "It was small. Now it is big."
 
 const PROMPT_FULL := "full" ## "It was small. Now it is big."
 const PROMPT_GAPPED := "gapped" ## "It was ____ . Now it is ____ ."
@@ -37,7 +34,6 @@ const STRICT_NORMAL := 1
 const STRICT_EXACT := 2
 
 var choice_mode: String = CHOICE_FREE
-var say_mode: String = SAY_SPLIT
 var prompt_mode: String = PROMPT_FULL
 var strictness: int = STRICT_NORMAL
 var enabled_pairs := PackedStringArray() ## Empty = all.
@@ -64,7 +60,6 @@ func load_settings() -> void:
 	if cfg.load(PATH) != OK:
 		return
 	choice_mode = str(cfg.get_value("game", "choice_mode", choice_mode))
-	say_mode = str(cfg.get_value("game", "say_mode", say_mode))
 	prompt_mode = str(cfg.get_value("game", "prompt_mode", prompt_mode))
 	strictness = int(cfg.get_value("game", "strictness", strictness))
 	enabled_pairs = PackedStringArray(cfg.get_value("content", "pairs", []))
@@ -83,7 +78,6 @@ func load_settings() -> void:
 func save_settings() -> void:
 	var cfg := ConfigFile.new()
 	cfg.set_value("game", "choice_mode", choice_mode)
-	cfg.set_value("game", "say_mode", say_mode)
 	cfg.set_value("game", "prompt_mode", prompt_mode)
 	cfg.set_value("game", "strictness", strictness)
 	cfg.set_value("game", "persist_zoo", persist_zoo)
@@ -146,18 +140,3 @@ static func _toggled(current: PackedStringArray, all: PackedStringArray, key: St
 
 ## True when the card-by-card pass only asks for the "It was ___" half. Split mode does
 ## too - its present half is a separate pass at the end, not part of the same breath.
-func past_only() -> bool:
-	return say_mode != SAY_FULL
-
-
-## True when the present tense is collected as its own pass before the transformation.
-func split_pass() -> bool:
-	return say_mode == SAY_SPLIT
-
-
-## Typing does not have the recognition problem that makes a one-clause microphone round
-## useful, so a typed Past-only round still collects the missing "Now it is ___" half in
-## the existing present-tense pass. Full mode already collected both halves and must not
-## ask for the present a second time.
-func needs_present_pass(uses_microphone: bool) -> bool:
-	return split_pass() or (not uses_microphone and say_mode == SAY_PAST)
