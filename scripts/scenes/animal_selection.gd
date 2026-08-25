@@ -1130,6 +1130,12 @@ func _cancel_pending() -> void:
 func _on_heard(alternatives: PackedStringArray, is_final: bool) -> void:
 	var speaking := _mode == Mode.RECORDING or _mode == Mode.PRESENT
 	if not speaking or not is_final or _busy or _pending.is_empty() or not _speech.is_armed():
+		# Five separate reasons a heard sentence goes nowhere, and from outside they all look
+		# identical: nothing happens. Typed answers reach _evaluate() through the same guard,
+		# so whichever of these is false for speech and true for typing is the difference.
+		print("[speech] dropped: mode=%s final=%s busy=%s pending=%s armed=%s"
+			% [Mode.keys()[_mode], is_final, _busy, not _pending.is_empty(),
+			_speech.is_armed()])
 		return
 	_evaluate(alternatives)
 
@@ -1140,8 +1146,12 @@ func _evaluate(alternatives: PackedStringArray) -> void:
 	var before := str(_pending["before"])
 	var after := str(_pending["after"])
 	var best := {}
+	print("[speech] judging clause=%d mode=%s want='%s'/'%s' heard=%s"
+		% [_clause(), Mode.keys()[_mode], before, after, alternatives])
 	for alternative in alternatives:
 		var result := GrammarValidator.validate(alternative, before, after, Settings.strictness, _clause())
+		if not bool(result["ok"]):
+			print("[speech]   '%s' rejected: %s" % [alternative, result.get("reason", "")])
 		if bool(result["ok"]):
 			if _mode == Mode.PRESENT:
 				_present_advance()

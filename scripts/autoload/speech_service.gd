@@ -84,6 +84,12 @@ func submit_typed(text: String) -> void:
 
 
 func _on_transcript(alternatives: PackedStringArray, is_final: bool) -> void:
+	# Printed because the spoken path cannot be observed anywhere but a browser, and this is
+	# the first place it can silently end: a transcript arriving after a cancel is dropped
+	# here and the student sees nothing happen at all. Godot's print reaches the browser
+	# console in a web export.
+	print("[speech] transcript final=%s cancelled=%s alts=%s"
+		% [is_final, _cancelled, alternatives])
 	if _cancelled:
 		return
 	heard.emit(alternatives, is_final)
