@@ -202,6 +202,9 @@ func keep_present_for(index: int) -> void:
 
 ## Prints the recorder's state to the browser console.
 func report(note: String) -> void:
+	# On screen as well as in the console: the recorder's own account of what it captured is
+	# half the story, and the console holding it is the half nobody can reach.
+	Diagnostics.note("[voice]", "%s slots=%s" % [note, kept_slots])
 	if _supported:
 		JavaScriptBridge.eval('%s.report("%s")' % [BRIDGE, note], true)
 

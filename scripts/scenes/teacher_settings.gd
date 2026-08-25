@@ -180,6 +180,10 @@ func _toggles_section() -> Control:
 		func(on: bool) -> void:
 			Settings.fullscreen = on
 			Settings.save_settings()))
+	row.add_child(_switch("しんだんログ", func() -> bool: return Settings.speech_log,
+		func(on: bool) -> void:
+			Settings.speech_log = on
+			Settings.save_settings()))
 	row.add_child(UiKit.label(
 		"この環境の入力方法：%s" % Speech.prompt_label(), UiKit.SMALL, UiKit.MUTED))
 	return _wrap(column)

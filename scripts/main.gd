@@ -71,6 +71,10 @@ func _build_layers() -> void:
 	debug_overlay.visible = false
 	debug_layer.add_child(debug_overlay)
 
+	# Its own panel rather than part of DebugOverlay: that one is gated on a debug build and
+	# toggled with F3, neither of which is available in an exported game on a Chromebook.
+	debug_layer.add_child(SpeechLog.new())
+
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("toggle_debug") and Settings.debug_mode:

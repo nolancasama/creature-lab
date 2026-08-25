@@ -50,6 +50,9 @@ var sfx_volume := 0.85
 var fullscreen := false
 var persist_zoo := true
 var debug_mode := OS.is_debug_build()
+## Shows the speech diagnostics on screen. Off by default and reachable from Teacher
+## Settings, because the browser console is not reachable on the machines this runs on.
+var speech_log := false
 
 
 func _ready() -> void:
@@ -73,6 +76,7 @@ func load_settings() -> void:
 	sfx_volume = float(cfg.get_value("audio", "sfx", sfx_volume))
 	fullscreen = bool(cfg.get_value("display", "fullscreen", fullscreen))
 	persist_zoo = bool(cfg.get_value("game", "persist_zoo", persist_zoo))
+	speech_log = bool(cfg.get_value("game", "speech_log", speech_log))
 	_apply_display()
 
 

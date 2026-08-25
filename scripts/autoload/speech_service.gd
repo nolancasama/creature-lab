@@ -88,7 +88,7 @@ func _on_transcript(alternatives: PackedStringArray, is_final: bool) -> void:
 	# the first place it can silently end: a transcript arriving after a cancel is dropped
 	# here and the student sees nothing happen at all. Godot's print reaches the browser
 	# console in a web export.
-	print("[speech] transcript final=%s cancelled=%s alts=%s"
+	Diagnostics.note("[speech]", "transcript final=%s cancelled=%s alts=%s"
 		% [is_final, _cancelled, alternatives])
 	if _cancelled:
 		return

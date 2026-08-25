@@ -563,13 +563,18 @@ static func _screenshot(main: Node, phase: String) -> void:
 	# seen from --shot=lab, which only ever shows the idle screen.
 	if phase == "present":
 		Settings.say_mode = Settings.SAY_SPLIT
+	if phase == "speechlog":
+		# The on-screen diagnostic panel, which is off by default and has no console to
+		# stand in for it on the machines that need it.
+		Settings.speech_log = true
+		Settings.say_mode = Settings.SAY_SPLIT
 	# The zoo shortcut on the picker only appears once the zoo has a resident, so
 	# seeing it at all means putting one there first.
 	if phase == "select-zoo":
 		_seed_full_creature(Content.animal_ids())
 		Game.finish_creature("テスト")
 	var routed_phase := "select" if phase in ["select-side", "select-zoo"] \
-		else ("zoo" if phase == "zoo-name" else phase)
+		else ("zoo" if phase == "zoo-name" else ("present" if phase == "speechlog" else phase))
 	_goto("lab" if routed_phase in ["say", "present", "carousel", "color-before", "color-after", "color-say"] else routed_phase)
 	await main.get_tree().create_timer(SHOT_DELAY).timeout
 	if phase == "zoo-name":
@@ -620,7 +625,7 @@ static func _screenshot(main: Node, phase: String) -> void:
 		if word_lab != null:
 			word_lab.pair_selected.emit("HARDNESS", "soft", "hard")
 		await main.get_tree().create_timer(1.0).timeout
-	elif phase == "present":
+	elif phase == "present" or phase == "speechlog":
 		var _reached: bool = await _drive_past_pass(main.get_tree(), "shot")
 		await main.get_tree().create_timer(1.2).timeout
 	elif phase == "carousel":
