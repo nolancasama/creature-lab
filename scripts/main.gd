@@ -30,7 +30,6 @@ func _ready() -> void:
 ## Input actions are registered here rather than in project.godot: the file format for
 ## input events is fiddly to hand-author and this keeps the bindings visible in code.
 func _register_actions() -> void:
-	_bind("push_to_talk", KEY_SPACE)
 	_bind("toggle_debug", KEY_F3)
 	_bind("toggle_fullscreen", KEY_F11)
 	_bind("back", KEY_ESCAPE)

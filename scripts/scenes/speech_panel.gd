@@ -18,13 +18,23 @@ const HELP_AFTER_MODEL := 2 ## Failed attempts before the sentence is read aloud
 const HELP_AFTER_OVERRIDE := 3 ## Failed attempts before the teacher override appears.
 const MIC_ICON := preload("res://ui/mic.svg")
 const SPEAKER_ICON := preload("res://ui/speaker.svg")
-const MIC_IDLE := "タップして話す（スペース）"
+const MIC_IDLE := "タップして話す"
 const MIC_LISTENING := "聞いています… タップで停止"
+## Said in words, above the button, as well as shown on it.
+##
+## The button already changed colour and caption, but both live ON the control the student
+## is about to press, which is the one place they are not looking while they think about
+## the sentence. "Is it listening to me right now?" is the question the whole spoken half
+## of this game rests on, and it deserves its own line rather than an inference from a
+## button's shade.
+const STATUS_IDLE := "マイクは とまっています"
+const STATUS_LISTENING := "● ろくおん中… はなしてください"
 const LISTEN_TIMEOUT := 10.0 ## Seconds before an unanswered microphone closes itself.
 
 var _sentence_label: RichTextLabel = null
 var _feedback: Label = null
 var _mic_button: Button = null
+var _status: Label = null
 var _entry: LineEdit = null
 var _input_shell: Control = null
 var _submit_button: Button = null
@@ -119,6 +129,10 @@ func _build() -> void:
 	_feedback.custom_minimum_size = Vector2(0, 36)
 	column.add_child(_feedback)
 
+	_status = UiKit.label(STATUS_IDLE, UiKit.SMALL, UiKit.MUTED)
+	_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	column.add_child(_status)
+
 	_mic_button = UiKit.button(MIC_IDLE, UiKit.H3, true)
 	UiKit.style_primary(_mic_button) ## The call-to-action colour, not the
 	## ambient ACCENT the "true" flag would otherwise apply - _on_listening_changed()
@@ -202,6 +216,11 @@ func _sync_input_mode() -> void:
 	var mic := Speech.uses_microphone()
 	_mic_button.visible = mic
 	_input_shell.visible = not mic
+	# Set here as well as when listening changes: this runs when the panel is built, and a
+	# typed round would otherwise show "the microphone is stopped" under its text box until
+	# a recogniser it never uses happened to report something.
+	if _status != null:
+		_status.visible = mic
 
 
 # --- Public API --------------------------------------------------------------
@@ -354,15 +373,23 @@ func _on_listening_changed(listening: bool) -> void:
 	else:
 		_listen_timer.stop()
 	_mic_button.text = MIC_LISTENING if listening else MIC_IDLE
+	if _status != null:
+		_status.text = STATUS_LISTENING if listening else STATUS_IDLE
+		_status.add_theme_color_override("font_color",
+			UiKit.OK if listening else UiKit.MUTED)
+		# Only meaningful when the microphone is the input; a typed round has no state to
+		# report and the line would just be noise under the text field.
+		_status.visible = Speech.uses_microphone()
 	UiKit.style_button(_mic_button, UiKit.OK if listening else UiKit.CTA, true)
 
 
 func _unhandled_input(event: InputEvent) -> void:
 	if not _armed or not Speech.uses_microphone():
 		return
-	if event.is_action_pressed("push_to_talk"):
-		_on_mic_pressed()
-		get_viewport().set_input_as_handled()
+	# Space used to open the microphone here. It is a confirm key everywhere else in the
+	# game now, and a key that submits an answer on one screen and starts recording on
+	# another is worse than a key that does nothing. The microphone is tapped.
+	pass
 
 
 ## Child-facing wording for each validator reason. The validator returns codes; the

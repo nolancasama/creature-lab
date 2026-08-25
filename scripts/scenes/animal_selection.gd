@@ -100,6 +100,11 @@ var _root: Control = null
 var _progress: Label = null
 var _progress_group: Control = null
 var _lesson_progress: HBoxContainer = null
+## "2 / 3" during the past-tense round. The dot row above it says the same thing, but a row
+## of dots is a thing to decode: a child has to count filled ones and know how many there
+## were to begin with. A number does not need decoding, and this is the one screen where
+## knowing how much is left actually changes what the student does next.
+var _sentence_count: Label = null
 var _drag_hint: Label = null
 var _word_lab: DescriptorCarousel = null
 var _speech: SpeechPanel = null
@@ -158,6 +163,20 @@ func _process(delta: float) -> void:
 ## During sentence recording, the player can inspect the still creature without
 ## restarting its automatic turntable rotation.
 func _unhandled_input(event: InputEvent) -> void:
+	# The picker, by keyboard: arrows walk the animals, space or enter takes the one on the
+	# platform. ui_left/ui_right/ui_accept are Godot's own bindings, so this costs no new
+	# key definitions and matches what the arrow and confirm keys already do everywhere.
+	if _mode == Mode.PICKING:
+		if event.is_action_pressed("ui_left"):
+			_browse_animal(-1)
+			get_viewport().set_input_as_handled()
+		elif event.is_action_pressed("ui_right"):
+			_browse_animal(1)
+			get_viewport().set_input_as_handled()
+		elif event.is_action_pressed("ui_accept"):
+			_confirm()
+			get_viewport().set_input_as_handled()
+		return
 	if _mode != Mode.RECORDING or _preview_root == null:
 		return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
@@ -524,6 +543,7 @@ func _clear_overlays() -> void:
 	_progress = null
 	_progress_group = null
 	_lesson_progress = null
+	_sentence_count = null
 	_drag_hint = null
 	_animal_cards.clear()
 
@@ -903,13 +923,29 @@ func _build_progress_display(show_heading := true) -> void:
 	_lesson_progress = UiKit.lesson_progress()
 	box.add_child(_lesson_progress)
 	if show_heading:
+		_sentence_count = UiKit.label("", UiKit.H3, UiKit.ACCENT)
+		_sentence_count.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		box.add_child(_sentence_count)
+		_refresh_sentence_count()
+	if show_heading:
 		_drag_hint = UiKit.label("ドラッグでどうぶつの向きを変えられます", UiKit.SMALL, UiKit.MUTED)
 		_drag_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		box.add_child(_drag_hint)
 	_update_lesson_progress()
 
 
+## How many of the three sentences are done. Recomputed from CreatureState rather than
+## counted alongside it, so it cannot drift out of step with what was actually recorded.
+func _refresh_sentence_count() -> void:
+	if _sentence_count == null:
+		return
+	var filled := Game.current.slots_filled() if Game.current != null else 0
+	var total := CreatureState.SLOTS
+	_sentence_count.text = "%d / %d" % [filled, total]
+
+
 func _update_lesson_progress(completed_override := -1) -> void:
+	_refresh_sentence_count()
 	if _lesson_progress == null:
 		return
 	var completed := 0

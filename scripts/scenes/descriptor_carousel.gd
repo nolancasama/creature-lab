@@ -154,6 +154,35 @@ func _process(_delta: float) -> void:
 	_sync_edge_fades()
 
 
+## Arrows step the deck and space or enter takes the word in the middle, mirroring the
+## chevrons and the centre card exactly. Only while the deck is actually the thing being
+## used: a locked deck is waiting for a sentence to be said, and stealing the confirm key
+## from the Say It panel underneath it would be worse than having no shortcut at all.
+func _unhandled_input(event: InputEvent) -> void:
+	if not visible or _locked:
+		return
+	if _view == View.COLOUR:
+		if event.is_action_pressed("ui_left"):
+			_step_colour(-1)
+		elif event.is_action_pressed("ui_right"):
+			_step_colour(1)
+		elif event.is_action_pressed("ui_accept"):
+			_confirm_colour()
+		else:
+			return
+		get_viewport().set_input_as_handled()
+		return
+	if event.is_action_pressed("ui_left"):
+		_step(-1)
+	elif event.is_action_pressed("ui_right"):
+		_step(1)
+	elif event.is_action_pressed("ui_accept"):
+		_activate()
+	else:
+		return
+	get_viewport().set_input_as_handled()
+
+
 func _ready() -> void:
 	# The cards are a control console beneath the platform, not a second screen-sized panel.
 	# Their own faces provide contrast while the laboratory remains visible around them.
