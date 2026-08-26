@@ -38,7 +38,6 @@ const H3 := 22
 const BODY := 18
 const SMALL := 17
 const MIN_TOUCH := 52
-const LESSON_STEPS := 7
 
 
 static func stylebox(bg: Color, radius := 12, border := 0, border_color := Color.TRANSPARENT, padding := 0) -> StyleBoxFlat:
@@ -212,49 +211,6 @@ static func icon_button(icon: String, size := 48) -> Button:
 	b.add_theme_font_size_override("font_size", H2)
 	style_navigation(b)
 	return b
-
-
-## Seven stable cells: animal selection, three past clauses and three present clauses.
-## Completed dots are filled, the current dot is a larger gold ring, and future dots are
-## small hollow rings, so progress is still readable without relying on hue.
-static func lesson_progress(completed := 0, active := 0) -> HBoxContainer:
-	var row := hbox(8)
-	row.name = "LessonProgress"
-	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	for i in LESSON_STEPS:
-		var cell := CenterContainer.new()
-		cell.custom_minimum_size = Vector2(22, 22)
-		var dot := PanelContainer.new()
-		dot.name = "Step%d" % (i + 1)
-		cell.add_child(dot)
-		row.add_child(cell)
-	set_lesson_progress(row, completed, active)
-	return row
-
-
-static func set_lesson_progress(row: HBoxContainer, completed: int, active: int) -> void:
-	if row == null:
-		return
-	var labels := ["どうぶつ", "過去形 1", "過去形 2", "過去形 3",
-		"現在形 1", "現在形 2", "現在形 3"]
-	for i in mini(row.get_child_count(), LESSON_STEPS):
-		var cell := row.get_child(i) as CenterContainer
-		if cell == null or cell.get_child_count() == 0:
-			continue
-		var dot := cell.get_child(0) as PanelContainer
-		if dot == null:
-			continue
-		dot.tooltip_text = str(labels[i])
-		if i < completed:
-			dot.custom_minimum_size = Vector2(14, 14)
-			dot.add_theme_stylebox_override("panel", stylebox(ACCENT, 7, 0,
-				Color.TRANSPARENT, 1))
-		elif i == active:
-			dot.custom_minimum_size = Vector2(18, 18)
-			dot.add_theme_stylebox_override("panel", stylebox(PANEL, 9, 3, GOLD, 1))
-		else:
-			dot.custom_minimum_size = Vector2(14, 14)
-			dot.add_theme_stylebox_override("panel", stylebox(PANEL, 7, 2, NAV_EDGE, 1))
 
 
 ## Full-screen background wash used by the 2D screens.

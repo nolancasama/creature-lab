@@ -16,8 +16,6 @@ const CONFIRM_TURN_SPEED := 8.0 ## Radians per second: quick, but still a visibl
 const CONFIRM_TURN_MIN := 0.10
 const CONFIRM_TURN_MAX := 0.38 ## Formerly as long as 0.9s while the reaction had begun.
 const DRAG_TURN_SPEED := 0.012
-const SUCCESS_PAUSE := 1.1
-const PRE_TRANSFORM_PAUSE := 0.28
 const UI_EXIT_TIME := 0.72
 
 const PLATFORM_POS := Vector3(-0.5, 0.0, 0.6)
@@ -60,7 +58,7 @@ const SAY_IT_WIDTH := 620
 ## width only fit the old one-word "Before" label; the longer instruction then expanded
 ## the VBox toward the right and no longer shared the platform's centreline.
 const PROGRESS_WIDTH := 760
-const PROGRESS_HEIGHT := 112 ## Heading, seven lesson dots and the one-time drag hint.
+const PROGRESS_HEIGHT := 112 ## Heading and the one-time drag hint.
 const APPEARANCE_HEADING := "へんしん前の見た目をえらぼう"
 const NOW_COLOUR_HEADING := "今の色をえらぼう"
 
@@ -99,12 +97,6 @@ var _rig_animal := "" ## Which animal the live rig was built for.
 var _root: Control = null
 var _progress: Label = null
 var _progress_group: Control = null
-var _lesson_progress: HBoxContainer = null
-## "2 / 3" during the past-tense round. The dot row above it says the same thing, but a row
-## of dots is a thing to decode: a child has to count filled ones and know how many there
-## were to begin with. A number does not need decoding, and this is the one screen where
-## knowing how much is left actually changes what the student does next.
-var _sentence_count: Label = null
 var _drag_hint: Label = null
 var _word_lab: DescriptorCarousel = null
 var _speech: SpeechPanel = null
@@ -309,8 +301,6 @@ func _build_picking_panel() -> void:
 	heading.name = "AnimalSelectionHeading"
 	heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	heading_group.add_child(heading)
-	_lesson_progress = UiKit.lesson_progress(0, 0)
-	heading_group.add_child(_lesson_progress)
 
 	# Exact footprint used by the adjective carousel on the Before screen. Five English
 	# names stay readable at their normal card size; browsing merely changes which five
@@ -542,8 +532,6 @@ func _clear_overlays() -> void:
 	_console = null
 	_progress = null
 	_progress_group = null
-	_lesson_progress = null
-	_sentence_count = null
 	_drag_hint = null
 	_animal_cards.clear()
 
@@ -766,7 +754,6 @@ func _enter_present() -> void:
 	_speech.change_requested.connect(_cancel_present)
 	column.add_child(_speech)
 
-	_build_progress_display(false)
 	_add_gear_button() ## A teacher must still be able to reach the settings mid-pass.
 	_present_step()
 
@@ -788,8 +775,8 @@ func _present_step() -> void:
 		"after": str(entry["after"]),
 	}
 	_attempts = 0
-	_update_lesson_progress()
-	_speech.show_target(str(entry["before"]), str(entry["after"]), GrammarValidator.CLAUSE_PRESENT)
+	_speech.show_target(str(entry["before"]), str(entry["after"]),
+		GrammarValidator.CLAUSE_PRESENT, 4 + _present_index)
 
 
 ## Nothing is recorded here - the entry already exists from the past pass, and the traits
@@ -803,11 +790,7 @@ func _present_advance() -> void:
 	# filed here - _commit() only ever sees the past pass, so without this the whole
 	# "Now it is..." side of a split round was recorded and then dropped.
 	Voice.keep_present_for(_present_index)
-	_speech.show_success()
-	Audio.play("success")
-	_update_lesson_progress(5 + _present_index)
-	var is_last := Game.current == null or _present_index + 1 >= Game.current.entries.size()
-	await get_tree().create_timer(PRE_TRANSFORM_PAUSE if is_last else SUCCESS_PAUSE).timeout
+	await _speech.show_success(5 + _present_index)
 	if not is_inside_tree():
 		return
 	_busy = false
@@ -920,53 +903,10 @@ func _build_progress_display(show_heading := true) -> void:
 		_progress.add_theme_font_size_override("font_size", PROGRESS_FONT)
 		_progress.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		box.add_child(_progress)
-	_lesson_progress = UiKit.lesson_progress()
-	box.add_child(_lesson_progress)
-	if show_heading:
-		_sentence_count = UiKit.label("", UiKit.H3, UiKit.ACCENT)
-		_sentence_count.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		box.add_child(_sentence_count)
-		_refresh_sentence_count()
 	if show_heading:
 		_drag_hint = UiKit.label("ドラッグでどうぶつの向きを変えられます", UiKit.SMALL, UiKit.MUTED)
 		_drag_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		box.add_child(_drag_hint)
-	_update_lesson_progress()
-
-
-## How many of the three sentences are done. Recomputed from CreatureState rather than
-## counted alongside it, so it cannot drift out of step with what was actually recorded.
-func _refresh_sentence_count() -> void:
-	if _sentence_count == null:
-		return
-	var filled := Game.current.slots_filled() if Game.current != null else 0
-	var total := CreatureState.SLOTS
-	_sentence_count.text = "%d / %d" % [filled, total]
-
-
-func _update_lesson_progress(completed_override := -1) -> void:
-	_refresh_sentence_count()
-	if _lesson_progress == null:
-		return
-	var completed := 0
-	var active := 0
-	match _mode:
-		Mode.PICKING:
-			completed = 0
-			active = 0
-		Mode.RECORDING:
-			completed = 1 + (Game.current.slots_filled() if Game.current != null else 0)
-			active = mini(completed, 4)
-		Mode.PRESENT:
-			completed = 4 + _present_index
-			active = mini(completed, 6)
-		Mode.PRE_TRANSFORMATION:
-			completed = UiKit.LESSON_STEPS
-			active = -1
-	if completed_override >= 0:
-		completed = clampi(completed_override, 0, UiKit.LESSON_STEPS)
-		active = -1 if completed >= UiKit.LESSON_STEPS else mini(completed, 6)
-	UiKit.set_lesson_progress(_lesson_progress, completed, active)
 
 
 ## Say It replaces the carousel inside SelectionConsole instead of introducing another
@@ -993,8 +933,6 @@ func _sync_ui() -> void:
 	var assigned := _assigned_category()
 	if _progress != null:
 		_progress.text = NOW_COLOUR_HEADING if _choosing_now_colour else APPEARANCE_HEADING
-	_update_lesson_progress()
-
 	_word_lab.set_used(Game.current.used_categories())
 	_word_lab.set_restriction(assigned)
 	_word_lab.set_locked(not _pending.is_empty() or _busy)
@@ -1097,7 +1035,8 @@ func _on_pair_selected(category: String, before: String, after: String) -> void:
 		_punch()
 	_word_lab.set_locked(true)
 	_word_lab.visible = false
-	_speech.show_target(before, after, _clause())
+	_speech.show_target(before, after, _clause(),
+		1 + (Game.current.slots_filled() if Game.current != null else 0))
 
 
 ## Choosing a Before colour has enough information for the past clause, but not enough to
@@ -1114,7 +1053,8 @@ func _on_before_colour_selected(word: String) -> void:
 	_attempts = 0
 	_word_lab.set_locked(true)
 	_word_lab.visible = false
-	_speech.show_target(word, "", GrammarValidator.CLAUSE_PAST)
+	_speech.show_target(word, "", GrammarValidator.CLAUSE_PAST,
+		1 + (Game.current.slots_filled() if Game.current != null else 0))
 
 
 ## Before-colour browsing is visual only. It deliberately bypasses `_pending`, because a
@@ -1232,7 +1172,6 @@ func _commit(assisted: bool) -> void:
 	_colour_preview = ""
 
 	Game.record_sentence(category, before, after, assisted or _colour_past_assisted)
-	_update_lesson_progress()
 	# Keep the take that was actually accepted, indexed by the slot it filled, so the
 	# transformation can play the three sentences back in the order they were said.
 	if completing_colour_present:
@@ -1242,9 +1181,8 @@ func _commit(assisted: bool) -> void:
 	_colour_speech_stage = ColourSpeechStage.NONE
 	_colour_past_accepted = false
 	_colour_past_assisted = false
-	Audio.play("success")
 	Fx.burst(_preview_root, Vector3(0, 0.4, 0), "sparkle", UiKit.OK, 1.6)
-	_speech.show_success()
+	await _speech.show_success(1 + Game.current.slots_filled())
 	# The rig is NOT rebuilt here: the BEFORE word is already applied, and the AFTER
 	# word must not appear until the chamber runs on the next screen.
 	_finish_sentence()
@@ -1257,10 +1195,10 @@ func _accept_colour_past(assisted: bool) -> void:
 	# The eventual colour entry will occupy the current empty slot.
 	Voice.keep_for(Game.current.slots_filled())
 	_pending = {}
-	Audio.play("success")
 	Fx.burst(_preview_root, Vector3(0, 0.4, 0), "sparkle", UiKit.OK, 1.6)
-	_speech.show_success()
-	await get_tree().create_timer(SUCCESS_PAUSE).timeout
+	# This accepted colour clause does not fill a slot until the child chooses its Now
+	# colour, so celebrate without advancing the state-derived count.
+	await _speech.show_success(1 + Game.current.slots_filled())
 	if not is_inside_tree() or Game.current == null:
 		return
 	_busy = false
@@ -1280,22 +1218,16 @@ func _complete_colour_without_present() -> void:
 	_pending = {}
 	_colour_preview = ""
 	Game.record_sentence(Content.COLOR_CATEGORY, before, after, _colour_past_assisted)
-	_update_lesson_progress()
 	_colour_speech_stage = ColourSpeechStage.NONE
 	_colour_past_accepted = false
 	_colour_past_assisted = false
-	Audio.play("success")
 	Fx.burst(_preview_root, Vector3(0, 0.4, 0), "sparkle", UiKit.OK, 1.6)
-	_speech.show_idle()
+	# The slot becomes real only here; briefly return to Say It so its counter can tick.
+	await _speech.show_success(1 + Game.current.slots_filled())
 	_finish_sentence()
 
 
 func _finish_sentence() -> void:
-	# Never straight to the cinematic: a finished set of past sentences is always followed
-	# by the present-tense pass.
-	var ready_for_cinematic := false
-	await get_tree().create_timer(
-		PRE_TRANSFORM_PAUSE if ready_for_cinematic else SUCCESS_PAUSE).timeout
 	if not is_inside_tree():
 		return
 	_busy = false
@@ -1315,7 +1247,6 @@ func _begin_pre_transformation() -> void:
 		return
 	_pre_transforming = true
 	_mode = Mode.PRE_TRANSFORMATION
-	_update_lesson_progress()
 	_busy = true
 	_dragging_view = false
 	Speech.stop()

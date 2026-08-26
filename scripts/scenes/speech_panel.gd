@@ -32,6 +32,7 @@ const STATUS_LISTENING := "● ろくおん中… はなしてください"
 const LISTEN_TIMEOUT := 10.0 ## Seconds before an unanswered microphone closes itself.
 
 var _sentence_label: RichTextLabel = null
+var _step_counter: Label = null
 var _feedback: Label = null
 var _mic_button: Button = null
 var _status: Label = null
@@ -60,6 +61,21 @@ func _ready() -> void:
 func _build() -> void:
 	var column := UiKit.vbox(8)
 	add_child(column)
+
+	# Overlay progress without adding another row to this fixed-height panel.
+	var step_overlay := Control.new()
+	step_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(step_overlay)
+	_step_counter = UiKit.label("0 / 7", UiKit.H3, UiKit.ACCENT)
+	_step_counter.name = "StepCounter"
+	_step_counter.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_step_counter.z_index = 1
+	# PanelContainer already insets children by its 14 px style margin.
+	_step_counter.offset_left = 2
+	_step_counter.offset_top = 2
+	_step_counter.offset_right = 82
+	_step_counter.offset_bottom = 34
+	step_overlay.add_child(_step_counter)
 
 	# Two expanders, not a fixed spacer, so the sentence and input block remain centred
 	# however much slack the panel actually has.
@@ -168,9 +184,7 @@ func _build() -> void:
 	_override_button.custom_minimum_size.y = 52
 	UiKit.style_secondary(_override_button)
 	_override_button.visible = false
-	_override_button.pressed.connect(func() -> void:
-		Audio.play("success")
-		accepted_by_teacher.emit())
+	_override_button.pressed.connect(func() -> void: accepted_by_teacher.emit())
 	column.add_child(_override_button)
 
 	# Last child regardless of what is visible above it, so Cancel (or the override button,
@@ -241,10 +255,12 @@ func show_idle(message := "") -> void:
 	_set_input_enabled(false)
 
 
-func show_target(before: String, after: String, clause := GrammarValidator.CLAUSE_BOTH) -> void:
+func show_target(before: String, after: String, clause := GrammarValidator.CLAUSE_BOTH,
+		completed_steps := 0) -> void:
 	_before = before
 	_after = after
 	_clause = clause
+	_set_completed_steps(completed_steps)
 	_armed = true
 	visible = true
 	_sentence_label.text = _prompt_text()
@@ -261,14 +277,35 @@ func show_target(before: String, after: String, clause := GrammarValidator.CLAUS
 		_entry.grab_focus()
 
 
-func show_success() -> void:
+## The sound and pop begin together; callers await this before closing or advancing.
+func show_success(completed_steps: int) -> void:
 	_armed = false
+	visible = true
 	_feedback.text = "できました！  %s" % _target_sentence()
 	_feedback.visible = true
 	_feedback.add_theme_color_override("font_color", UiKit.OK)
 	_override_button.visible = false
 	_cancel_label.visible = false
 	_set_input_enabled(false)
+	_set_completed_steps(completed_steps)
+	Audio.play("success")
+	_step_counter.pivot_offset = _step_counter.size * 0.5
+	_step_counter.add_theme_color_override("font_color", UiKit.GOLD)
+	var tween := create_tween()
+	tween.tween_property(_step_counter, "scale", Vector2.ONE * 1.4, 0.12) \
+		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tween.tween_property(_step_counter, "scale", Vector2.ONE, 0.23) \
+		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	await tween.finished
+	if not is_inside_tree():
+		return
+	_step_counter.add_theme_color_override("font_color", UiKit.ACCENT)
+
+
+func _set_completed_steps(completed_steps: int) -> void:
+	_step_counter.text = "%d / 7" % clampi(completed_steps, 0, 7)
+	_step_counter.scale = Vector2.ONE
+	_step_counter.add_theme_color_override("font_color", UiKit.ACCENT)
 
 
 ## The scaffold ladder. `attempts` is how many times this sentence has now failed.

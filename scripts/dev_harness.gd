@@ -785,18 +785,6 @@ static func _report_profile(id: String, samples: Array[Dictionary], speed: float
 		print("[gaittest] %-8s %-12s%s" % [id, leg_id, line])
 
 
-## Every character the UI prints has to exist in the bundled font.
-##
-## This cannot be checked by looking at the game on this machine. Godot fills in glyphs its
-## font lacks from an OS font, so on Windows the Japanese text and the tick marks render
-## perfectly whether or not anything is bundled - and a browser has no OS fonts to borrow,
-## so the web build drew blanks. The desktop is the misleading case, which is exactly why
-## this is asserted against the font file rather than trusted to the eye.
-##
-## The sample is every non-ASCII character that appears inside a quoted string anywhere in
-## the project, regenerated whenever this check is updated. Comments are excluded: a kanji
-## in a comment is never drawn.
-const UI_CHARACTERS := "×…✓、。「」あいうえおかがきぎくぐけげこさしじすずせぜそただちっつてでとどなにのはひびふぶへべぼまみめもやよらりるれろわをんァアィイウェエオカガキクグゲコゴサザジスセタダチッデトドニネハバビフプベペボマムメモャヤュユラリルレロンー一上下中了人今代伝体使保停備元先入全判利前力効化半単厳去古合同名向回在地場塔境声変夕夜大天太失妻存学安完定密少山岩嵐巨常度形影後怪扱承押指文新方明星春晶期木果根桜楽欄次止正残毛水氷河法流海準火灼炎焼熱牙珠現環生用由画番異疾目真短確示稲空立粉紅終組綿羽習老者聞自色花苔若英草葉蛇表見言設話認語説読識豆象送進過量鉄鋼長陽難雪雲霜霧青非面音順風鹿！（）－："
 
 
 ## Taking one creature out of the zoo takes exactly that one out, and it stays out.
@@ -890,6 +878,19 @@ static func _music_checks(failures: Array[String]) -> void:
 	Settings.music_volume = restore
 
 
+## Every character the UI prints has to exist in the bundled font.
+##
+## This cannot be checked by looking at the game on this machine. Godot fills in glyphs its
+## font lacks from an OS font, so on Windows the Japanese text and the tick marks render
+## perfectly whether or not anything is bundled - and a browser has no OS fonts to borrow,
+## so the web build draws blanks. The desktop is the misleading case, which is why this is
+## asserted against the font FILE rather than trusted to the eye.
+##
+## The characters are read out of the source EVERY RUN rather than from a list kept
+## alongside it. A baked list is only as current as the last time someone remembered to
+## regenerate it, and that failed exactly as you would expect: a recording indicator gained
+## a U+25CF months after the list was written, the check went on asserting the old
+## characters, and the box shipped. Scanning the real files cannot go stale.
 static func _font_checks(failures: Array[String]) -> void:
 	var path := str(ProjectSettings.get_setting("gui/theme/custom_font", ""))
 	_check(failures, not path.is_empty(),
@@ -900,13 +901,67 @@ static func _font_checks(failures: Array[String]) -> void:
 	_check(failures, font != null, "bundled font %s failed to load" % path)
 	if font == null:
 		return
+	var printed := _printed_characters()
+	_check(failures, printed.length() > 50,
+		"only %d printable characters were found in the source - the scan is broken, and a"
+			% printed.length() + " check that finds nothing passes for the wrong reason")
 	var missing := ""
-	for i in UI_CHARACTERS.length():
-		var ch := UI_CHARACTERS[i]
+	for i in printed.length():
+		var ch := printed[i]
 		if not font.has_char(ch.unicode_at(0)):
 			missing += ch
 	_check(failures, missing.is_empty(),
 		"bundled font is missing %d glyph(s) the UI prints: %s" % [missing.length(), missing])
+
+
+## Every non-ASCII character inside a quoted string anywhere in the project's own scripts
+## and content.
+##
+## Comments are stripped first: a kanji in a comment is never drawn, and counting them would
+## demand glyphs for words like "the horse's beard" that no student ever sees.
+static func _printed_characters() -> String:
+	var found := {}
+	for dir_path in ["res://scripts", "res://content"]:
+		_scan_for_characters(dir_path, found)
+	var keys := found.keys()
+	keys.sort()
+	return "".join(PackedStringArray(keys))
+
+
+static func _scan_for_characters(dir_path: String, found: Dictionary) -> void:
+	var dir := DirAccess.open(dir_path)
+	if dir == null:
+		return
+	for sub in dir.get_directories():
+		_scan_for_characters("%s/%s" % [dir_path, sub], found)
+	for file in dir.get_files():
+		var name := file.trim_suffix(".remap")
+		if not name.get_extension() in ["gd", "json"]:
+			continue
+		var text := FileAccess.get_file_as_string("%s/%s" % [dir_path, name])
+		if text.is_empty():
+			continue
+		for line in text.split("\n"):
+			var code := line if name.get_extension() == "json" else _strip_comment(line)
+			var quoted := false
+			for i in code.length():
+				var ch := code[i]
+				if ch == "\"":
+					quoted = not quoted
+				elif quoted and ch.unicode_at(0) > 127:
+					found[ch] = true
+
+
+## A GDScript line up to its first # that is not inside a string.
+static func _strip_comment(line: String) -> String:
+	var quoted := false
+	for i in line.length():
+		var ch := line[i]
+		if ch == "\"":
+			quoted = not quoted
+		elif ch == "#" and not quoted:
+			return line.substr(0, i)
+	return line
 
 
 ## Watches the creature's shape across the opening of the transformation.
