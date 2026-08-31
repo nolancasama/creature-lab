@@ -39,6 +39,7 @@ var _distance_before_focus := 34.0
 var _touch_points := {}
 var _pinching := false
 var _pinch_distance := 0.0
+var _overlap_clock := 0.0
 
 
 func _ready() -> void:
@@ -55,9 +56,14 @@ func _ready() -> void:
 	Audio.play_ambience(true)
 
 
-func _physics_process(_delta: float) -> void:
-	if _creatures != null:
-		CreatureBrain.resolve_group_overlaps(_creatures, 8)
+func _physics_process(delta: float) -> void:
+	if _creatures == null:
+		return
+	_overlap_clock += delta
+	if _overlap_clock < GraphicsQuality.zoo_overlap_interval():
+		return
+	_overlap_clock = 0.0
+	CreatureBrain.resolve_group_overlaps(_creatures, 8)
 
 
 func _build_stage() -> void:

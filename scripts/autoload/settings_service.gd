@@ -36,6 +36,7 @@ const STRICT_EXACT := 2
 var choice_mode: String = CHOICE_FREE
 var prompt_mode: String = PROMPT_FULL
 var strictness: int = STRICT_NORMAL
+var graphics_quality := GraphicsQuality.STANDARD
 var enabled_pairs := PackedStringArray() ## Empty = all.
 var enabled_colors := PackedStringArray() ## Empty = all.
 var tts_enabled := true
@@ -62,6 +63,9 @@ func load_settings() -> void:
 	choice_mode = str(cfg.get_value("game", "choice_mode", choice_mode))
 	prompt_mode = str(cfg.get_value("game", "prompt_mode", prompt_mode))
 	strictness = int(cfg.get_value("game", "strictness", strictness))
+	graphics_quality = str(cfg.get_value("display", "graphics_quality", graphics_quality))
+	if not GraphicsQuality.is_valid_profile(graphics_quality):
+		graphics_quality = GraphicsQuality.STANDARD
 	enabled_pairs = PackedStringArray(cfg.get_value("content", "pairs", []))
 	enabled_colors = PackedStringArray(cfg.get_value("content", "colors", []))
 	tts_enabled = bool(cfg.get_value("io", "tts", tts_enabled))
@@ -73,6 +77,7 @@ func load_settings() -> void:
 	persist_zoo = bool(cfg.get_value("game", "persist_zoo", persist_zoo))
 	speech_log = bool(cfg.get_value("game", "speech_log", speech_log))
 	_apply_display()
+	GraphicsQuality.set_profile(graphics_quality)
 
 
 func save_settings() -> void:
@@ -81,6 +86,7 @@ func save_settings() -> void:
 	cfg.set_value("game", "prompt_mode", prompt_mode)
 	cfg.set_value("game", "strictness", strictness)
 	cfg.set_value("game", "persist_zoo", persist_zoo)
+	cfg.set_value("game", "speech_log", speech_log)
 	cfg.set_value("content", "pairs", enabled_pairs)
 	cfg.set_value("content", "colors", enabled_colors)
 	cfg.set_value("io", "tts", tts_enabled)
@@ -89,9 +95,16 @@ func save_settings() -> void:
 	cfg.set_value("audio", "music", music_volume)
 	cfg.set_value("audio", "sfx", sfx_volume)
 	cfg.set_value("display", "fullscreen", fullscreen)
+	cfg.set_value("display", "graphics_quality", graphics_quality)
 	cfg.save(PATH)
 	_apply_display()
+	GraphicsQuality.set_profile(graphics_quality)
 	changed.emit()
+
+
+func set_graphics_quality(value: String) -> void:
+	graphics_quality = value if GraphicsQuality.is_valid_profile(value) else GraphicsQuality.STANDARD
+	save_settings()
 
 
 func _apply_display() -> void:

@@ -618,6 +618,10 @@ func _pose_head(cycle: float, strength: float) -> void:
 ## sides agree for free: both derive from the same skeleton-space direction, so mirrored
 ## bones hinge the same way round without a hand-written sign for each side.
 func _rotate(idx: int, angle: float) -> void:
+	# Optional joints are -1 for species that do not have that part. Guard before asking
+	# _hinge() for the bone's rest transform; _rotate_axis()'s later guard is too late.
+	if idx < 0 or is_zero_approx(angle):
+		return
 	_rotate_axis(idx, _hinge(idx, Vector3.RIGHT), angle)
 
 

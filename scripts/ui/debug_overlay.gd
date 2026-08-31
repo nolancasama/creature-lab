@@ -9,6 +9,7 @@ extends Control
 var _state_view: RichTextLabel = null
 var _transcript_view: Label = null
 var _mic_button: Button = null
+var _refresh_clock := 0.0
 
 
 func _ready() -> void:
@@ -19,7 +20,19 @@ func _ready() -> void:
 	Game.creature_updated.connect(func(_s: CreatureState) -> void: _refresh())
 	Game.phase_changed.connect(func(_a: int, _b: int) -> void: _refresh())
 	Speech.heard.connect(_on_heard)
+	visibility_changed.connect(func() -> void:
+		set_process(visible)
+		if visible:
+			_refresh())
+	set_process(visible)
 	_refresh()
+
+
+func _process(delta: float) -> void:
+	_refresh_clock += delta
+	if _refresh_clock >= 0.5:
+		_refresh_clock = 0.0
+		_refresh()
 
 
 func _build() -> void:
@@ -112,6 +125,19 @@ func _refresh() -> void:
 	if _state_view == null:
 		return
 	var lines := PackedStringArray()
+	var fps := float(Performance.get_monitor(Performance.TIME_FPS))
+	var frame_ms := 1000.0 / fps if fps > 0.0 else 0.0
+	lines.append("[b]performance[/b] %.0f FPS / %.1f ms" % [fps, frame_ms])
+	lines.append("[b]renderer[/b] %s / %s" % [
+		RenderingServer.get_current_rendering_method(),
+		RenderingServer.get_current_rendering_driver_name()])
+	lines.append("[b]graphics[/b] %s, scale %.3f, shadows %s, MSAA %s" % [
+		GraphicsQuality.profile_label(), GraphicsQuality.render_scale(),
+		"on" if GraphicsQuality.shadows_enabled() else "off", GraphicsQuality.msaa_label()])
+	lines.append("[b]zoo FX[/b] %s  [b]draws[/b] %d  [b]primitives[/b] %d" % [
+		GraphicsQuality.effect_quality_label(),
+		int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)),
+		int(Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME))])
 	lines.append("[b]phase[/b] %s" % Game.Phase.keys()[Game.phase])
 	lines.append("[b]zoo[/b] %d creature(s)" % Game.zoo.size())
 	if Game.current == null:

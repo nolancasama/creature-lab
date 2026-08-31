@@ -830,6 +830,16 @@ func add_thermal_fx(node: Node3D, at := Vector3.ZERO, follows_body := false) -> 
 		(node as GPUParticles3D).emitting = true
 
 
+## Zoo residents keep their HOT/COLD identity at distance without every continuous layer
+## running at full density. amount_ratio changes the live emitter instead of rebuilding it,
+## so focus/profile changes neither duplicate systems nor create an empty warm-up period.
+func set_continuous_fx_intensity(ratio: float) -> void:
+	if thermal_fx_root == null:
+		return
+	for node in thermal_fx_root.find_children("*", "GPUParticles3D", true, false):
+		(node as GPUParticles3D).amount_ratio = clampf(ratio, 0.0, 1.0)
+
+
 ## Does not touch thermal_applied: TraitVisuals sets that itself, either to the value
 ## it is about to build (rebuilding) or to NAN (nothing left to show).
 func clear_thermal_fx() -> void:

@@ -8,12 +8,13 @@ config_version=5
 config/name="Creature Lab"
 config/description="Programme an animal's DNA with spoken English, then build a zoo."
 run/main_scene="res://scenes/Main.tscn"
-config/features=PackedStringArray("4.6", "Forward Plus")
+config/features=PackedStringArray("4.6", "GL Compatibility")
 config/icon="res://icon.svg"
 
 [autoload]
 
 Content="*res://scripts/autoload/content_library.gd"
+GraphicsQuality="*res://scripts/autoload/graphics_quality.gd"
 Settings="*res://scripts/autoload/settings_service.gd"
 SaveService="*res://scripts/autoload/save_service.gd"
 Game="*res://scripts/autoload/game_state.gd"
@@ -41,4 +42,6 @@ theme/custom_font="res://ui/noto_sans_jp_subset.ttf"
 
 [rendering]
 
-anti_aliasing/quality/msaa_3d=2
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+anti_aliasing/quality/msaa_3d=0

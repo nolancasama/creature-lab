@@ -21,12 +21,13 @@ static func environment(sky_top: Color, sky_horizon: Color, ambient := 0.35) -> 
 	env.ambient_light_energy = ambient
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	env.ssao_enabled = false
-	env.glow_enabled = true
-	env.glow_intensity = 0.5
+	env.glow_enabled = GraphicsQuality.glow_enabled()
+	env.glow_intensity = GraphicsQuality.glow_intensity()
 	env.glow_bloom = 0.12
 
 	var holder := WorldEnvironment.new()
 	holder.name = "WorldEnvironment"
+	holder.set_meta("graphics_environment", true)
 	holder.environment = env
 	return holder
 
@@ -36,7 +37,8 @@ static func key_light(angle_deg := Vector3(-48, -35, 0), energy := 1.15) -> Dire
 	light.name = "KeyLight"
 	light.rotation_degrees = angle_deg
 	light.light_energy = energy
-	light.shadow_enabled = true
+	light.shadow_enabled = GraphicsQuality.shadows_enabled()
+	light.set_meta("graphics_key_light", true)
 	return light
 
 
@@ -155,4 +157,3 @@ static func ui_layer() -> CanvasLayer:
 	var layer := CanvasLayer.new()
 	layer.name = "UI"
 	return layer
-

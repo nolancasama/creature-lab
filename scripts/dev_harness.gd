@@ -75,6 +75,11 @@ static func run_if_requested(main: Node) -> void:
 			phase = text.substr(8)
 		elif text.begins_with("--look="):
 			look = text.substr(7)
+		elif text.begins_with("--graphics="):
+			GraphicsQuality.set_profile(text.substr(11))
+			print("[graphics] %s, scale %.3f, shadows=%s, MSAA=%s" % [
+				GraphicsQuality.profile_label(), GraphicsQuality.render_scale(),
+				GraphicsQuality.shadows_enabled(), GraphicsQuality.msaa_label()])
 
 	if selftest:
 		_selftest(main)
@@ -404,7 +409,11 @@ static func _tallflowtest(main: Node) -> void:
 
 	var collided := false
 	var min_gap := INF
-	for poll in 2700: ## Up to 45 seconds at 60fps, matching the other flow timeout.
+	# A wall-clock timeout, not a frame count. Uncapped Compatibility rendering can advance
+	# thousands of frames in a few seconds and used to make this fail long before the real
+	# cinematic had time to finish.
+	var deadline := Time.get_ticks_msec() + 45000
+	while Time.get_ticks_msec() < deadline:
 		if Game.phase == Game.Phase.NAMING and Router.current_scene != null \
 				and Router.current_scene.name == "NamingScreen":
 			break
@@ -567,7 +576,8 @@ static func _screenshot(main: Node, phase: String) -> void:
 		_seed_full_creature(Content.animal_ids())
 		Game.finish_creature("テスト")
 	var routed_phase := "select" if phase in ["select-side", "select-zoo"] \
-		else ("zoo" if phase == "zoo-name" else ("present" if phase == "speechlog" else phase))
+		else ("zoo" if phase in ["zoo-name", "zoo-debug"] \
+		else ("present" if phase == "speechlog" else phase))
 	_goto("lab" if routed_phase in ["say", "present", "carousel", "color-before", "color-after", "color-say"] else routed_phase)
 	await main.get_tree().create_timer(SHOT_DELAY).timeout
 	if phase == "zoo-name":
@@ -576,6 +586,9 @@ static func _screenshot(main: Node, phase: String) -> void:
 		if residents != null and residents.get_child_count() > 0:
 			zoo_scene._show_info(residents.get_child(0))
 			await main.get_tree().create_timer(0.5).timeout
+	elif phase == "zoo-debug":
+		main.debug_overlay.visible = true
+		await main.get_tree().create_timer(0.65).timeout
 	elif phase == "select-side":
 		var selection_scene := Router.current_scene
 		var cards: Array = selection_scene.get("_animal_cards") if selection_scene != null else []
@@ -1524,6 +1537,36 @@ static func _selftest(main: Node) -> void:
 	# A plain Array, not PackedStringArray: packed arrays are copy-on-write, so
 	# appends inside _check() would never reach the caller.
 	var failures: Array[String] = []
+	_check(failures, is_equal_approx(main.get_tree().root.scaling_3d_scale,
+		GraphicsQuality.render_scale()), "active 3D render scale does not match the graphics profile")
+	_check(failures, main.get_tree().root.msaa_3d == GraphicsQuality.msaa_3d(),
+		"active MSAA does not match the graphics profile")
+	# Every preset must apply to an already-running stage, not only to nodes built after a
+	# scene change. This exercises the same live switch the Settings buttons use.
+	var restore_profile := GraphicsQuality.profile
+	var quality_light := StageKit.key_light()
+	var quality_world := StageKit.environment(Color.BLACK, Color("#101820"))
+	main.add_child(quality_light)
+	main.add_child(quality_world)
+	var profile_expectations := {
+		GraphicsQuality.PERFORMANCE: [0.625, false, Viewport.MSAA_DISABLED],
+		GraphicsQuality.STANDARD: [0.75, false, Viewport.MSAA_DISABLED],
+		GraphicsQuality.HIGH: [1.0, true, Viewport.MSAA_2X],
+	}
+	for quality_profile in profile_expectations:
+		GraphicsQuality.set_profile(str(quality_profile))
+		var expected: Array = profile_expectations[quality_profile]
+		_check(failures, is_equal_approx(main.get_tree().root.scaling_3d_scale, float(expected[0])),
+			"%s did not apply its 3D render scale live" % quality_profile)
+		_check(failures, quality_light.shadow_enabled == bool(expected[1]),
+			"%s did not apply directional shadows live" % quality_profile)
+		_check(failures, main.get_tree().root.msaa_3d == int(expected[2]),
+			"%s did not apply MSAA live" % quality_profile)
+		_check(failures, quality_world.environment.glow_enabled,
+			"%s unexpectedly disabled the game's glow identity" % quality_profile)
+	GraphicsQuality.set_profile(restore_profile)
+	quality_light.free()
+	quality_world.free()
 
 	_check(failures, Content.animals.size() >= 7, "expected 7 animals, got %d" % Content.animals.size())
 	_check(failures, Content.pairs.size() >= 8, "expected 8 opposite pairs, got %d" % Content.pairs.size())
@@ -1672,6 +1715,10 @@ static func _selftest(main: Node) -> void:
 					"%s: emitted HOT flames remain in world space" % def.id)
 		_check(failures, hot_particles >= 4,
 			"%s: HOT did not build its persistent flame layers" % def.id)
+		rig.set_continuous_fx_intensity(0.35)
+		for hot_child in rig.thermal_fx_root.find_children("*", "GPUParticles3D", true, false):
+			_check(failures, is_equal_approx((hot_child as GPUParticles3D).amount_ratio, 0.35),
+				"%s: zoo thermal effect did not accept its quality ratio" % def.id)
 		rig.body.position = Vector3(0.37, 0.08, -0.21)
 		rig.body.rotation.y = 0.24
 		rig._sync_thermal_fx_to_body()

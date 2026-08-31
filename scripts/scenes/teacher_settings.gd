@@ -62,6 +62,8 @@ func _build() -> void:
 		func() -> String: return str(Settings.strictness),
 		func(value: String) -> void: Settings.strictness = int(value)))
 
+	column.add_child(_graphics_section())
+
 	column.add_child(_vocabulary_section())
 	column.add_child(_toggles_section())
 	column.add_child(_audio_section())
@@ -109,6 +111,38 @@ func _paint_choice(buttons: Dictionary, active: String) -> void:
 	for value in buttons:
 		var b: Button = buttons[value]
 		UiKit.style_choice(b, str(value) == active)
+
+
+func _graphics_section() -> Control:
+	var column := _section("グラフィック / Graphics")
+	var helper := UiKit.label("", UiKit.SMALL, UiKit.MUTED)
+	column.add_child(helper)
+	var row := UiKit.hbox(8)
+	column.add_child(row)
+	var buttons := {}
+	var options := [
+		["Performance / 軽い", GraphicsQuality.PERFORMANCE, "動きが重いときにおすすめ"],
+		["Standard / 標準", GraphicsQuality.STANDARD, "おすすめ"],
+		["High / 高画質", GraphicsQuality.HIGH, "高性能なパソコン向け"],
+	]
+	var refresh := func() -> void:
+		_paint_choice(buttons, Settings.graphics_quality)
+		for option in options:
+			if str(option[1]) == Settings.graphics_quality:
+				helper.text = str(option[2])
+				break
+	for option in options:
+		var value := str(option[1])
+		var button := UiKit.button(str(option[0]), UiKit.BODY)
+		button.custom_minimum_size = Vector2(220, 52)
+		row.add_child(button)
+		buttons[value] = button
+		button.pressed.connect(func() -> void:
+			Audio.play("click")
+			Settings.set_graphics_quality(value)
+			refresh.call())
+	refresh.call()
+	return _wrap(column)
 
 
 func _vocabulary_section() -> Control:

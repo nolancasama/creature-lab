@@ -32,6 +32,11 @@ mic is unavailable or a teacher switches it off — students type the sentence i
 game plays identically either way, because both go through `SpeechService`. Text-to-speech
 does work natively via `DisplayServer.tts_*`.
 
+**Graphics:** Teacher Settings offers Performance, Standard and High presets. Standard is
+the default browser profile; every preset keeps the 1600×900 UI sharp and changes only the
+3D render scale, shadows, MSAA and sustained off-focus zoo effects. The transformation
+sequence keeps its complete visual effects in every preset.
+
 ---
 
 ## What was changed from the two spec documents, and why
@@ -154,5 +159,5 @@ no bones at all, working at the body-transform and material level instead.
 
 **Not done (Phase 2/3):** the pack ships **no animations**, so idle and walk are posed
 procedurally in `CreatureRig._swing_legs()`; a real animation set would look considerably
-better. Also outstanding: richer zoo interactions, camera moves, and a low-graphics
-toggle for weaker Chromebooks. The zoo is designed for 20–30 creatures and caps at 30.
+better. Also outstanding: richer zoo interactions and camera moves. The zoo is designed
+for 20–30 creatures and caps at 30.

@@ -152,6 +152,8 @@ func _ready() -> void:
 	rotation.y = _rng.randf_range(0.0, TAU)
 	_action_word = _pick_action_word()
 	_build_click_target(def)
+	GraphicsQuality.changed.connect(_apply_graphics_quality)
+	_apply_graphics_quality()
 	_enter(State.IDLE)
 
 
@@ -190,6 +192,7 @@ func focus_on(camera: Camera3D) -> void:
 	_timer = INF
 	if rig != null:
 		rig.moving = false
+	_apply_graphics_quality()
 	var direction := camera.global_position - global_position
 	direction.y = 0.0
 	if direction.length_squared() > 0.0001:
@@ -198,7 +201,13 @@ func focus_on(camera: Camera3D) -> void:
 
 func dismiss_focus() -> void:
 	_focused = false
+	_apply_graphics_quality()
 	_enter(State.IDLE)
+
+
+func _apply_graphics_quality() -> void:
+	if rig != null:
+		rig.set_continuous_fx_intensity(GraphicsQuality.zoo_effect_ratio(_focused))
 
 
 func _trait_speed_scale() -> float:
