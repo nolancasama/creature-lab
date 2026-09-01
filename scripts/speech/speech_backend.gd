@@ -6,7 +6,7 @@ extends RefCounted
 
 ## Recognisers return ranked alternatives; all of them are forwarded so a young learner's
 ## accent gets more than one chance at a match.
-signal transcript(alternatives: PackedStringArray, is_final: bool)
+signal transcript(alternatives: PackedStringArray, confidences: PackedFloat32Array, is_final: bool)
 signal listening_changed(is_listening: bool)
 signal failed(reason: String)
 
@@ -32,6 +32,15 @@ func start() -> void:
 
 func stop() -> void:
 	pass
+
+
+## Optional recogniser hints. Backends that do not support contextual biasing ignore them.
+func set_context(_phrases: PackedStringArray) -> void:
+	pass
+
+
+func biasing_status() -> Dictionary:
+	return {"available": false, "applied": false}
 
 
 ## Typed backends receive text from the UI; microphone backends ignore this.

@@ -2,7 +2,7 @@ extends Control
 ## Teacher-owned configuration, stored separately from gameplay and never written by it.
 ##
 ## The three dials at the top are what replaced the spec's undefined "Easy Mode": how
-## much choice the student gets, how strictly speech is judged, and how much of the
+## much choice the student gets, how tolerant recognition is, and how much of the
 ## sentence is printed for them.
 
 
@@ -56,9 +56,9 @@ func _build() -> void:
 		func(value: String) -> void: Settings.prompt_mode = value))
 
 	column.add_child(_choice_section(
-		"音声判定のきびしさ",
-		"やさしい判定は2語の順番だけ、厳密な判定は文全体を確認します。",
-		[["やさしい", str(Settings.STRICT_LENIENT)], ["ふつう", str(Settings.STRICT_NORMAL)], ["厳密", str(Settings.STRICT_EXACT)]],
+		"発音判定",
+		"発音の違いを広く認識します。",
+		[["やさしい", str(Settings.HEAR_LENIENT)], ["標準", str(Settings.HEAR_NORMAL)], ["きびしい", str(Settings.HEAR_EXACT)]],
 		func() -> String: return str(Settings.strictness),
 		func(value: String) -> void: Settings.strictness = int(value)))
 

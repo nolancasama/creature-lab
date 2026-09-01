@@ -1,32 +1,44 @@
 class_name WebSpeechBackend
 extends SpeechBackend
-## Real speech recognition through the browser's Web Speech API (HTML5 export).
-##
-## Godot ships no speech-to-text, so a web export is the only route to a real microphone
-## without a native extension. Everything JavaScript-shaped is confined to this file;
-## gameplay never learns that a browser is involved. Alternatives are passed through so a
-## young learner's accent gets several chances at a match.
+## Browser Web Speech recognition. JavaScript remains confined here; normalisation and
+## grammar stay in their own stages.
 
 const LANGUAGE := "en-US"
-const ALT_SEP := "\u0001" ## Alternatives arrive joined by U+0001, impossible in speech.
 
 const JS_SETUP := """
 window.__godotSpeech = (function () {
 	var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-	var api = { supported: !!SR, rec: null, active: false };
-	api.start = function (lang) {
+	var api = { supported: !!SR, rec: null, active: false,
+		biasingAvailable: false, biasingApplied: false };
+	api.start = function (lang, phrases) {
 		if (!api.supported) { window.godotSpeechBridge('error', 'unsupported'); return; }
 		if (api.active) { return; }
 		var r = new SR();
 		r.lang = lang || 'en-US';
 		r.interimResults = true;
 		r.continuous = false;
-		r.maxAlternatives = 4;
+		r.maxAlternatives = 6;
+		// SpeechRecognitionPhrase is experimental and unverified in this project. Every
+		// error is swallowed so contextual biasing can never stop recognition working.
+		api.biasingAvailable = ('phrases' in r && typeof window.SpeechRecognitionPhrase === 'function');
+		api.biasingApplied = false;
+		if (api.biasingAvailable && Array.isArray(phrases) && phrases.length) {
+			try {
+				r.phrases = phrases.map(function (text) {
+					return new window.SpeechRecognitionPhrase(text, 5.0);
+				});
+				api.biasingApplied = true;
+			} catch (e) { api.biasingApplied = false; }
+		}
 		r.onresult = function (e) {
 			for (var i = e.resultIndex; i < e.results.length; i++) {
 				var alts = [];
-				for (var j = 0; j < e.results[i].length; j++) { alts.push(e.results[i][j].transcript); }
-				window.godotSpeechBridge(e.results[i].isFinal ? 'final' : 'interim', alts.join('\\u0001'));
+				for (var j = 0; j < e.results[i].length; j++) {
+					var alt = e.results[i][j];
+					alts.push({ text: alt.transcript,
+						confidence: (typeof alt.confidence === 'number' ? alt.confidence : -1) });
+				}
+				window.godotSpeechBridge(e.results[i].isFinal ? 'final' : 'interim', JSON.stringify(alts));
 			}
 		};
 		r.onerror = function (e) { window.godotSpeechBridge('error', e.error || 'unknown'); };
@@ -44,6 +56,7 @@ window.__godotSpeech = (function () {
 var _bridge: Object = null
 var _callback: Variant = null # Must stay referenced or the JS callback is collected.
 var _ready_to_listen := false
+var _context_phrases := PackedStringArray()
 
 
 func backend_id() -> String:
@@ -79,12 +92,26 @@ func _ensure_bridge() -> void:
 	_ready_to_listen = true
 
 
+func set_context(phrases: PackedStringArray) -> void:
+	_context_phrases = phrases.duplicate()
+
+
+func biasing_status() -> Dictionary:
+	if not _ready_to_listen or _bridge == null:
+		return {"available": false, "applied": false}
+	return {
+		"available": bool(_bridge.eval("!!window.__godotSpeech.biasingAvailable", true)),
+		"applied": bool(_bridge.eval("!!window.__godotSpeech.biasingApplied", true)),
+	}
+
+
 func start() -> void:
 	_ensure_bridge()
 	if not _ready_to_listen:
 		failed.emit("unsupported")
 		return
-	_bridge.eval("window.__godotSpeech.start('%s');" % LANGUAGE, true)
+	_bridge.eval("window.__godotSpeech.start(%s, %s);" % [
+		JSON.stringify(LANGUAGE), JSON.stringify(Array(_context_phrases))], true)
 
 
 func stop() -> void:
@@ -119,16 +146,23 @@ func _on_js_event(args: Array) -> void:
 			listening = false
 			listening_changed.emit(false)
 			failed.emit(payload)
-		"interim":
-			transcript.emit(_split(payload), false)
-		"final":
-			transcript.emit(_split(payload), true)
+		"interim", "final":
+			var decoded := _decode(payload)
+			transcript.emit(decoded["alternatives"], decoded["confidences"], kind == "final")
 
 
-func _split(payload: String) -> PackedStringArray:
-	var out := PackedStringArray()
-	for part in payload.split(ALT_SEP, false):
-		var text := str(part).strip_edges()
-		if not text.is_empty():
-			out.append(text)
-	return out
+func _decode(payload: String) -> Dictionary:
+	var alternatives := PackedStringArray()
+	var confidences := PackedFloat32Array()
+	var parsed: Variant = JSON.parse_string(payload)
+	if typeof(parsed) != TYPE_ARRAY:
+		return {"alternatives": alternatives, "confidences": confidences}
+	for item in parsed:
+		if typeof(item) != TYPE_DICTIONARY:
+			continue
+		var text := str(item.get("text", "")).strip_edges()
+		if text.is_empty():
+			continue
+		alternatives.append(text)
+		confidences.append(float(item.get("confidence", -1.0)))
+	return {"alternatives": alternatives, "confidences": confidences}

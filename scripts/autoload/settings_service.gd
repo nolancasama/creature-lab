@@ -3,8 +3,8 @@ extends Node
 ##
 ## The spec left "Easy Mode is the default" dangling with no other mode defined, so the
 ## idea is split into three independent dials a teacher can actually reason about:
-## how much choice the student gets, how strictly speech is judged, and how much of the
-## sentence is printed on screen.
+## how much choice the student gets, how tolerant recognition is, and how much of the
+## sentence is printed on screen. Grammar frames are fixed at every tolerance.
 
 signal changed
 
@@ -28,14 +28,15 @@ const PROMPT_FULL := "full" ## "It was small. Now it is big."
 const PROMPT_GAPPED := "gapped" ## "It was ____ . Now it is ____ ."
 const PROMPT_HIDDEN := "hidden" ## Picture cards only - the student produces the frame.
 
-## Speech judging. 0 = keywords in order, 1 = both halves present, 2 = whole sentence.
-const STRICT_LENIENT := 0
-const STRICT_NORMAL := 1
-const STRICT_EXACT := 2
+## Pronunciation / recognition tolerance. The persisted `strictness` key keeps its old
+## numeric values so existing teacher configuration remains compatible.
+const HEAR_LENIENT := 0
+const HEAR_NORMAL := 1
+const HEAR_EXACT := 2
 
 var choice_mode: String = CHOICE_FREE
 var prompt_mode: String = PROMPT_FULL
-var strictness: int = STRICT_NORMAL
+var strictness: int = HEAR_LENIENT
 var graphics_quality := GraphicsQuality.STANDARD
 var enabled_pairs := PackedStringArray() ## Empty = all.
 var enabled_colors := PackedStringArray() ## Empty = all.

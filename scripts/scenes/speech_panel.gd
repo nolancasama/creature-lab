@@ -244,6 +244,7 @@ func show_idle(message := "") -> void:
 	_armed = false
 	_before = ""
 	_after = ""
+	Speech.set_context(PackedStringArray())
 	visible = false
 	_sentence_label.text = "[center][color=#93a6bf]単語カードをえらぼう。[/color][/center]"
 	_feedback.text = message
@@ -262,6 +263,7 @@ func show_target(before: String, after: String, clause := GrammarValidator.CLAUS
 	_clause = clause
 	_set_completed_steps(completed_steps)
 	_armed = true
+	Speech.set_context(_bias_phrases())
 	visible = true
 	_sentence_label.text = _prompt_text()
 	# The field or microphone button already makes the required action clear. Keep this row
@@ -329,6 +331,19 @@ func show_failure(result: Dictionary, attempts: int) -> void:
 		_entry.grab_focus()
 
 
+## Silence and inconclusive recognition are microphone uncertainty, not language failure.
+## They do not play the fail sound or advance the scaffold ladder.
+func show_uncertain() -> void:
+	_feedback.text = "もう一度言ってみよう！"
+	_feedback.visible = true
+	_feedback.add_theme_color_override("font_color", UiKit.MUTED)
+	_override_button.visible = false
+	_entry.clear()
+	_set_input_enabled(true)
+	if not Speech.uses_microphone():
+		_entry.grab_focus()
+
+
 func is_armed() -> bool:
 	return _armed
 
@@ -344,6 +359,17 @@ func _target_sentence() -> String:
 		GrammarValidator.CLAUSE_PRESENT:
 			return CreatureState.present_sentence_for(_after)
 	return CreatureState.sentence_for(_before, _after)
+
+
+## Target-only hints for the browser's optional experimental phrase-biasing API.
+func _bias_phrases() -> PackedStringArray:
+	match _clause:
+		GrammarValidator.CLAUSE_PAST:
+			return PackedStringArray([_target_sentence(), _before, GrammarValidator.BEFORE_FRAME])
+		GrammarValidator.CLAUSE_PRESENT:
+			return PackedStringArray([_target_sentence(), _after, GrammarValidator.AFTER_FRAME])
+	return PackedStringArray([_target_sentence(), _before, _after,
+		GrammarValidator.BEFORE_FRAME, GrammarValidator.AFTER_FRAME])
 
 
 func _prompt_text() -> String:
@@ -397,9 +423,7 @@ func _on_listen_timeout() -> void:
 	if not Speech.is_listening():
 		return
 	Speech.cancel()
-	_feedback.text = "声が聞こえませんでした。ボタンをタップして、もう一度ためそう。"
-	_feedback.visible = true
-	_feedback.add_theme_color_override("font_color", UiKit.MUTED)
+	show_uncertain()
 
 
 func _on_listening_changed(listening: bool) -> void:
@@ -436,8 +460,10 @@ func _message_for(result: Dictionary) -> String:
 	match str(result.get("reason", "")):
 		"empty":
 			return "声が聞こえませんでした。もう一度ためそう！"
-		"nothing":
+		"nothing", "wrong_word":
 			return "もう一度ためそう。「%s」と聞こえました。" % heard
+		"uncertain":
+			return "もう一度言ってみよう！"
 		"no_after":
 			return "いいスタート！「It was %s」と聞こえました。つぎに「Now it is %s」と言おう。" % [_before, _after]
 		"no_before":

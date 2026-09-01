@@ -114,7 +114,8 @@ func _run(action: String) -> void:
 	_refresh()
 
 
-func _on_heard(alternatives: PackedStringArray, is_final: bool) -> void:
+func _on_heard(alternatives: PackedStringArray, _confidences: PackedFloat32Array,
+		is_final: bool) -> void:
 	var tag := "final" if is_final else "interim"
 	_transcript_view.text = "%s: %s" % [tag, ", ".join(alternatives)]
 

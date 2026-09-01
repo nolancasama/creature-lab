@@ -3,6 +3,7 @@ extends RefCounted
 ## Command-line hooks for checking the build without clicking through it.
 ##
 ##   godot --path . -- --selftest          content, assembly and grammar checks, then quit
+##   godot --path . -- --speechtest        pronunciation tolerance + fixed grammar fixtures
 ##   godot --path . -- --extractanims      lift the walk/idle clips off the source FBXs
 ##                                         into res://animations, so the meshes that carry
 ##                                         them never have to ship. A build step, not a
@@ -51,7 +52,7 @@ const SPLIT_PICKS := [
 static func is_requested() -> bool:
 	for arg in OS.get_cmdline_user_args():
 		var text := str(arg)
-		if text in ["--selftest", "--autoplay", "--backtest", "--splittest", "--youngflowtest",
+		if text in ["--selftest", "--speechtest", "--autoplay", "--backtest", "--splittest", "--youngflowtest",
 				"--tallflowtest", "--bones", "--gaittest", "--reverttest", "--stancetest",
 				"--extractanims", "--runtest", "--stridecheck"] \
 				or text.begins_with("--shot=") or text.begins_with("--phase=") or text.begins_with("--look="):
@@ -84,7 +85,9 @@ static func run_if_requested(main: Node) -> void:
 	if selftest:
 		_selftest(main)
 		return
-	if args.has("--autoplay"):
+	if args.has("--speechtest"):
+		_speechtest(main)
+	elif args.has("--autoplay"):
 		_autoplay(main)
 	elif args.has("--backtest"):
 		_backtest(main)
@@ -2638,55 +2641,61 @@ static func _speed_checks(failures: Array[String]) -> void:
 
 
 static func _grammar_checks(failures: Array[String]) -> void:
+	_run_speech_fixtures(failures)
+
+
+## Required fixture shape: clause, before, after, transcript, tolerance, should_pass, note.
+static func _speech_cases() -> Array:
 	var cases := [
-		# transcript, before, after, strictness, expected ok, note
-		["It was small. Now it is big.", "small", "big", GrammarValidator.NORMAL, true, "clean sentence"],
-		["it was small now it is big", "small", "big", GrammarValidator.NORMAL, true, "no punctuation"],
-		["um it was small now it is big okay", "small", "big", GrammarValidator.NORMAL, true, "edge filler"],
-		["it was small now it's big", "small", "big", GrammarValidator.NORMAL, true, "contraction expanded"],
-		["it was small and now it is big", "small", "big", GrammarValidator.EXACT, true, "exact tolerates 'and'"],
-		["it was small now it is big please", "small", "big", GrammarValidator.EXACT, false, "exact rejects extras"],
-		["small big", "small", "big", GrammarValidator.LENIENT, true, "lenient keywords"],
-		["small big", "small", "big", GrammarValidator.NORMAL, false, "normal needs the frame"],
-		["it was big now it is small", "small", "big", GrammarValidator.NORMAL, false, "reversed pair"],
-		["it was red now it is blew", "red", "blue", GrammarValidator.NORMAL, true, "homophone blew->blue"],
-		["it was read now it is blue", "red", "blue", GrammarValidator.NORMAL, true, "homophone read->red"],
-		["it was hot now it is called", "hot", "cold", GrammarValidator.NORMAL, true, "homophone called->cold"],
-		["it was small", "small", "big", GrammarValidator.NORMAL, false, "half a sentence"],
-		["", "small", "big", GrammarValidator.NORMAL, false, "silence"],
+		[GrammarValidator.CLAUSE_PAST, "strong", "weak", "it was strong", GrammarValidator.HEAR_LENIENT, true, "clean target"],
+		[GrammarValidator.CLAUSE_PAST, "strong", "weak", "it was strang", GrammarValidator.HEAR_LENIENT, true, "known alias"],
+		[GrammarValidator.CLAUSE_PAST, "strong", "weak", "it wus strong", GrammarValidator.HEAR_LENIENT, true, "fuzzy frame"],
+		[GrammarValidator.CLAUSE_PAST, "strong", "weak", "um it was strong", GrammarValidator.HEAR_LENIENT, true, "leading filler"],
+		[GrammarValidator.CLAUSE_PAST, "strong", "weak", "was strong", GrammarValidator.HEAR_LENIENT, true, "missing optional it"],
+		[GrammarValidator.CLAUSE_PAST, "cold", "hot", "it was gold", GrammarValidator.HEAR_LENIENT, true, "non-vocabulary near neighbour"],
+		[GrammarValidator.CLAUSE_PRESENT, "weak", "strong", "is strong", GrammarValidator.HEAR_NORMAL, true, "missing optional now"],
+		[GrammarValidator.CLAUSE_BOTH, "strong", "weak", "was strong is weak", GrammarValidator.HEAR_EXACT, true, "both frames without optional words"],
+		[GrammarValidator.CLAUSE_BOTH, "strong", "weak", "is weak was strong", GrammarValidator.HEAR_LENIENT, false, "both clauses reversed"],
+		[GrammarValidator.CLAUSE_PRESENT, "weak", "strong", "now it strong", GrammarValidator.HEAR_LENIENT, false, "present missing is"],
+		# Mutation sentinel: without the protected-word guard, old fuzzily becomes cold.
+		[GrammarValidator.CLAUSE_PAST, "cold", "hot", "it was old", GrammarValidator.HEAR_LENIENT, false, "protected fuzzy collision"],
 	]
-	for case in cases:
-		var result := GrammarValidator.validate(str(case[0]), str(case[1]), str(case[2]), int(case[3]))
-		_check(failures, bool(result["ok"]) == bool(case[4]),
-			"grammar: %s - '%s' gave ok=%s reason=%s" % [str(case[5]), str(case[0]), result["ok"], result["reason"]])
+	for tolerance in [GrammarValidator.HEAR_LENIENT, GrammarValidator.HEAR_NORMAL,
+			GrammarValidator.HEAR_EXACT]:
+		cases.append([GrammarValidator.CLAUSE_PAST, "strong", "weak", "it was weak", tolerance, false, "opposite strength"])
+		cases.append([GrammarValidator.CLAUSE_PAST, "long", "short", "it was short", tolerance, false, "opposite length"])
+		cases.append([GrammarValidator.CLAUSE_PAST, "strong", "weak", "strong", tolerance, false, "bare adjective"])
+		cases.append([GrammarValidator.CLAUSE_PAST, "strong", "weak", "it strong", tolerance, false, "missing was"])
+		cases.append([GrammarValidator.CLAUSE_PAST, "strong", "weak", "", tolerance, false, "empty transcript"])
+	return cases
 
-	# Past-only is the shipped default, so it needs its own row of cases: the same
-	# transcripts must pass that fail when the whole sentence is required.
-	var past_cases := [
-		["It was small.", "small", "big", GrammarValidator.NORMAL, true, "past clause alone"],
-		["it was small", "small", "big", GrammarValidator.NORMAL, true, "no punctuation"],
-		["um it was small okay", "small", "big", GrammarValidator.NORMAL, true, "edge filler"],
-		["it was small now it is big", "small", "big", GrammarValidator.NORMAL, true, "running on is not punished"],
-		["small", "small", "big", GrammarValidator.LENIENT, true, "lenient keyword"],
-		["small", "small", "big", GrammarValidator.NORMAL, false, "normal still needs the frame"],
-		["it was big", "small", "big", GrammarValidator.NORMAL, false, "wrong half of the pair"],
-		["it was small", "small", "big", GrammarValidator.EXACT, true, "exact wants just the clause"],
-		["", "small", "big", GrammarValidator.NORMAL, false, "silence"],
-	]
-	for case in past_cases:
-		var result := GrammarValidator.validate(str(case[0]), str(case[1]), str(case[2]), int(case[3]), true)
-		_check(failures, bool(result["ok"]) == bool(case[4]),
-			"grammar past-only: %s - '%s' gave ok=%s reason=%s" % [str(case[5]), str(case[0]), result["ok"], result["reason"]])
 
-	# The missing second clause must never be reported as a failure in past-only.
-	var past_partial := GrammarValidator.validate("it was small", "small", "big", GrammarValidator.NORMAL, true)
-	_check(failures, str(past_partial["reason"]) == "ok",
-		"grammar past-only: complete answer reported as %s" % past_partial["reason"])
+static func _run_speech_fixtures(failures: Array[String]) -> void:
+	for case in _speech_cases():
+		var result := GrammarValidator.validate(str(case[3]), str(case[1]), str(case[2]),
+			int(case[4]), int(case[0]))
+		_check(failures, bool(result["ok"]) == bool(case[5]),
+			"speech: %s - '%s' gave ok=%s reason=%s" % [case[6], case[3],
+			result["ok"], result["reason"]])
+	var alternatives := PackedStringArray(["banana", "it strong", "it was weak", "it was strong"])
+	var outcome := GrammarValidator.validate_alternatives(alternatives, "strong", "weak",
+		GrammarValidator.HEAR_LENIENT, GrammarValidator.CLAUSE_PAST)
+	_check(failures, bool(outcome["ok"]) and int(outcome["selected_index"]) == 3,
+		"speech: passing alternative at index 3 was not selected (%s)" % outcome)
+	_check(failures, TextNormalizer.protected_alias_violations().is_empty(),
+		"speech: alias table maps between protected words: %s" % TextNormalizer.protected_alias_violations())
 
-	# Half-credit feedback is what the retry ladder shows the student.
-	var partial := GrammarValidator.validate("it was small now it is red", "small", "big", GrammarValidator.NORMAL)
-	_check(failures, bool(partial["said_before"]) and not bool(partial["said_after"]) and str(partial["reason"]) == "no_after",
-		"grammar: partial credit not detected")
+
+static func _speechtest(main: Node) -> void:
+	var failures: Array[String] = []
+	_run_speech_fixtures(failures)
+	if failures.is_empty():
+		print("[speechtest] PASS")
+	else:
+		printerr("[speechtest] %d FAILURE(S):" % failures.size())
+		for failure in failures:
+			printerr("  - %s" % failure)
+	main.get_tree().quit(0 if failures.is_empty() else 1)
 
 
 static func _check(failures: Array[String], condition: bool, message: String) -> void:

@@ -32,5 +32,5 @@ func stop() -> void:
 func submit(text: String) -> void:
 	if text.strip_edges().is_empty():
 		return
-	transcript.emit(PackedStringArray([text]), true)
+	transcript.emit(PackedStringArray([text]), PackedFloat32Array([-1.0]), true)
 	stop()

@@ -1,28 +1,16 @@
 class_name GrammarValidator
 extends RefCounted
-## Judges a transcript against the sentence the student was asked to say.
-##
-## It validates against *the pair the student selected*, never "which pair did they say".
-## That single decision removes the ambiguity baked into the vocabulary list: `old` is the
-## opposite of both `new` and `young`, and `short` is the opposite of both `tall` and
-## `long`, so word-level matching would be guesswork. Pair-scoped matching is exact.
-##
-## Reason codes: ok, empty, nothing, no_before, no_after, swapped, frame_before,
-## frame_after, exact. A single-clause mode raises only: ok, empty, nothing, exact, and
-## whichever of frame_before / frame_after belongs to the clause it asked for.
+## Matches the required grammar frame after TextNormalizer has cleaned recogniser output.
+## Tolerance changes only token recognition; `was` / `is` and adjective order never do.
 
 const BEFORE_FRAME := "it was"
 const AFTER_FRAME := "now it is"
 
-## Kept local rather than read off Settings so the validator stays testable in isolation.
-## These mirror Settings.STRICT_*.
-const LENIENT := 0
-const NORMAL := 1
-const EXACT := 2
+## Kept local so this class remains testable without reading Settings.
+const HEAR_LENIENT := 0
+const HEAR_NORMAL := 1
+const HEAR_EXACT := 2
 
-## Which clause the student was actually asked for. A boolean covered past-vs-whole; the
-## present-tense pass makes it three cases, and judging a clause nobody was set is how
-## students get told they failed at something they were never asked to do.
 const CLAUSE_BOTH := 0
 const CLAUSE_PAST := 1
 const CLAUSE_PRESENT := 2
@@ -32,19 +20,58 @@ static func expected_sentence(before: String, after: String) -> String:
 	return "%s %s %s %s" % [BEFORE_FRAME, before, AFTER_FRAME, after]
 
 
-## Just the past half, which is all the student is asked for in Settings.SAY_PAST.
 static func expected_past(before: String) -> String:
 	return "%s %s" % [BEFORE_FRAME, before]
 
 
-## Just the present half, said one creature-trait at a time in Settings.SAY_SPLIT.
 static func expected_present(after: String) -> String:
 	return "%s %s" % [AFTER_FRAME, after]
 
 
-## `clause` is passed in rather than read off Settings, for the same reason the strictness
-## constants are duplicated here: this class stays testable on its own.
-static func validate(transcript: String, before: String, after: String, strictness: int, clause := CLAUSE_BOTH) -> Dictionary:
+## Validates every ranked recognition alternative. The first passing candidate wins;
+## otherwise the failure with the most useful frame evidence is selected for feedback.
+static func validate_alternatives(alternatives: PackedStringArray, before: String,
+		after: String, tolerance: int, clause := CLAUSE_BOTH) -> Dictionary:
+	var candidates: Array[Dictionary] = []
+	var best := {}
+	var best_index := -1
+	var passing_index := -1
+	for index in alternatives.size():
+		var transcript := str(alternatives[index])
+		var result := validate(transcript, before, after, tolerance, clause)
+		candidates.append({"transcript": transcript, "result": result})
+		if passing_index < 0 and bool(result["ok"]):
+			passing_index = index
+		if best.is_empty() or _score(result) > _score(best):
+			best = result
+			best_index = index
+
+	if passing_index >= 0:
+		return {
+			"ok": true, "selected_index": passing_index,
+			"selected_transcript": str(alternatives[passing_index]),
+			"result": candidates[passing_index]["result"], "candidates": candidates,
+			"uncertain": false,
+		}
+	if best.is_empty():
+		best = validate("", before, after, tolerance, clause)
+	var all_uncertain := true
+	for candidate in candidates:
+		if not bool(candidate["result"].get("uncertain", false)):
+			all_uncertain = false
+			break
+	return {
+		"ok": false,
+		"selected_index": best_index,
+		"selected_transcript": "" if best_index < 0 else str(alternatives[best_index]),
+		"result": best,
+		"candidates": candidates,
+		"uncertain": candidates.is_empty() or all_uncertain,
+	}
+
+
+static func validate(transcript: String, before: String, after: String, tolerance: int,
+		clause := CLAUSE_BOTH) -> Dictionary:
 	var normalized := TextNormalizer.strip_edge_filler(TextNormalizer.normalize(transcript))
 	var result := {
 		"ok": false,
@@ -54,90 +81,155 @@ static func validate(transcript: String, before: String, after: String, strictne
 		"said_after": false,
 		"frame_before": false,
 		"frame_after": false,
+		"protected_conflict": false,
+		"match_evidence": PackedStringArray(),
+		"uncertain": normalized.is_empty(),
 	}
 	if normalized.is_empty():
 		return result
 
-	# Word-level presence, in order. This drives the "I heard the first half" feedback
-	# regardless of which strictness the teacher picked.
-	var word_before := TextNormalizer.find_phrase(normalized, before)
-	var word_after := TextNormalizer.find_phrase(normalized, after, maxi(word_before + 1, 0))
-	result["said_before"] = word_before >= 0
-	result["said_after"] = word_after >= 0
+	var words := PackedStringArray(normalized.split(" ", false))
+	var protected := TextNormalizer.protected_vocabulary()
+	var before_any := _find_adjective(words, before, 0, tolerance, protected)
+	var after_any := _find_adjective(words, after, 0, tolerance, protected)
+	result["said_before"] = int(before_any["index"]) >= 0
+	result["said_after"] = int(after_any["index"]) >= 0
 
-	var frame_before := TextNormalizer.find_phrase(normalized, "%s %s" % [BEFORE_FRAME, before])
-	var frame_after := TextNormalizer.find_phrase(normalized, "%s %s" % [AFTER_FRAME, after], maxi(frame_before + 1, 0))
-	result["frame_before"] = frame_before >= 0
-	result["frame_after"] = frame_after >= 0
+	var past := _match_clause(words, "was", before, 0, tolerance, protected)
+	var present_from := int(past["adjective_index"]) + 1 if bool(past["ok"]) else 0
+	var present := _match_clause(words, "is", after, present_from, tolerance, protected)
+	result["frame_before"] = bool(past["ok"])
+	result["frame_after"] = bool(present["ok"])
+	result["protected_conflict"] = bool(past["protected_conflict"]) or bool(present["protected_conflict"])
+	result["match_evidence"] = _evidence(past, present, clause)
 
-	# One clause asked for means the other is neither required nor penalised: a student who
-	# runs on into the rest of the sentence has still said the part that was set, and is
-	# not corrected for volunteering more.
-	if clause == CLAUSE_PAST:
-		if strictness >= EXACT:
-			result["ok"] = normalized == expected_past(before)
-		elif strictness <= LENIENT:
-			result["ok"] = word_before >= 0
-		else:
-			result["ok"] = frame_before >= 0
-		result["reason"] = "ok" if result["ok"] else _diagnose_half(result, normalized, expected_past(before), "said_before", "frame_before")
-		return result
-
-	if clause == CLAUSE_PRESENT:
-		if strictness >= EXACT:
-			result["ok"] = normalized == expected_present(after)
-		elif strictness <= LENIENT:
-			result["ok"] = word_after >= 0
-		else:
-			result["ok"] = frame_after >= 0
-		result["reason"] = "ok" if result["ok"] else _diagnose_half(result, normalized, expected_present(after), "said_after", "frame_after")
-		return result
-
-	if strictness >= EXACT:
-		result["ok"] = _matches_exactly(normalized, before, after)
-		result["reason"] = "ok" if result["ok"] else _diagnose(result, normalized, before, after, true)
-	elif strictness <= LENIENT:
-		result["ok"] = word_before >= 0 and word_after > word_before
-		result["reason"] = "ok" if result["ok"] else _diagnose(result, normalized, before, after, false)
-	else:
-		result["ok"] = frame_before >= 0 and frame_after > frame_before
-		result["reason"] = "ok" if result["ok"] else _diagnose(result, normalized, before, after, false)
+	match clause:
+		CLAUSE_PAST:
+			result["ok"] = bool(past["ok"])
+			result["reason"] = "ok" if result["ok"] else _diagnose_clause(
+				past, bool(result["said_before"]), "frame_before")
+			result["uncertain"] = _is_uncertain_failure(past, bool(result["said_before"]))
+		CLAUSE_PRESENT:
+			present = _match_clause(words, "is", after, 0, tolerance, protected)
+			result["frame_after"] = bool(present["ok"])
+			result["protected_conflict"] = bool(present["protected_conflict"])
+			result["match_evidence"] = _evidence({}, present, clause)
+			result["ok"] = bool(present["ok"])
+			result["reason"] = "ok" if result["ok"] else _diagnose_clause(
+				present, bool(result["said_after"]), "frame_after")
+			result["uncertain"] = _is_uncertain_failure(present, bool(result["said_after"]))
+		_:
+			result["ok"] = bool(past["ok"]) and bool(present["ok"])
+			result["reason"] = "ok" if result["ok"] else _diagnose_both(result, past, present)
+			result["uncertain"] = not bool(result["ok"]) \
+				and not bool(result["protected_conflict"]) \
+				and (bool(past["weak_fuzzy"]) or bool(present["weak_fuzzy"])) \
+				and not _has_clear_frame_miss(result)
 	return result
 
 
-## Exact mode still tolerates the one join word children naturally insert.
-static func _matches_exactly(normalized: String, before: String, after: String) -> bool:
-	var target := expected_sentence(before, after)
-	if normalized == target:
-		return true
-	return normalized == target.replace(AFTER_FRAME, "and " + AFTER_FRAME)
+## Finds the required frame word, then the expected adjective after it. `it` and `now`
+## are intentionally absent because browsers often drop those unstressed words.
+static func _match_clause(words: PackedStringArray, frame_word: String, adjective: String,
+		from_word: int, tolerance: int, protected: Dictionary) -> Dictionary:
+	var frame := TextNormalizer.find_token(words, frame_word, from_word, tolerance, protected)
+	var out := {
+		"ok": false, "frame_index": int(frame["index"]), "adjective_index": -1,
+		"frame_quality": str(frame["quality"]), "adjective_quality": "",
+		"frame_heard": str(frame["heard"]), "adjective_heard": "",
+		"protected_conflict": false, "weak_fuzzy": false,
+	}
+	if int(frame["index"]) < 0:
+		return out
+	var adjective_match := _find_adjective(words, adjective, int(frame["index"]) + 1,
+		tolerance, protected)
+	out["adjective_index"] = int(adjective_match["index"])
+	out["adjective_quality"] = str(adjective_match["quality"])
+	out["adjective_heard"] = str(adjective_match["heard"])
+	out["protected_conflict"] = bool(adjective_match["protected_conflict"])
+	out["weak_fuzzy"] = bool(adjective_match["weak_fuzzy"])
+	out["ok"] = int(adjective_match["index"]) >= 0 and not bool(out["protected_conflict"])
+	return out
 
 
-## Single-clause diagnosis never reports the other half as missing - it was never asked
-## for, so naming it would teach the student they had failed at something they were not
-## set. Only three outcomes are reachable: they said nothing of it, they said the word
-## without the frame, or they said it with something extra.
-static func _diagnose_half(result: Dictionary, normalized: String, target: String, said_key: String, frame_key: String) -> String:
-	if not bool(result[said_key]):
-		return "nothing"
-	if not bool(result[frame_key]):
-		return frame_key
-	return "exact" if normalized != target else "ok"
+## The first protected adjective after the frame is decisive. It may never be reinterpreted
+## as another protected game word, even when edit distance would otherwise allow it.
+static func _find_adjective(words: PackedStringArray, expected: String, from_word: int,
+		tolerance: int, protected: Dictionary) -> Dictionary:
+	var weak_fuzzy := false
+	for index in range(maxi(from_word, 0), words.size()):
+		var heard := str(words[index])
+		if protected.has(heard) and heard != expected:
+			return {"index": -1, "quality": "protected-conflict", "heard": heard,
+				"protected_conflict": true, "weak_fuzzy": false}
+		var match := TextNormalizer.token_match(heard, expected, tolerance, protected)
+		if bool(match["ok"]):
+			return {"index": index, "quality": match["quality"], "heard": heard,
+				"protected_conflict": false, "weak_fuzzy": weak_fuzzy}
+		weak_fuzzy = weak_fuzzy or bool(match["near_fuzzy"])
+	return {"index": -1, "quality": "", "heard": "",
+		"protected_conflict": false, "weak_fuzzy": weak_fuzzy}
 
 
-static func _diagnose(result: Dictionary, normalized: String, before: String, after: String, exact: bool) -> String:
-	if not bool(result["said_before"]) and not bool(result["said_after"]):
-		# Did they say either word at all, in any order?
-		if TextNormalizer.find_phrase(normalized, after) >= 0:
-			return "swapped"
-		return "nothing"
-	if bool(result["said_before"]) and not bool(result["said_after"]):
-		return "no_after"
-	if not bool(result["said_before"]) and bool(result["said_after"]):
-		# The adjective is there but the "It was ___" half is missing or came second.
-		return "swapped" if TextNormalizer.find_phrase(normalized, before) >= 0 else "no_before"
-	if not bool(result["frame_before"]):
-		return "frame_before"
-	if not bool(result["frame_after"]):
-		return "frame_after"
-	return "exact" if exact else "frame_after"
+static func _diagnose_clause(match: Dictionary, said_adjective: bool, frame_reason: String) -> String:
+	if bool(match["protected_conflict"]):
+		return "wrong_word"
+	if int(match["frame_index"]) < 0 and said_adjective:
+		return frame_reason
+	if bool(match["weak_fuzzy"]):
+		return "uncertain"
+	return "nothing"
+
+
+static func _diagnose_both(result: Dictionary, past: Dictionary, present: Dictionary) -> String:
+	if bool(result["protected_conflict"]):
+		return "wrong_word"
+	if not bool(past["ok"]):
+		if bool(past["weak_fuzzy"]):
+			return "uncertain"
+		return "frame_before" if bool(result["said_before"]) else "no_before"
+	if not bool(present["ok"]):
+		if bool(present["weak_fuzzy"]):
+			return "uncertain"
+		return "frame_after" if bool(result["said_after"]) else "no_after"
+	return "nothing"
+
+
+static func _is_uncertain_failure(match: Dictionary, said_adjective: bool) -> bool:
+	return not bool(match["protected_conflict"]) and bool(match["weak_fuzzy"]) \
+		and int(match["frame_index"]) >= 0 and not said_adjective
+
+
+static func _has_clear_frame_miss(result: Dictionary) -> bool:
+	return (bool(result["said_before"]) and not bool(result["frame_before"])) \
+		or (bool(result["said_after"]) and not bool(result["frame_after"]))
+
+
+static func _evidence(past: Dictionary, present: Dictionary, clause: int) -> PackedStringArray:
+	var evidence := PackedStringArray()
+	if clause != CLAUSE_PRESENT and not past.is_empty():
+		if int(past.get("frame_index", -1)) >= 0:
+			evidence.append("was:%s" % past.get("frame_quality", ""))
+		if int(past.get("adjective_index", -1)) >= 0:
+			evidence.append("before:%s" % past.get("adjective_quality", ""))
+	if clause != CLAUSE_PAST and not present.is_empty():
+		if int(present.get("frame_index", -1)) >= 0:
+			evidence.append("is:%s" % present.get("frame_quality", ""))
+		if int(present.get("adjective_index", -1)) >= 0:
+			evidence.append("after:%s" % present.get("adjective_quality", ""))
+	return evidence
+
+
+static func _score(result: Dictionary) -> int:
+	var value := 0
+	if bool(result.get("said_before", false)):
+		value += 1
+	if bool(result.get("said_after", false)):
+		value += 1
+	if bool(result.get("frame_before", false)):
+		value += 2
+	if bool(result.get("frame_after", false)):
+		value += 2
+	if bool(result.get("protected_conflict", false)):
+		value += 1
+	return value

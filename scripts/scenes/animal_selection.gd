@@ -1103,7 +1103,8 @@ func _cancel_pending() -> void:
 	_apply_traits(true)
 
 
-func _on_heard(alternatives: PackedStringArray, is_final: bool) -> void:
+func _on_heard(alternatives: PackedStringArray, confidences: PackedFloat32Array,
+		is_final: bool) -> void:
 	var speaking := _mode == Mode.RECORDING or _mode == Mode.PRESENT
 	if not speaking or not is_final or _busy or _pending.is_empty() or not _speech.is_armed():
 		# Five separate reasons a heard sentence goes nowhere, and from outside they all look
@@ -1113,48 +1114,52 @@ func _on_heard(alternatives: PackedStringArray, is_final: bool) -> void:
 			% [Mode.keys()[_mode], is_final, _busy, not _pending.is_empty(),
 			_speech.is_armed()])
 		return
-	_evaluate(alternatives)
+	_evaluate(alternatives, confidences)
 
 
 ## Every alternative the recogniser offered gets a chance; the first that passes wins,
 ## otherwise the best-diagnosed failure is what the student is shown.
-func _evaluate(alternatives: PackedStringArray) -> void:
+func _evaluate(alternatives: PackedStringArray, confidences := PackedFloat32Array()) -> void:
 	var before := str(_pending["before"])
 	var after := str(_pending["after"])
-	var best := {}
-	Diagnostics.note("[speech]", "judging clause=%d mode=%s want='%s'/'%s' heard=%s"
-		% [_clause(), Mode.keys()[_mode], before, after, alternatives])
-	for alternative in alternatives:
-		var result := GrammarValidator.validate(alternative, before, after, Settings.strictness, _clause())
-		if not bool(result["ok"]):
-			Diagnostics.note("[speech]", "  '%s' rejected: %s"
-				% [alternative, result.get("reason", "")])
-		if bool(result["ok"]):
-			if _mode == Mode.PRESENT:
-				_present_advance()
-			else:
-				_commit(false)
-			return
-		if best.is_empty() or _score(result) > _score(best):
-			best = result
-	if best.is_empty():
-		best = GrammarValidator.validate("", before, after, Settings.strictness, _clause())
+	var expected := GrammarValidator.expected_sentence(before, after)
+	var adjective := "%s -> %s" % [before, after]
+	if _clause() == GrammarValidator.CLAUSE_PAST:
+		expected = GrammarValidator.expected_past(before)
+		adjective = before
+	elif _clause() == GrammarValidator.CLAUSE_PRESENT:
+		expected = GrammarValidator.expected_present(after)
+		adjective = after
+	var tolerance: String = ["lenient", "standard", "strict"][clampi(Settings.strictness, 0, 2)]
+	Diagnostics.note("[speech]", "expected='%s' adjective='%s' tolerance=%s bias=%s"
+		% [expected, adjective, tolerance, Speech.biasing_status()])
+	var outcome := GrammarValidator.validate_alternatives(
+		alternatives, before, after, Settings.strictness, _clause())
+	var candidates: Array = outcome["candidates"]
+	for index in candidates.size():
+		var candidate: Dictionary = candidates[index]
+		var result: Dictionary = candidate["result"]
+		var confidence := "n/a"
+		if index < confidences.size() and confidences[index] >= 0.0:
+			confidence = "%.3f" % confidences[index]
+		Diagnostics.note("[speech]", "alt[%d] conf=%s raw='%s' normalized='%s' %s reason=%s evidence=%s"
+			% [index, confidence, candidate["transcript"], result["normalized"],
+			"PASS" if result["ok"] else "FAIL", result["reason"], result["match_evidence"]])
+	Diagnostics.note("[speech]", "selected=%d '%s' outcome=%s reason=%s"
+		% [outcome["selected_index"], outcome["selected_transcript"],
+		"PASS" if outcome["ok"] else ("UNCERTAIN" if outcome["uncertain"] else "WRONG"),
+		outcome["result"]["reason"]])
+	if bool(outcome["ok"]):
+		if _mode == Mode.PRESENT:
+			_present_advance()
+		else:
+			_commit(false)
+		return
+	if bool(outcome["uncertain"]):
+		_speech.show_uncertain()
+		return
 	_attempts += 1
-	_speech.show_failure(best, _attempts)
-
-
-## How close a failed attempt got, so the most useful diagnosis is the one shown.
-static func _score(result: Dictionary) -> int:
-	var value := 0
-	if bool(result.get("said_before", false)):
-		value += 1
-	if bool(result.get("said_after", false)):
-		value += 1
-	if bool(result.get("frame_before", false)):
-		value += 2
-	if bool(result.get("frame_after", false)):
-		value += 2
-	return value
+	_speech.show_failure(outcome["result"], _attempts)
 
 
 func _commit(assisted: bool) -> void:
