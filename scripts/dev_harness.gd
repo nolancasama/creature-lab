@@ -162,7 +162,11 @@ static func _autoplay(main: Node) -> void:
 	# trait land, then the held breath before the last one, the echo after it, the peak, and
 	# a reveal that now lingers. Generous on purpose: this wait failing means "the lab never
 	# finished", which is a slow and confusing thing to debug.
-	await tree.create_timer(45.0).timeout
+	# 60s, not 45. The sequence has grown repeatedly - the held breath before the last
+	# sentence, the echo after it, a reveal that lingers, and now a counter celebration the
+	# panel waits for - and at 45 this began failing about one run in three. An
+	# intermittently failing check is worse than none, because people learn to rerun it.
+	await tree.create_timer(60.0).timeout
 
 	var ok := Game.phase == Game.Phase.NAMING
 	print("[autoplay] ended in phase %s" % Game.Phase.keys()[Game.phase])
