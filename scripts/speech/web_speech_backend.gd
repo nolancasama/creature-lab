@@ -18,18 +18,19 @@ window.__godotSpeech = (function () {
 		r.interimResults = true;
 		r.continuous = false;
 		r.maxAlternatives = 6;
-		// SpeechRecognitionPhrase is experimental and unverified in this project. Every
-		// error is swallowed so contextual biasing can never stop recognition working.
+		// Contextual biasing is DETECTED but deliberately NOT APPLIED.
+		//
+		// Chrome exposes SpeechRecognitionPhrase, so the feature test passes, but biasing
+		// only works when recognition is running on-device - and assigning r.phrases
+		// without that made start() fail. The failure arrives as an async error/end event,
+		// so the try/catch around the assignment never saw it and could not swallow it:
+		// the microphone flipped to listening and straight back to idle, and no sentence
+		// could be recorded at all.
+		//
+		// A speculative accuracy gain is not worth a chance of no recording. Re-enable
+		// only alongside processLocally, and only after testing in a real browser.
 		api.biasingAvailable = ('phrases' in r && typeof window.SpeechRecognitionPhrase === 'function');
 		api.biasingApplied = false;
-		if (api.biasingAvailable && Array.isArray(phrases) && phrases.length) {
-			try {
-				r.phrases = phrases.map(function (text) {
-					return new window.SpeechRecognitionPhrase(text, 5.0);
-				});
-				api.biasingApplied = true;
-			} catch (e) { api.biasingApplied = false; }
-		}
 		r.onresult = function (e) {
 			for (var i = e.resultIndex; i < e.results.length; i++) {
 				var alts = [];

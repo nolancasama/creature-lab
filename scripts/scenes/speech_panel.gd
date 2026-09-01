@@ -54,6 +54,7 @@ func _ready() -> void:
 	add_theme_stylebox_override("panel", UiKit.stylebox(Color(0.06, 0.1, 0.16, 0.94), 16, 2, UiKit.PANEL_HI))
 	_build()
 	Speech.listening_changed.connect(_on_listening_changed)
+	Speech.failed.connect(_on_speech_failed)
 	Speech.backend_changed.connect(func(_id: String) -> void: _sync_input_mode())
 	show_idle()
 
@@ -417,6 +418,28 @@ func _on_mic_pressed() -> void:
 		_feedback.add_theme_color_override("font_color", UiKit.MUTED)
 	else:
 		Speech.start()
+
+
+## A recogniser that refuses to start was completely silent before: the button flipped to
+## listening and straight back, with nothing on screen to say why. Whatever the browser
+## complains about, the student is told something they can act on rather than being left
+## with a button that appears dead.
+func _on_speech_failed(reason: String) -> void:
+	if not _armed:
+		return
+	var message := "もう一度言ってみよう！"
+	match reason:
+		"not-allowed", "service-not-allowed":
+			message = "マイクが使えません。ブラウザの設定をかくにんしてね。"
+		"audio-capture":
+			message = "マイクが見つかりません。せつぞくをかくにんしてね。"
+		"network":
+			message = "ネットワークの調子がわるいみたい。もう一度ためそう。"
+		"no-speech":
+			message = "声が聞こえませんでした。もう一度ためそう！"
+	_feedback.text = message
+	_feedback.visible = true
+	_feedback.add_theme_color_override("font_color", UiKit.MUTED)
 
 
 func _on_listen_timeout() -> void:

@@ -113,6 +113,10 @@ func _on_listening_changed(value: bool) -> void:
 
 
 func _on_failed(reason: String) -> void:
+	# Named on screen, not just raised as a signal. A recogniser that refuses to start is
+	# indistinguishable from a dead button otherwise, which is exactly how the biasing
+	# regression presented: press, flicker, nothing.
+	Diagnostics.note("[speech]", "recogniser error: %s" % reason)
 	failed.emit(reason)
 	# A recogniser-side silence is an uncertain attempt, not a language failure. Route an
 	# empty final through the same evaluation path so the scene can show its neutral retry.
