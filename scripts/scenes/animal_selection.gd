@@ -750,7 +750,6 @@ func _enter_present() -> void:
 
 	_speech = SpeechPanel.new()
 	_speech.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_speech.accepted_by_teacher.connect(func() -> void: _present_advance())
 	_speech.change_requested.connect(_cancel_present)
 	column.add_child(_speech)
 
@@ -922,7 +921,6 @@ func _build_say_it_dock() -> void:
 	_speech.offset_right = SAY_IT_WIDTH * 0.5
 	_speech.offset_top = 0.0
 	_speech.offset_bottom = 0.0
-	_speech.accepted_by_teacher.connect(func() -> void: _commit(true))
 	_speech.change_requested.connect(_cancel_pending)
 	_console.add_child(_speech)
 
@@ -1150,16 +1148,34 @@ func _evaluate(alternatives: PackedStringArray, confidences := PackedFloat32Arra
 		"PASS" if outcome["ok"] else ("UNCERTAIN" if outcome["uncertain"] else "WRONG"),
 		outcome["result"]["reason"]])
 	if bool(outcome["ok"]):
-		if _mode == Mode.PRESENT:
-			_present_advance()
-		else:
-			_commit(false)
+		Diagnostics.note("[speech]", "success_type=normal attempts=%d" % _attempts)
+		_accept(false)
 		return
 	if bool(outcome["uncertain"]):
 		_speech.show_uncertain()
 		return
 	_attempts += 1
+	if _attempts >= SpeechPanel.AUTO_PASS_ATTEMPTS:
+		Diagnostics.note("[speech]", "success_type=assisted_third_attempt attempts=%d"
+			% _attempts)
+		_accept(true)
+		return
 	_speech.show_failure(outcome["result"], _attempts)
+
+
+## Take the sentence, whether it was heard correctly or granted by the scaffold.
+##
+## `assisted` reaches Game.record_sentence() and so the end-of-round report: the child sees
+## the same success either way, and the teacher can still tell the two apart afterwards.
+func _accept(assisted: bool) -> void:
+	# Closed here rather than left to whatever asks the next question. Every later entry
+	# point does clear it, but "the sentence is over" is the reason it clears, and putting
+	# it anywhere else means a new path into the panel inherits the last child's failures.
+	_attempts = 0
+	if _mode == Mode.PRESENT:
+		_present_advance()
+	else:
+		_commit(assisted)
 
 
 func _commit(assisted: bool) -> void:

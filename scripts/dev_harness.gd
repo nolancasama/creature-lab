@@ -4,6 +4,8 @@ extends RefCounted
 ##
 ##   godot --path . -- --selftest          content, assembly and grammar checks, then quit
 ##   godot --path . -- --speechtest        pronunciation tolerance + fixed grammar fixtures
+##   godot --path . -- --scaffoldtest      the retry ladder: what counts as a real try,
+##                                         and that a third one is accepted
 ##   godot --path . -- --extractanims      lift the walk/idle clips off the source FBXs
 ##                                         into res://animations, so the meshes that carry
 ##                                         them never have to ship. A build step, not a
@@ -52,7 +54,8 @@ const SPLIT_PICKS := [
 static func is_requested() -> bool:
 	for arg in OS.get_cmdline_user_args():
 		var text := str(arg)
-		if text in ["--selftest", "--speechtest", "--autoplay", "--backtest", "--splittest", "--youngflowtest",
+		if text in ["--selftest", "--speechtest", "--scaffoldtest", "--autoplay", "--backtest",
+				"--splittest", "--youngflowtest",
 				"--tallflowtest", "--bones", "--gaittest", "--reverttest", "--stancetest",
 				"--extractanims", "--runtest", "--stridecheck"] \
 				or text.begins_with("--shot=") or text.begins_with("--phase=") or text.begins_with("--look="):
@@ -87,6 +90,8 @@ static func run_if_requested(main: Node) -> void:
 		return
 	if args.has("--speechtest"):
 		_speechtest(main)
+	elif args.has("--scaffoldtest"):
+		_scaffoldtest(main)
 	elif args.has("--autoplay"):
 		_autoplay(main)
 	elif args.has("--backtest"):
@@ -2700,6 +2705,92 @@ static func _speechtest(main: Node) -> void:
 		for failure in failures:
 			printerr("  - %s" % failure)
 	main.get_tree().quit(0 if failures.is_empty() else 1)
+
+
+## The retry ladder, driven through the real scene instead of asserted against constants.
+##
+## Checked here rather than by reading AUTO_PASS_ATTEMPTS because the interesting question
+## is not what the number is, it is which utterances move the counter. A child gets a free
+## pass on the third try, so anything that can be miscounted as a try - a cough, a burst of
+## the next table's conversation, a microphone that returned nothing - is a way for the
+## game to hand out the answer to a child who never spoke. That is the failure this guards.
+##
+## Typed submissions are used as the transcripts. They enter through the same
+## SpeechService transcript path the microphone does, so the ladder under test is the real
+## one, and unlike a microphone they say the same thing every run.
+static func _scaffoldtest(main: Node) -> void:
+	var tree := main.get_tree()
+	var failures: Array[String] = []
+
+	# 1: heard correctly the first time. The scaffold must stay out of the way.
+	await _scaffold_case(tree, failures, "1 normal success",
+		["it was hard"], true, false)
+	# 2: wrong, then right. Succeeding on the second try is an ordinary success, not an
+	# assisted one - the child said it.
+	await _scaffold_case(tree, failures, "2 second try succeeds",
+		["it was soft", "it was hard"], true, false)
+	# 3: three real tries, none of them correct. The third is taken.
+	await _scaffold_case(tree, failures, "3 third effort accepted",
+		["it was soft", "it was smooth", "it was rough"], true, true)
+	# 4: silence in the middle. Two real failures either side of it are still two.
+	await _scaffold_case(tree, failures, "4 silence is not a try",
+		["it was soft", "", "it was smooth"], false, false)
+	# 5: nothing but empty transcripts. A dead microphone must never reach the pass.
+	await _scaffold_case(tree, failures, "5 recogniser trouble never passes",
+		["", "", "", "", ""], false, false)
+	# 6: the same wrong adjective three times. Wrong is not the same as absent: the child
+	# is answering, and after two corrections the third answer is accepted.
+	await _scaffold_case(tree, failures, "6 wrong adjective on third effort",
+		["it was soft", "it was soft", "it was soft"], true, true)
+	# 7: a single stray word. One token carrying neither frame nor adjective is noise, and
+	# three of them are three pieces of noise, not three attempts.
+	await _scaffold_case(tree, failures, "7 lone noise token is not a try",
+		["hmm", "the", "yeah"], false, false)
+
+	if failures.is_empty():
+		print("[scaffoldtest] PASS")
+	else:
+		printerr("[scaffoldtest] %d FAILURE(S):" % failures.size())
+		for failure in failures:
+			printerr("  - %s" % failure)
+	tree.quit(0 if failures.is_empty() else 1)
+
+
+## One sentence, from a fresh round, answered with `said` in order.
+##
+## `expect_filled` is whether the slot was taken at all, `expect_assisted` whether it was
+## recorded as helped - the flag the end-of-round report shows the teacher, and the only
+## externally visible difference between "said it" and "was given it".
+static func _scaffold_case(tree: SceneTree, failures: Array[String], label: String,
+		said: Array, expect_filled: bool, expect_assisted: bool) -> void:
+	_goto("lab")
+	await tree.create_timer(1.4).timeout
+	var word_lab := _find_word_lab(Router.current_scene)
+	if word_lab == null:
+		failures.append("%s: no Word Lab in %s" % [label, Router.current_scene])
+		return
+	word_lab.pair_selected.emit("HARDNESS", "hard", "soft")
+	await tree.create_timer(0.7).timeout
+	for text in said:
+		Speech.submit_typed(str(text))
+		# Long enough for a failure to finish modelling the sentence and re-enable input.
+		# A success takes longer, but nothing is submitted after one.
+		await tree.create_timer(0.8).timeout
+	await tree.create_timer(2.6).timeout
+
+	var filled := Game.current != null and Game.current.slots_filled() > 0
+	_check(failures, filled == expect_filled, "%s: slot %s, expected %s"
+		% [label, "taken" if filled else "still empty",
+		"taken" if expect_filled else "still empty"])
+	if filled and expect_filled:
+		var entry: Dictionary = Game.current.entries[0]
+		_check(failures, bool(entry["assisted"]) == expect_assisted,
+			"%s: recorded assisted=%s, expected %s"
+			% [label, entry["assisted"], expect_assisted])
+		# Case 7 of the spec: the count cannot bleed into whatever is asked next.
+		var attempts := int(Router.current_scene.get("_attempts"))
+		_check(failures, attempts == 0,
+			"%s: attempt counter left at %d after the sentence closed" % [label, attempts])
 
 
 static func _check(failures: Array[String], condition: bool, message: String) -> void:

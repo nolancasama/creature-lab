@@ -108,7 +108,8 @@ static func validate(transcript: String, before: String, after: String, toleranc
 			result["ok"] = bool(past["ok"])
 			result["reason"] = "ok" if result["ok"] else _diagnose_clause(
 				past, bool(result["said_before"]), "frame_before")
-			result["uncertain"] = _is_uncertain_failure(past, bool(result["said_before"]))
+			result["uncertain"] = _is_uncertain_failure(past, bool(result["said_before"])) \
+				or _is_noise(words, bool(result["said_before"]), int(past["frame_index"]))
 		CLAUSE_PRESENT:
 			present = _match_clause(words, "is", after, 0, tolerance, protected)
 			result["frame_after"] = bool(present["ok"])
@@ -117,14 +118,17 @@ static func validate(transcript: String, before: String, after: String, toleranc
 			result["ok"] = bool(present["ok"])
 			result["reason"] = "ok" if result["ok"] else _diagnose_clause(
 				present, bool(result["said_after"]), "frame_after")
-			result["uncertain"] = _is_uncertain_failure(present, bool(result["said_after"]))
+			result["uncertain"] = _is_uncertain_failure(present, bool(result["said_after"])) \
+				or _is_noise(words, bool(result["said_after"]), int(present["frame_index"]))
 		_:
 			result["ok"] = bool(past["ok"]) and bool(present["ok"])
 			result["reason"] = "ok" if result["ok"] else _diagnose_both(result, past, present)
-			result["uncertain"] = not bool(result["ok"]) \
-				and not bool(result["protected_conflict"]) \
-				and (bool(past["weak_fuzzy"]) or bool(present["weak_fuzzy"])) \
-				and not _has_clear_frame_miss(result)
+			result["uncertain"] = not bool(result["ok"]) and (
+				_is_noise(words, bool(result["said_before"]) or bool(result["said_after"]),
+					maxi(int(past["frame_index"]), int(present["frame_index"])))
+				or (not bool(result["protected_conflict"])
+					and (bool(past["weak_fuzzy"]) or bool(present["weak_fuzzy"]))
+					and not _has_clear_frame_miss(result)))
 	return result
 
 
@@ -198,6 +202,19 @@ static func _diagnose_both(result: Dictionary, past: Dictionary, present: Dictio
 static func _is_uncertain_failure(match: Dictionary, said_adjective: bool) -> bool:
 	return not bool(match["protected_conflict"]) and bool(match["weak_fuzzy"]) \
 		and int(match["frame_index"]) >= 0 and not said_adjective
+
+
+## A single stray token is noise, not an answer.
+##
+## The scaffold now walks a child toward an assisted pass on effortful attempts, so what
+## counts as "effortful" decides whether a cough or a neighbour's voice could carry them
+## there without them ever speaking. One word carrying neither a frame word nor the
+## adjective is not an attempt at "It was strong" by any reading, so it is uncertainty
+## rather than a failed try. Deliberately narrow at two words, because "was strong" is a
+## real answer and so is a genuinely wrong one.
+static func _is_noise(words: PackedStringArray, said_adjective: bool,
+		frame_index: int) -> bool:
+	return words.size() < 2 and not said_adjective and frame_index < 0
 
 
 static func _has_clear_frame_miss(result: Dictionary) -> bool:

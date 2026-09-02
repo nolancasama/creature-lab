@@ -4,18 +4,28 @@ extends PanelContainer
 ##
 ## The specs described only the success path. In a classroom the failure path is the one
 ## that decides whether a child keeps going, so this panel implements a scaffold ladder:
-## retry, then tell them which half was heard, then model the sentence aloud, and finally
-## let the teacher accept it. Nothing here can dead-end a lesson.
+## retry, then tell them which half was heard, then model the sentence aloud, and then
+## accept the third real try whatever it sounded like. Nothing here can dead-end a lesson.
+##
+## The last rung used to be a button a teacher pressed. It was the right idea reached the
+## wrong way: it stalls the child in front of the class until an adult walks over, and one
+## teacher cannot walk to thirty machines. The child does the work - a third genuine spoken
+## attempt - and the game does the accepting. It is still recorded as an assisted pass, so
+## the round report tells the teacher what happened without the lesson ever stopping.
 ##
 ## Hidden until there is something to say - show_idle() turns it off, show_target() turns
 ## it on - so it appears the moment a card is picked and disappears the moment the sentence
 ## is done, rather than sitting on screen empty between turns.
 
-signal accepted_by_teacher()
 signal change_requested()
 
 const HELP_AFTER_MODEL := 2 ## Failed attempts before the sentence is read aloud.
-const HELP_AFTER_OVERRIDE := 3 ## Failed attempts before the teacher override appears.
+## Effortful spoken attempts after which the try is accepted however it sounded.
+##
+## Counted by the caller, and only for attempts where the child actually said something
+## resembling an answer - silence, noise and recogniser trouble are not rungs on this
+## ladder, or a broken microphone would hand out a pass for three seconds of nothing.
+const AUTO_PASS_ATTEMPTS := 3
 const MIC_ICON := preload("res://ui/mic.svg")
 const SPEAKER_ICON := preload("res://ui/speaker.svg")
 const MIC_IDLE := "タップして話す"
@@ -41,7 +51,6 @@ var _input_shell: Control = null
 var _submit_button: Button = null
 var _listen_button: Button = null
 var _listen_timer: Timer = null
-var _override_button: Button = null
 var _cancel_label: Button = null
 
 var _before := ""
@@ -181,15 +190,9 @@ func _build() -> void:
 	_listen_timer.timeout.connect(_on_listen_timeout)
 	add_child(_listen_timer)
 
-	_override_button = UiKit.button("正しく言えました － 先生が承認", UiKit.SMALL)
-	_override_button.custom_minimum_size.y = 52
-	UiKit.style_secondary(_override_button)
-	_override_button.visible = false
-	_override_button.pressed.connect(func() -> void: accepted_by_teacher.emit())
-	column.add_child(_override_button)
 
-	# Last child regardless of what is visible above it, so Cancel (or the override button,
-	# on the rare round that reaches it) never sits flush against the panel's bottom edge.
+	# Last child regardless of what is visible above it, so the Cancel hint never sits
+	# flush against the panel's bottom edge.
 	column.add_child(UiKit.spacer(16))
 
 	_sync_input_mode()
@@ -251,7 +254,6 @@ func show_idle(message := "") -> void:
 	_feedback.text = message
 	_feedback.visible = not message.is_empty()
 	_feedback.add_theme_color_override("font_color", UiKit.MUTED)
-	_override_button.visible = false
 	_listen_button.visible = false
 	_cancel_label.visible = false
 	_set_input_enabled(false)
@@ -272,7 +274,6 @@ func show_target(before: String, after: String, clause := GrammarValidator.CLAUS
 	_feedback.text = ""
 	_feedback.visible = false
 	_feedback.add_theme_color_override("font_color", UiKit.MUTED)
-	_override_button.visible = false
 	_listen_button.visible = Tts.available() and Settings.prompt_mode != Settings.PROMPT_HIDDEN
 	_cancel_label.visible = true
 	_set_input_enabled(true)
@@ -287,7 +288,6 @@ func show_success(completed_steps: int) -> void:
 	_feedback.text = "できました！  %s" % _target_sentence()
 	_feedback.visible = true
 	_feedback.add_theme_color_override("font_color", UiKit.OK)
-	_override_button.visible = false
 	_cancel_label.visible = false
 	_set_input_enabled(false)
 	_set_completed_steps(completed_steps)
@@ -322,10 +322,6 @@ func show_failure(result: Dictionary, attempts: int) -> void:
 		# Stop asking and start showing: say the sentence for them.
 		_sentence_label.text = _sentence_bbcode(_target_sentence())
 		Tts.speak(_target_sentence(), 0.75)
-	if attempts >= HELP_AFTER_OVERRIDE:
-		_override_button.visible = true
-		_feedback.text += "  下のボタンから先生が承認できます。"
-
 	_entry.clear()
 	_set_input_enabled(true)
 	if not Speech.uses_microphone():
@@ -338,7 +334,6 @@ func show_uncertain() -> void:
 	_feedback.text = "もう一度言ってみよう！"
 	_feedback.visible = true
 	_feedback.add_theme_color_override("font_color", UiKit.MUTED)
-	_override_button.visible = false
 	_entry.clear()
 	_set_input_enabled(true)
 	if not Speech.uses_microphone():
