@@ -119,17 +119,27 @@ func play_music(track: String, level: float) -> void:
 
 
 ## Ease the music to a new level. `seconds` of 0 sets it immediately.
-func set_music_level(level: float, seconds := 0.0) -> void:
+##
+## `delay` holds the current level for that long first. It exists so a caller can let a
+## swell stand at its peak before coming down without blocking on a timer: the sequence
+## that asked for the drop is usually also driving the camera and the scene change, and
+## awaiting the hold there would push those out by the same amount.
+func set_music_level(level: float, seconds := 0.0, delay := 0.0) -> void:
 	if _music_player == null:
 		return
 	_music_level = clampf(level, 0.0, 1.0)
 	var target := _music_db(_music_level)
 	if _music_tween != null and _music_tween.is_valid():
 		_music_tween.kill()
-	if seconds <= 0.0:
+	if seconds <= 0.0 and delay <= 0.0:
 		_music_player.volume_db = target
 		return
 	_music_tween = create_tween()
+	if delay > 0.0:
+		_music_tween.tween_interval(delay)
+	if seconds <= 0.0:
+		_music_tween.tween_callback(func() -> void: _music_player.volume_db = target)
+		return
 	_music_tween.tween_property(_music_player, "volume_db", target, seconds)
 
 

@@ -264,9 +264,81 @@ func _zoo_section() -> Control:
 	var reset := UiKit.button("どうぶつえんをリセット", UiKit.SMALL)
 	reset.custom_minimum_size = Vector2(220, 52)
 	UiKit.style_button(reset, UiKit.BAD.darkened(0.52))
+	var count := UiKit.label("保存中：%d体" % Game.zoo.size(), UiKit.SMALL, UiKit.MUTED)
 	reset.pressed.connect(func() -> void:
-		Game.reset_zoo()
-		Audio.play("pop"))
+		Audio.play("click")
+		_confirm_zoo_reset(count))
 	row.add_child(reset)
-	row.add_child(UiKit.label("保存中：%d体" % Game.zoo.size(), UiKit.SMALL, UiKit.MUTED))
+	row.add_child(count)
 	return _wrap(column)
+
+
+## Resetting throws away every creature a class made, and the button used to do it on the
+## first press - one mis-tap on a teacher's screen mid-lesson and a morning's work was gone
+## with nothing to undo it. The zoo's own release row already asks before sending a single
+## creature home; wiping all of them had less protection than releasing one.
+##
+## A modal rather than the zoo's inline yes/no swap: this is the destructive end of a
+## settings page a teacher scrolls quickly, so it takes over the screen and says how many
+## animals are about to be lost, and the safe answer is the one that reads first.
+func _confirm_zoo_reset(count_label: Label) -> void:
+	var living := Game.zoo.size()
+
+	var overlay := Control.new()
+	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	add_child(overlay)
+
+	# Dimmed rather than opaque: the teacher can still see which screen they are on, and
+	# MOUSE_FILTER_STOP means nothing behind it can be pressed by accident.
+	var shade := ColorRect.new()
+	shade.color = Color(UiKit.BG, 0.78)
+	shade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	shade.mouse_filter = Control.MOUSE_FILTER_STOP
+	overlay.add_child(shade)
+
+	# A CenterContainer rather than a centre anchor preset: the panel is sized by its own
+	# content, and this is the one arrangement that centres it without hard-coding a height.
+	var centre := CenterContainer.new()
+	centre.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	centre.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	overlay.add_child(centre)
+
+	var frame := UiKit.panel(UiKit.PANEL, 16, 2, UiKit.BAD.darkened(0.35), 26)
+	frame.custom_minimum_size = Vector2(560, 0)
+	centre.add_child(frame)
+
+	var box := UiKit.vbox(16)
+	frame.add_child(box)
+	box.add_child(UiKit.title("どうぶつえんをリセットしますか？", UiKit.H3, UiKit.TEXT))
+	box.add_child(UiKit.label(
+		"%d体のどうぶつが すべていなくなります。もとにもどせません。" % living,
+		UiKit.SMALL, UiKit.MUTED))
+
+	var buttons := UiKit.hbox(12)
+	buttons.alignment = BoxContainer.ALIGNMENT_CENTER
+	box.add_child(buttons)
+
+	# Cancel first and styled as the ordinary control; the destructive one has to be chosen.
+	var cancel := UiKit.button("キャンセル", UiKit.SMALL)
+	cancel.custom_minimum_size = Vector2(200, UiKit.MIN_TOUCH)
+	cancel.focus_mode = Control.FOCUS_NONE
+	UiKit.style_navigation(cancel)
+	buttons.add_child(cancel)
+
+	var confirm := UiKit.button("リセットする", UiKit.SMALL)
+	confirm.custom_minimum_size = Vector2(200, UiKit.MIN_TOUCH)
+	confirm.focus_mode = Control.FOCUS_NONE
+	UiKit.style_button(confirm, UiKit.BAD.darkened(0.52))
+	buttons.add_child(confirm)
+
+	cancel.pressed.connect(func() -> void:
+		Audio.play("click")
+		overlay.queue_free())
+	confirm.pressed.connect(func() -> void:
+		Game.reset_zoo()
+		Audio.play("pop")
+		# The count is built once with the section, so it would otherwise keep reporting the
+		# creatures that no longer exist until the teacher reopened the page.
+		count_label.text = "保存中：%d体" % Game.zoo.size()
+		overlay.queue_free())

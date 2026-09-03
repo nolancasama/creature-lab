@@ -73,6 +73,14 @@ const MUSIC_PEAK := 1.0 ## The transformation itself.
 const MUSIC_AFTER := 0.34 ## Under the before-and-after screen that follows.
 const MUSIC_RISE := 1.2 ## Seconds to swell into the peak.
 const MUSIC_SETTLE := 1.6 ## Seconds to come back down afterwards.
+## How long the peak is allowed to stand before the settle begins.
+##
+## The swell arrives with the transformation and the drop followed almost immediately
+## behind the reveal, so the loudest moment was over about as soon as it registered. The
+## music is the payoff for the whole round; it can sit at the top a beat longer. Held
+## rather than slowed: a longer MUSIC_SETTLE would only make the descent draggier, and it
+## is the time AT the peak that was short, not the time coming down from it.
+const MUSIC_PEAK_HOLD := 1.5
 const FRONT_CAMERA_MOVE := 0.42 ## A quick orbit replaces the old instant animal swivel.
 const FRONT_CAMERA_DISTANCE := 7.05 ## Matches the final pull-back shot's subject scale.
 const FRONT_CAMERA_HEIGHT := 1.75
@@ -189,8 +197,9 @@ func run(state: CreatureState) -> void:
 	await _reveal()
 
 	# Down, not off: the naming screen is the same moment continuing, and it stops the
-	# music itself when the student leaves it.
-	Audio.set_music_level(MUSIC_AFTER, MUSIC_SETTLE)
+	# music itself when the student leaves it. The hold is passed to the tween rather than
+	# awaited, so the banner and the screen after it are not delayed by it.
+	Audio.set_music_level(MUSIC_AFTER, MUSIC_SETTLE, MUSIC_PEAK_HOLD)
 	if _alive():
 		_banner.text = _banner_text
 		_banner.visible = false
