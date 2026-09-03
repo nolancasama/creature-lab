@@ -19,7 +19,7 @@ func _ready() -> void:
 	_build()
 	Game.creature_updated.connect(func(_s: CreatureState) -> void: _refresh())
 	Game.phase_changed.connect(func(_a: int, _b: int) -> void: _refresh())
-	Speech.heard.connect(_on_heard)
+	Speech.transcript_observed.connect(_on_transcript_observed)
 	visibility_changed.connect(func() -> void:
 		set_process(visible)
 		if visible:
@@ -114,7 +114,7 @@ func _run(action: String) -> void:
 	_refresh()
 
 
-func _on_heard(alternatives: PackedStringArray, _confidences: PackedFloat32Array,
+func _on_transcript_observed(_session_id: int, alternatives: PackedStringArray,
 		is_final: bool) -> void:
 	var tag := "final" if is_final else "interim"
 	_transcript_view.text = "%s: %s" % [tag, ", ".join(alternatives)]

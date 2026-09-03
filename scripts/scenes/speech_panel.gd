@@ -1,17 +1,7 @@
 class_name SpeechPanel
 extends PanelContainer
-## Where the student actually speaks, and where a student who is stuck gets help.
-##
-## The specs described only the success path. In a classroom the failure path is the one
-## that decides whether a child keeps going, so this panel implements a scaffold ladder:
-## retry, then tell them which half was heard, then model the sentence aloud, and then
-## accept the third real try whatever it sounded like. Nothing here can dead-end a lesson.
-##
-## The last rung used to be a button a teacher pressed. It was the right idea reached the
-## wrong way: it stalls the child in front of the class until an adult walks over, and one
-## teacher cannot walk to thirty machines. The child does the work - a third genuine spoken
-## attempt - and the game does the accepting. It is still recorded as an assisted pass, so
-## the round report tells the teacher what happened without the lesson ever stopping.
+## Presentation for the current spoken target. Recognition, classification and scaffold
+## counting live below and above this control respectively; this node only renders them.
 ##
 ## Hidden until there is something to say - show_idle() turns it off, show_target() turns
 ## it on - so it appears the moment a card is picked and disappears the moment the sentence
@@ -19,17 +9,12 @@ extends PanelContainer
 
 signal change_requested()
 
-const HELP_AFTER_MODEL := 2 ## Failed attempts before the sentence is read aloud.
-## Effortful spoken attempts after which the try is accepted however it sounded.
-##
-## Counted by the caller, and only for attempts where the child actually said something
-## resembling an answer - silence, noise and recogniser trouble are not rungs on this
-## ladder, or a broken microphone would hand out a pass for three seconds of nothing.
-const AUTO_PASS_ATTEMPTS := 3
 const MIC_ICON := preload("res://ui/mic.svg")
 const SPEAKER_ICON := preload("res://ui/speaker.svg")
 const MIC_IDLE := "タップして話す"
+const MIC_STARTING := "マイクを準備しています… タップで停止"
 const MIC_LISTENING := "聞いています… タップで停止"
+const MIC_QUEUED := "次のマイクを準備しています…"
 ## Said in words, above the button, as well as shown on it.
 ##
 ## The button already changed colour and caption, but both live ON the control the student
@@ -38,7 +23,9 @@ const MIC_LISTENING := "聞いています… タップで停止"
 ## of this game rests on, and it deserves its own line rather than an inference from a
 ## button's shade.
 const STATUS_IDLE := "マイクは とまっています"
+const STATUS_STARTING := "マイクを じゅんびしています…"
 const STATUS_LISTENING := "● ろくおん中… はなしてください"
+const STATUS_QUEUED := "つぎの ろくおんを じゅんびしています…"
 const LISTEN_TIMEOUT := 10.0 ## Seconds before an unanswered microphone closes itself.
 
 var _sentence_label: RichTextLabel = null
@@ -62,8 +49,7 @@ var _clause := GrammarValidator.CLAUSE_BOTH
 func _ready() -> void:
 	add_theme_stylebox_override("panel", UiKit.stylebox(Color(0.06, 0.1, 0.16, 0.94), 16, 2, UiKit.PANEL_HI))
 	_build()
-	Speech.listening_changed.connect(_on_listening_changed)
-	Speech.failed.connect(_on_speech_failed)
+	Speech.session_state_changed.connect(_on_session_state_changed)
 	Speech.backend_changed.connect(func(_id: String) -> void: _sync_input_mode())
 	show_idle()
 
@@ -161,7 +147,7 @@ func _build() -> void:
 
 	_mic_button = UiKit.button(MIC_IDLE, UiKit.H3, true)
 	UiKit.style_primary(_mic_button) ## The call-to-action colour, not the
-	## ambient ACCENT the "true" flag would otherwise apply - _on_listening_changed()
+	## ambient ACCENT the "true" flag would otherwise apply - the session-state renderer
 	## switches it to OK while actually listening and back to this otherwise.
 	_mic_button.icon = MIC_ICON
 	_mic_button.custom_minimum_size = Vector2(0, 60)
@@ -239,6 +225,8 @@ func _sync_input_mode() -> void:
 	# a recogniser it never uses happened to report something.
 	if _status != null:
 		_status.visible = mic
+	if _armed and not mic and _entry != null:
+		_entry.grab_focus()
 
 
 # --- Public API --------------------------------------------------------------
@@ -248,7 +236,6 @@ func show_idle(message := "") -> void:
 	_armed = false
 	_before = ""
 	_after = ""
-	Speech.set_context(PackedStringArray())
 	visible = false
 	_sentence_label.text = "[center][color=#93a6bf]単語カードをえらぼう。[/color][/center]"
 	_feedback.text = message
@@ -266,7 +253,6 @@ func show_target(before: String, after: String, clause := GrammarValidator.CLAUS
 	_clause = clause
 	_set_completed_steps(completed_steps)
 	_armed = true
-	Speech.set_context(_bias_phrases())
 	visible = true
 	_sentence_label.text = _prompt_text()
 	# The field or microphone button already makes the required action clear. Keep this row
@@ -311,14 +297,14 @@ func _set_completed_steps(completed_steps: int) -> void:
 	_step_counter.add_theme_color_override("font_color", UiKit.ACCENT)
 
 
-## The scaffold ladder. `attempts` is how many times this sentence has now failed.
-func show_failure(result: Dictionary, attempts: int) -> void:
-	_feedback.text = _message_for(result)
+func show_failure(heard: String, model_sentence: bool) -> void:
+	_feedback.text = "もう一度ためそう！" if heard.is_empty() \
+		else "もう一度ためそう。「%s」と聞こえました。" % heard
 	_feedback.visible = true
-	_feedback.add_theme_color_override("font_color", UiKit.BAD if attempts < HELP_AFTER_MODEL else UiKit.GOLD)
+	_feedback.add_theme_color_override("font_color", UiKit.GOLD if model_sentence else UiKit.BAD)
 	Audio.play("fail")
 
-	if attempts >= HELP_AFTER_MODEL:
+	if model_sentence:
 		# Stop asking and start showing: say the sentence for them.
 		_sentence_label.text = _sentence_bbcode(_target_sentence())
 		Tts.speak(_target_sentence(), 0.75)
@@ -332,6 +318,22 @@ func show_failure(result: Dictionary, attempts: int) -> void:
 ## They do not play the fail sound or advance the scaffold ladder.
 func show_uncertain() -> void:
 	_feedback.text = "もう一度言ってみよう！"
+	_feedback.visible = true
+	_feedback.add_theme_color_override("font_color", UiKit.MUTED)
+	_entry.clear()
+	_set_input_enabled(true)
+	if not Speech.uses_microphone():
+		_entry.grab_focus()
+
+
+func show_technical_error(reason: String) -> void:
+	var message := "もう一度言ってみよう！"
+	match reason:
+		"not-allowed", "service-not-allowed":
+			message = "マイクが使えません。ブラウザの設定をかくにんしてね。"
+		"audio-capture":
+			message = "マイクが見つかりません。せつぞくをかくにんしてね。"
+	_feedback.text = message
 	_feedback.visible = true
 	_feedback.add_theme_color_override("font_color", UiKit.MUTED)
 	_entry.clear()
@@ -355,17 +357,6 @@ func _target_sentence() -> String:
 		GrammarValidator.CLAUSE_PRESENT:
 			return CreatureState.present_sentence_for(_after)
 	return CreatureState.sentence_for(_before, _after)
-
-
-## Target-only hints for the browser's optional experimental phrase-biasing API.
-func _bias_phrases() -> PackedStringArray:
-	match _clause:
-		GrammarValidator.CLAUSE_PAST:
-			return PackedStringArray([_target_sentence(), _before, GrammarValidator.BEFORE_FRAME])
-		GrammarValidator.CLAUSE_PRESENT:
-			return PackedStringArray([_target_sentence(), _after, GrammarValidator.AFTER_FRAME])
-	return PackedStringArray([_target_sentence(), _before, _after,
-		GrammarValidator.BEFORE_FRAME, GrammarValidator.AFTER_FRAME])
 
 
 func _prompt_text() -> String:
@@ -406,60 +397,48 @@ func _submit_typed(text: String) -> void:
 func _on_mic_pressed() -> void:
 	if not _armed:
 		return
-	if Speech.is_listening():
-		Speech.cancel()
-		_feedback.text = ""
-		_feedback.visible = false
-		_feedback.add_theme_color_override("font_color", UiKit.MUTED)
-	else:
-		Speech.start()
-
-
-## A recogniser that refuses to start was completely silent before: the button flipped to
-## listening and straight back, with nothing on screen to say why. Whatever the browser
-## complains about, the student is told something they can act on rather than being left
-## with a button that appears dead.
-func _on_speech_failed(reason: String) -> void:
-	if not _armed:
-		return
-	var message := "もう一度言ってみよう！"
-	match reason:
-		"not-allowed", "service-not-allowed":
-			message = "マイクが使えません。ブラウザの設定をかくにんしてね。"
-		"audio-capture":
-			message = "マイクが見つかりません。せつぞくをかくにんしてね。"
-		"network":
-			message = "ネットワークの調子がわるいみたい。もう一度ためそう。"
-		"no-speech":
-			message = "声が聞こえませんでした。もう一度ためそう！"
-	_feedback.text = message
-	_feedback.visible = true
-	_feedback.add_theme_color_override("font_color", UiKit.MUTED)
+	Speech.toggle()
 
 
 func _on_listen_timeout() -> void:
-	if not Speech.is_listening():
+	if Speech.session_state() not in [SpeechSession.State.STARTING, SpeechSession.State.LISTENING]:
 		return
-	Speech.cancel()
-	show_uncertain()
+	Speech.timeout()
 
 
-func _on_listening_changed(listening: bool) -> void:
+func _on_session_state_changed(_session_id: int, state: int, restart_queued: bool) -> void:
 	if not Speech.uses_microphone():
 		return
-	if listening:
+	if state in [SpeechSession.State.STARTING, SpeechSession.State.LISTENING]:
 		_listen_timer.start()
 	else:
 		_listen_timer.stop()
-	_mic_button.text = MIC_LISTENING if listening else MIC_IDLE
+	var armed := state in [SpeechSession.State.STARTING, SpeechSession.State.LISTENING] \
+		or restart_queued
+	match state:
+		SpeechSession.State.STARTING:
+			_mic_button.text = MIC_STARTING
+		SpeechSession.State.LISTENING:
+			_mic_button.text = MIC_LISTENING
+		SpeechSession.State.FINISHING:
+			_mic_button.text = MIC_QUEUED if restart_queued else MIC_IDLE
+		_:
+			_mic_button.text = MIC_IDLE
 	if _status != null:
-		_status.text = STATUS_LISTENING if listening else STATUS_IDLE
-		_status.add_theme_color_override("font_color",
-			UiKit.OK if listening else UiKit.MUTED)
+		match state:
+			SpeechSession.State.STARTING:
+				_status.text = STATUS_STARTING
+			SpeechSession.State.LISTENING:
+				_status.text = STATUS_LISTENING
+			SpeechSession.State.FINISHING:
+				_status.text = STATUS_QUEUED if restart_queued else STATUS_IDLE
+			_:
+				_status.text = STATUS_IDLE
+		_status.add_theme_color_override("font_color", UiKit.OK if armed else UiKit.MUTED)
 		# Only meaningful when the microphone is the input; a typed round has no state to
 		# report and the line would just be noise under the text field.
 		_status.visible = Speech.uses_microphone()
-	UiKit.style_button(_mic_button, UiKit.OK if listening else UiKit.CTA, true)
+	UiKit.style_button(_mic_button, UiKit.OK if armed else UiKit.CTA, true)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -469,31 +448,3 @@ func _unhandled_input(event: InputEvent) -> void:
 	# game now, and a key that submits an answer on one screen and starts recording on
 	# another is worse than a key that does nothing. The microphone is tapped.
 	pass
-
-
-## Child-facing wording for each validator reason. The validator returns codes; the
-## classroom voice lives here.
-func _message_for(result: Dictionary) -> String:
-	var heard := str(result.get("normalized", ""))
-	match str(result.get("reason", "")):
-		"empty":
-			return "声が聞こえませんでした。もう一度ためそう！"
-		"nothing", "wrong_word":
-			return "もう一度ためそう。「%s」と聞こえました。" % heard
-		"uncertain":
-			return "もう一度言ってみよう！"
-		"no_after":
-			return "いいスタート！「It was %s」と聞こえました。つぎに「Now it is %s」と言おう。" % [_before, _after]
-		"no_before":
-			return "おしい！「It was %s」からはじめよう。" % _before
-		"swapped":
-			return "おしい！前の単語から言おう：It was %s. Now it is %s." % [_before, _after]
-		"said_before", "frame_before":
-			return "文の形をぜんぶ言おう：It was %s." % _before
-		"said_after":
-			return "文の形をぜんぶ言おう：Now it is %s." % _after
-		"frame_after":
-			return "後半を言おう：Now it is %s." % _after
-		"exact":
-			return "あと少し！この文だけを言おう：%s" % _target_sentence()
-	return "もう一度ためそう！"

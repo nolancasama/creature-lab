@@ -1,17 +1,29 @@
+class_name SpeechService
 extends Node
-## The only speech-related thing gameplay is allowed to talk to.
-##
-## Picks a backend at runtime, forwards its transcripts, and knows nothing about
-## grammar - validation is a separate stage so recognisers can be swapped freely.
+## Owns the current SpeechSession and converts browser callbacks into one classified
+## attempt. Gameplay never reasons about callback order, and the classifier never sees
+## browser state.
 
-signal heard(alternatives: PackedStringArray, confidences: PackedFloat32Array, is_final: bool)
-signal listening_changed(is_listening: bool)
+signal attempt_completed(result: Dictionary)
+signal session_state_changed(session_id: int, state: int, restart_queued: bool)
+signal session_capture_started(session_id: int)
+signal session_capture_finished(session_id: int, tail_seconds: float, discard: bool)
+signal transcript_observed(session_id: int, alternatives: PackedStringArray, is_final: bool)
 signal backend_changed(backend_id: String)
-signal failed(reason: String)
+
+const INTERIM_RECORDING_TAIL := 0.7
+const FALLBACK_ERRORS := ["not-allowed", "service-not-allowed", "unsupported", "audio-capture"]
 
 var backend: SpeechBackend = null
-var _cancelled := false ## Drops the transcript from a session the student called off.
-var _context_phrases := PackedStringArray()
+var active_session: SpeechSession = null
+
+var _next_session_id := 0
+var _target_before := ""
+var _target_after := ""
+var _target_tolerance := GrammarValidator.HEAR_LENIENT
+var _target_clause := GrammarValidator.CLAUSE_BOTH
+var _target_configured := false
+var _fallback_after_session := false
 
 
 func _ready() -> void:
@@ -19,11 +31,12 @@ func _ready() -> void:
 
 
 ## Real recognition when the platform can do it and the teacher wants it; typed input
-## otherwise. Typed is never merely a fallback - see TypedSpeechBackend.
+## otherwise. Typed mode is also the deterministic fallback for a refused microphone.
 func select_backend() -> void:
+	if active_session != null and active_session.is_active():
+		cancel()
 	if backend != null:
 		backend.cleanup()
-		backend = null
 
 	var chosen: SpeechBackend = null
 	if Settings.stt_enabled:
@@ -32,13 +45,43 @@ func select_backend() -> void:
 			chosen = web
 	if chosen == null:
 		chosen = TypedSpeechBackend.new()
+	_set_backend(chosen)
 
-	backend = chosen
-	backend.transcript.connect(_on_transcript)
-	backend.listening_changed.connect(_on_listening_changed)
-	backend.failed.connect(_on_failed)
-	backend.set_context(_context_phrases)
+
+## The harness installs a passive backend and injects the same callbacks the browser uses.
+## This tests ordering and stale IDs without pretending Chrome Web Speech exists on desktop.
+func install_backend_for_test(candidate: SpeechBackend) -> void:
+	if backend != null:
+		backend.cleanup()
+	active_session = null
+	_fallback_after_session = false
+	_set_backend(candidate)
+
+
+func _set_backend(candidate: SpeechBackend) -> void:
+	backend = candidate
+	backend.browser_started.connect(_on_browser_started)
+	backend.interim.connect(_on_interim)
+	backend.final.connect(_on_final)
+	backend.error.connect(_on_error)
+	backend.no_match.connect(_on_no_match)
+	backend.browser_ended.connect(_on_browser_ended)
 	backend_changed.emit(backend.backend_id())
+
+
+func configure_attempt(before: String, after: String, tolerance: int, clause: int) -> void:
+	_target_before = before
+	_target_after = after
+	_target_tolerance = tolerance
+	_target_clause = clause
+	_target_configured = true
+
+
+func clear_attempt() -> void:
+	cancel()
+	_target_configured = false
+	_target_before = ""
+	_target_after = ""
 
 
 func mode() -> String:
@@ -53,76 +96,257 @@ func prompt_label() -> String:
 	return backend.display_name() if backend != null else "利用できません"
 
 
+func session_state() -> int:
+	return active_session.state if active_session != null else SpeechSession.State.IDLE
+
+
 func is_listening() -> bool:
-	return backend != null and backend.listening
+	return active_session != null and active_session.state == SpeechSession.State.LISTENING
 
 
-func start() -> void:
+func is_active() -> bool:
+	return active_session != null and active_session.is_active()
+
+
+func start() -> int:
+	if active_session != null and active_session.state == SpeechSession.State.FINISHING:
+		if active_session.queue_restart():
+			_log_event(active_session.session_id, "restart_queued")
+			_emit_state(active_session)
+		return active_session.session_id
+	if active_session != null and active_session.state in [
+			SpeechSession.State.STARTING, SpeechSession.State.LISTENING]:
+		return active_session.session_id
+	if not _target_configured or backend == null:
+		Diagnostics.note("[speech]", "start refused: no active target or backend")
+		return -1
+
+	_next_session_id += 1
+	active_session = SpeechSession.new(_next_session_id, _target_before, _target_after,
+		_target_tolerance, _target_clause)
+	active_session.request_start(Time.get_ticks_msec())
+	_fallback_after_session = false
+	# A modelled sentence can still be speaking when the retry button becomes available.
+	# Stop it before either microphone consumer opens, or the game grades its own voice.
+	Tts.stop()
+	_log_event(active_session.session_id, "start_requested")
+	_emit_state(active_session)
+	session_capture_started.emit(active_session.session_id)
+	backend.start(active_session.session_id)
+	return active_session.session_id
+
+
+func toggle() -> void:
+	if active_session == null:
+		start()
+		return
+	match active_session.state:
+		SpeechSession.State.STARTING, SpeechSession.State.LISTENING:
+			cancel()
+		SpeechSession.State.FINISHING:
+			start() # Queues the tap; onend consumes it.
+		_:
+			start()
+
+
+## Cancellation is not an attempt. abort() detaches the abandoned recogniser's handlers,
+## while the state and session ID independently reject anything already queued by Chrome.
+func cancel() -> void:
+	if active_session == null or not active_session.cancel():
+		return
+	var id := active_session.session_id
+	_log_event(id, "cancelled")
 	if backend != null:
-		_cancelled = false
-		backend.start()
+		backend.abort(id)
+	_finish_capture(active_session, 0.0, true)
+	_emit_state(active_session)
 
 
 func stop() -> void:
-	if backend != null:
-		backend.stop()
+	cancel()
 
 
-func set_context(phrases: PackedStringArray) -> void:
-	_context_phrases = phrases.duplicate()
-	if backend != null:
-		backend.set_context(_context_phrases)
-
-
-func biasing_status() -> Dictionary:
-	return backend.biasing_status() if backend != null else {"available": false, "applied": false}
-
-
-## Stop listening and throw away whatever this session was about to report. A student who
-## taps the button a second time has changed their mind, not answered wrongly, so the
-## transcript must not reach the validator and be counted as a failed attempt - a
-## recogniser will still deliver a final result after being told to stop.
-func cancel() -> void:
-	if backend == null:
+## The presentation timer reports its intent here; it never paints a second result beside
+## the session. A timeout and an onend-without-result are the same neutral uncertainty.
+func timeout() -> void:
+	if active_session == null or active_session.state not in [
+			SpeechSession.State.STARTING, SpeechSession.State.LISTENING]:
 		return
-	_cancelled = true
-	backend.stop()
+	var result := SpeechAttemptClassifier.classify(PackedStringArray(), active_session.before,
+		active_session.after, active_session.tolerance, active_session.clause)
+	_complete_attempt(active_session, result, "timeout", 0.0, true)
+	if backend != null:
+		backend.stop(active_session.session_id)
 
 
+## Typed input shares the language classifier but never enters the microphone state machine.
 func submit_typed(text: String) -> void:
-	if backend != null:
-		_cancelled = false ## Typing is its own answer; an earlier cancel must not eat it.
-		backend.submit(text)
-
-
-func _on_transcript(alternatives: PackedStringArray, confidences: PackedFloat32Array,
-		is_final: bool) -> void:
-	# Printed because the spoken path cannot be observed anywhere but a browser, and this is
-	# the first place it can silently end: a transcript arriving after a cancel is dropped
-	# here and the student sees nothing happen at all. Godot's print reaches the browser
-	# console in a web export.
-	Diagnostics.note("[speech]", "transcript final=%s cancelled=%s alts=%s confidence=%s"
-		% [is_final, _cancelled, alternatives, confidences])
-	if _cancelled:
+	if not _target_configured:
+		Diagnostics.note("[speech]", "typed answer refused: no active target")
 		return
-	heard.emit(alternatives, confidences, is_final)
+	var result := SpeechAttemptClassifier.classify(PackedStringArray([text]), _target_before,
+		_target_after, _target_tolerance, _target_clause)
+	result["session_id"] = 0
+	result["source"] = "typed"
+	_log_result(0, result)
+	attempt_completed.emit(result)
 
 
-func _on_listening_changed(value: bool) -> void:
-	listening_changed.emit(value)
+func _on_browser_started(session_id: int) -> void:
+	if not _is_current(session_id, "start"):
+		return
+	if not active_session.browser_started(Time.get_ticks_msec()):
+		_log_ignored(session_id, "start")
+		return
+	_log_event(session_id, "browser_started")
+	if Settings.speech_log:
+		Diagnostics.note("[speech]", "session=%d timing tap_to_start_ms=%d" % [
+			session_id, active_session.browser_start_msec - active_session.tap_msec])
+	_emit_state(active_session)
 
 
-func _on_failed(reason: String) -> void:
-	# Named on screen, not just raised as a signal. A recogniser that refuses to start is
-	# indistinguishable from a dead button otherwise, which is exactly how the biasing
-	# regression presented: press, flicker, nothing.
-	Diagnostics.note("[speech]", "recogniser error: %s" % reason)
-	failed.emit(reason)
-	# A recogniser-side silence is an uncertain attempt, not a language failure. Route an
-	# empty final through the same evaluation path so the scene can show its neutral retry.
-	if reason == "no-speech" and not _cancelled:
-		heard.emit(PackedStringArray(), PackedFloat32Array(), true)
-	# A browser that denies the microphone must not dead-end the lesson.
-	if reason in ["not-allowed", "service-not-allowed", "unsupported", "audio-capture"]:
+func _on_interim(session_id: int, alternatives: PackedStringArray,
+		_confidences: PackedFloat32Array) -> void:
+	if not _is_current(session_id, "interim"):
+		return
+	if active_session.result_produced or active_session.state not in [
+			SpeechSession.State.STARTING, SpeechSession.State.LISTENING]:
+		_log_ignored(session_id, "interim")
+		return
+	transcript_observed.emit(session_id, alternatives, false)
+	var strong_pass := SpeechAttemptClassifier.is_strong_pass(alternatives,
+		active_session.before, active_session.after, active_session.tolerance,
+		active_session.clause)
+	if Settings.speech_log:
+		Diagnostics.note("[speech]", "session=%d interim strong_pass=%s alts=%s" % [
+			session_id, strong_pass, alternatives])
+	if not strong_pass:
+		return
+	var result := SpeechAttemptClassifier.classify(alternatives, active_session.before,
+		active_session.after, active_session.tolerance, active_session.clause)
+	_complete_attempt(active_session, result, "interim", INTERIM_RECORDING_TAIL, false)
+	if backend != null:
+		backend.stop(session_id)
+
+
+func _on_final(session_id: int, alternatives: PackedStringArray,
+		_confidences: PackedFloat32Array) -> void:
+	if not _is_current(session_id, "final"):
+		return
+	if active_session.result_produced or active_session.state not in [
+			SpeechSession.State.STARTING, SpeechSession.State.LISTENING]:
+		_log_ignored(session_id, "final")
+		return
+	transcript_observed.emit(session_id, alternatives, true)
+	if Settings.speech_log:
+		Diagnostics.note("[speech]", "session=%d final alts=%s" % [session_id, alternatives])
+	var result := SpeechAttemptClassifier.classify(alternatives, active_session.before,
+		active_session.after, active_session.tolerance, active_session.clause)
+	_complete_attempt(active_session, result, "final", 0.0,
+		int(result["outcome"]) in [SpeechAttemptClassifier.Outcome.UNCERTAIN,
+			SpeechAttemptClassifier.Outcome.TECHNICAL_ERROR])
+	if backend != null:
+		backend.stop(session_id)
+
+
+func _on_error(session_id: int, reason: String) -> void:
+	if not _is_current(session_id, "error"):
+		return
+	if active_session.result_produced:
+		_log_ignored(session_id, "error")
+		return
+	Diagnostics.note("[speech]", "session=%d browser_error=%s" % [session_id, reason])
+	_fallback_after_session = reason in FALLBACK_ERRORS
+	_complete_attempt(active_session, SpeechAttemptClassifier.technical_error(reason),
+		"error", 0.0, true)
+	if backend != null:
+		backend.stop(session_id)
+
+
+func _on_no_match(session_id: int) -> void:
+	if not _is_current(session_id, "nomatch") or active_session.result_produced:
+		return
+	var result := SpeechAttemptClassifier.classify(PackedStringArray(), active_session.before,
+		active_session.after, active_session.tolerance, active_session.clause)
+	_complete_attempt(active_session, result, "nomatch", 0.0, true)
+	if backend != null:
+		backend.stop(session_id)
+
+
+func _on_browser_ended(session_id: int) -> void:
+	if not _is_current(session_id, "end"):
+		return
+	_log_event(session_id, "browser_end")
+	if not active_session.result_produced and active_session.state in [
+			SpeechSession.State.STARTING, SpeechSession.State.LISTENING]:
+		var result := SpeechAttemptClassifier.classify(PackedStringArray(), active_session.before,
+			active_session.after, active_session.tolerance, active_session.clause)
+		_complete_attempt(active_session, result, "end", 0.0, true)
+	var restart := active_session.queued_restart
+	if not active_session.browser_ended():
+		_log_ignored(session_id, "end")
+		return
+	_emit_state(active_session)
+	if _fallback_after_session:
 		Settings.stt_enabled = false
 		select_backend()
+		return
+	if restart and _target_configured:
+		start()
+
+
+func _complete_attempt(session: SpeechSession, result: Dictionary, source: String,
+		tail_seconds: float, discard: bool) -> void:
+	var now := Time.get_ticks_msec()
+	if not session.begin_result(source, now):
+		_log_ignored(session.session_id, source)
+		return
+	result["session_id"] = session.session_id
+	result["source"] = source
+	_emit_state(session)
+	_finish_capture(session, tail_seconds, discard)
+	_log_result(session.session_id, result)
+	attempt_completed.emit(result)
+	if source == "final" and Settings.speech_log:
+		var start_to_final := session.final_msec - session.browser_start_msec \
+			if session.browser_start_msec > 0 else -1
+		Diagnostics.note("[speech]", "session=%d timing start_to_final_ms=%d final_to_ui_ms=%d" % [
+			session.session_id, start_to_final, Time.get_ticks_msec() - session.final_msec])
+
+
+func _finish_capture(session: SpeechSession, tail_seconds: float, discard: bool) -> void:
+	if session.capture_finished:
+		return
+	session.capture_finished = true
+	session_capture_finished.emit(session.session_id, tail_seconds, discard)
+
+
+func _is_current(session_id: int, kind: String) -> bool:
+	if active_session != null and active_session.session_id == session_id:
+		return true
+	var active_id := active_session.session_id if active_session != null else -1
+	Diagnostics.note("[speech]", "session=%d ignored_stale_callback=%s active=%d" % [
+		session_id, kind, active_id])
+	return false
+
+
+func _log_ignored(session_id: int, kind: String) -> void:
+	if Settings.speech_log:
+		Diagnostics.note("[speech]", "session=%d ignored_callback=%s state=%s" % [
+			session_id, kind, SpeechSession.State.keys()[active_session.state]])
+
+
+func _log_event(session_id: int, event: String) -> void:
+	Diagnostics.note("[speech]", "session=%d %s" % [session_id, event])
+
+
+func _log_result(session_id: int, result: Dictionary) -> void:
+	Diagnostics.note("[speech]", "session=%d result=%s" % [session_id,
+		SpeechAttemptClassifier.outcome_name(int(result["outcome"]))])
+	if Settings.speech_log and result.has("candidates"):
+		Diagnostics.note("[speech]", "session=%d candidates=%s" % [
+			session_id, result["candidates"]])
+
+
+func _emit_state(session: SpeechSession) -> void:
+	session_state_changed.emit(session.session_id, session.state, session.queued_restart)

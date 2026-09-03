@@ -2653,46 +2653,128 @@ static func _grammar_checks(failures: Array[String]) -> void:
 	_run_speech_fixtures(failures)
 
 
-## Required fixture shape: clause, before, after, transcript, tolerance, should_pass, note.
+## Required fixture shape: clause, before, after, transcript, tolerance, outcome, note.
 static func _speech_cases() -> Array:
 	var cases := [
-		[GrammarValidator.CLAUSE_PAST, "strong", "weak", "it was strong", GrammarValidator.HEAR_LENIENT, true, "clean target"],
-		[GrammarValidator.CLAUSE_PAST, "strong", "weak", "it was strang", GrammarValidator.HEAR_LENIENT, true, "known alias"],
-		[GrammarValidator.CLAUSE_PAST, "strong", "weak", "it wus strong", GrammarValidator.HEAR_LENIENT, true, "fuzzy frame"],
-		[GrammarValidator.CLAUSE_PAST, "strong", "weak", "um it was strong", GrammarValidator.HEAR_LENIENT, true, "leading filler"],
-		[GrammarValidator.CLAUSE_PAST, "strong", "weak", "was strong", GrammarValidator.HEAR_LENIENT, true, "missing optional it"],
-		[GrammarValidator.CLAUSE_PAST, "cold", "hot", "it was gold", GrammarValidator.HEAR_LENIENT, true, "non-vocabulary near neighbour"],
-		[GrammarValidator.CLAUSE_PRESENT, "weak", "strong", "is strong", GrammarValidator.HEAR_NORMAL, true, "missing optional now"],
-		[GrammarValidator.CLAUSE_BOTH, "strong", "weak", "was strong is weak", GrammarValidator.HEAR_EXACT, true, "both frames without optional words"],
-		[GrammarValidator.CLAUSE_BOTH, "strong", "weak", "is weak was strong", GrammarValidator.HEAR_LENIENT, false, "both clauses reversed"],
-		[GrammarValidator.CLAUSE_PRESENT, "weak", "strong", "now it strong", GrammarValidator.HEAR_LENIENT, false, "present missing is"],
+		[GrammarValidator.CLAUSE_PAST, "strong", "weak", "it was strong", GrammarValidator.HEAR_LENIENT, SpeechAttemptClassifier.Outcome.PASS, "clean target"],
+		[GrammarValidator.CLAUSE_PAST, "strong", "weak", "was strong", GrammarValidator.HEAR_LENIENT, SpeechAttemptClassifier.Outcome.PASS, "optional it omitted"],
+		[GrammarValidator.CLAUSE_PAST, "strong", "weak", "it wus strong", GrammarValidator.HEAR_LENIENT, SpeechAttemptClassifier.Outcome.PASS, "fuzzy frame"],
+		[GrammarValidator.CLAUSE_PAST, "strong", "weak", "it was strang", GrammarValidator.HEAR_LENIENT, SpeechAttemptClassifier.Outcome.PASS, "safe adjective alias"],
+		[GrammarValidator.CLAUSE_PAST, "strong", "weak", "it was weak", GrammarValidator.HEAR_LENIENT, SpeechAttemptClassifier.Outcome.EFFORTFUL_WRONG, "opposite adjective"],
+		[GrammarValidator.CLAUSE_PAST, "strong", "weak", "was weak", GrammarValidator.HEAR_LENIENT, SpeechAttemptClassifier.Outcome.EFFORTFUL_WRONG, "opposite with frame"],
+		[GrammarValidator.CLAUSE_PAST, "strong", "weak", "it strong", GrammarValidator.HEAR_LENIENT, SpeechAttemptClassifier.Outcome.EFFORTFUL_WRONG, "missing required was"],
+		[GrammarValidator.CLAUSE_PAST, "strong", "weak", "it was smooth", GrammarValidator.HEAR_LENIENT, SpeechAttemptClassifier.Outcome.EFFORTFUL_WRONG, "other protected adjective with frame"],
+		[GrammarValidator.CLAUSE_PAST, "strong", "weak", "thank you", GrammarValidator.HEAR_LENIENT, SpeechAttemptClassifier.Outcome.UNCERTAIN, "unrelated thanks"],
+		[GrammarValidator.CLAUSE_PAST, "strong", "weak", "yes please", GrammarValidator.HEAR_LENIENT, SpeechAttemptClassifier.Outcome.UNCERTAIN, "unrelated request"],
+		[GrammarValidator.CLAUSE_PAST, "strong", "weak", "I don't know", GrammarValidator.HEAR_LENIENT, SpeechAttemptClassifier.Outcome.UNCERTAIN, "unrelated uncertainty"],
+		[GrammarValidator.CLAUSE_PAST, "strong", "weak", "teacher teacher", GrammarValidator.HEAR_LENIENT, SpeechAttemptClassifier.Outcome.UNCERTAIN, "neighbour voice"],
+		[GrammarValidator.CLAUSE_PAST, "strong", "weak", "look at that", GrammarValidator.HEAR_LENIENT, SpeechAttemptClassifier.Outcome.UNCERTAIN, "unrelated direction"],
+		[GrammarValidator.CLAUSE_PAST, "strong", "weak", "what are you doing", GrammarValidator.HEAR_LENIENT, SpeechAttemptClassifier.Outcome.UNCERTAIN, "unrelated question"],
+		[GrammarValidator.CLAUSE_PAST, "strong", "weak", "hmm", GrammarValidator.HEAR_LENIENT, SpeechAttemptClassifier.Outcome.UNCERTAIN, "noise"],
+		[GrammarValidator.CLAUSE_PAST, "strong", "weak", "", GrammarValidator.HEAR_LENIENT, SpeechAttemptClassifier.Outcome.UNCERTAIN, "empty transcript"],
+		[GrammarValidator.CLAUSE_PAST, "strong", "weak", "blue", GrammarValidator.HEAR_LENIENT, SpeechAttemptClassifier.Outcome.UNCERTAIN, "bare colour is not effort"],
+		# The pair either side of this one is the point: an unrelated game word is not an
+		# attempt, but the target adjective and its own opposite are, even said bare. The
+		# commonest beginner under-answer is the adjective with the frame missing, and it has
+		# to reach the scaffold that models the frame for them.
+		[GrammarValidator.CLAUSE_PAST, "strong", "weak", "strong", GrammarValidator.HEAR_LENIENT, SpeechAttemptClassifier.Outcome.EFFORTFUL_WRONG, "bare target adjective is effort"],
+		[GrammarValidator.CLAUSE_PAST, "strong", "weak", "weak", GrammarValidator.HEAR_LENIENT, SpeechAttemptClassifier.Outcome.EFFORTFUL_WRONG, "bare paired opposite is effort"],
+		[GrammarValidator.CLAUSE_PAST, "strong", "weak", "smooth", GrammarValidator.HEAR_LENIENT, SpeechAttemptClassifier.Outcome.UNCERTAIN, "bare unpaired adjective is not effort"],
+		[GrammarValidator.CLAUSE_PAST, "cold", "hot", "it was gold", GrammarValidator.HEAR_LENIENT, SpeechAttemptClassifier.Outcome.PASS, "safe cold alias"],
 		# Mutation sentinel: without the protected-word guard, old fuzzily becomes cold.
-		[GrammarValidator.CLAUSE_PAST, "cold", "hot", "it was old", GrammarValidator.HEAR_LENIENT, false, "protected fuzzy collision"],
+		[GrammarValidator.CLAUSE_PAST, "cold", "hot", "it was old", GrammarValidator.HEAR_LENIENT, SpeechAttemptClassifier.Outcome.EFFORTFUL_WRONG, "protected fuzzy collision"],
+		# Mutation sentinel: optional it must never fuzzily become required is.
+		[GrammarValidator.CLAUSE_PAST, "strong", "weak", "it is strong", GrammarValidator.HEAR_LENIENT, SpeechAttemptClassifier.Outcome.EFFORTFUL_WRONG, "wrong-tense grammar token"],
+		[GrammarValidator.CLAUSE_PRESENT, "weak", "strong", "is strong", GrammarValidator.HEAR_NORMAL, SpeechAttemptClassifier.Outcome.PASS, "optional now omitted"],
+		[GrammarValidator.CLAUSE_PRESENT, "weak", "strong", "now it strong", GrammarValidator.HEAR_LENIENT, SpeechAttemptClassifier.Outcome.EFFORTFUL_WRONG, "present missing is"],
+		[GrammarValidator.CLAUSE_BOTH, "strong", "weak", "was strong is weak", GrammarValidator.HEAR_EXACT, SpeechAttemptClassifier.Outcome.PASS, "both frames without optional words"],
+		[GrammarValidator.CLAUSE_BOTH, "strong", "weak", "is weak was strong", GrammarValidator.HEAR_LENIENT, SpeechAttemptClassifier.Outcome.EFFORTFUL_WRONG, "both clauses reversed"],
 	]
-	for tolerance in [GrammarValidator.HEAR_LENIENT, GrammarValidator.HEAR_NORMAL,
-			GrammarValidator.HEAR_EXACT]:
-		cases.append([GrammarValidator.CLAUSE_PAST, "strong", "weak", "it was weak", tolerance, false, "opposite strength"])
-		cases.append([GrammarValidator.CLAUSE_PAST, "long", "short", "it was short", tolerance, false, "opposite length"])
-		cases.append([GrammarValidator.CLAUSE_PAST, "strong", "weak", "strong", tolerance, false, "bare adjective"])
-		cases.append([GrammarValidator.CLAUSE_PAST, "strong", "weak", "it strong", tolerance, false, "missing was"])
-		cases.append([GrammarValidator.CLAUSE_PAST, "strong", "weak", "", tolerance, false, "empty transcript"])
+	# The pronunciation dial still means exact / alias / conservative fuzzy, while every
+	# setting keeps the grammar frame mandatory.
+	cases.append([GrammarValidator.CLAUSE_PAST, "strong", "weak", "it was strang", GrammarValidator.HEAR_NORMAL, SpeechAttemptClassifier.Outcome.PASS, "alias at standard tolerance"])
+	cases.append([GrammarValidator.CLAUSE_PAST, "strong", "weak", "it was strang", GrammarValidator.HEAR_EXACT, SpeechAttemptClassifier.Outcome.EFFORTFUL_WRONG, "alias rejected at strict tolerance"])
+	cases.append([GrammarValidator.CLAUSE_PAST, "strong", "weak", "it was stronk", GrammarValidator.HEAR_NORMAL, SpeechAttemptClassifier.Outcome.EFFORTFUL_WRONG, "fuzzy adjective rejected at standard tolerance"])
 	return cases
 
 
 static func _run_speech_fixtures(failures: Array[String]) -> void:
 	for case in _speech_cases():
-		var result := GrammarValidator.validate(str(case[3]), str(case[1]), str(case[2]),
-			int(case[4]), int(case[0]))
-		_check(failures, bool(result["ok"]) == bool(case[5]),
-			"speech: %s - '%s' gave ok=%s reason=%s" % [case[6], case[3],
-			result["ok"], result["reason"]])
-	var alternatives := PackedStringArray(["banana", "it strong", "it was weak", "it was strong"])
-	var outcome := GrammarValidator.validate_alternatives(alternatives, "strong", "weak",
-		GrammarValidator.HEAR_LENIENT, GrammarValidator.CLAUSE_PAST)
-	_check(failures, bool(outcome["ok"]) and int(outcome["selected_index"]) == 3,
-		"speech: passing alternative at index 3 was not selected (%s)" % outcome)
+		var result := SpeechAttemptClassifier.classify(PackedStringArray([str(case[3])]),
+			str(case[1]), str(case[2]), int(case[4]), int(case[0]))
+		_check(failures, int(result["outcome"]) == int(case[5]),
+			"speech: %s - '%s' gave %s, expected %s" % [case[6], case[3],
+			SpeechAttemptClassifier.outcome_name(int(result["outcome"])),
+			SpeechAttemptClassifier.outcome_name(int(case[5]))])
+
+	var alternative_cases := [
+		[PackedStringArray(["thank you", "it was strong"]), SpeechAttemptClassifier.Outcome.PASS, "passing alternative"],
+		[PackedStringArray(["hmm", "thank you", "yes please"]), SpeechAttemptClassifier.Outcome.UNCERTAIN, "all unrelated"],
+		[PackedStringArray(["thank you", "it was weak"]), SpeechAttemptClassifier.Outcome.EFFORTFUL_WRONG, "one relevant wrong"],
+	]
+	for case in alternative_cases:
+		var outcome := SpeechAttemptClassifier.classify(PackedStringArray(case[0]), "strong", "weak",
+			GrammarValidator.HEAR_LENIENT, GrammarValidator.CLAUSE_PAST)
+		_check(failures, int(outcome["outcome"]) == int(case[1]),
+			"speech alternatives: %s gave %s" % [case[2],
+			SpeechAttemptClassifier.outcome_name(int(outcome["outcome"]))])
+	_check(failures, SpeechAttemptClassifier.is_strong_pass(
+		PackedStringArray(["it was strang"]), "strong", "weak",
+		GrammarValidator.HEAR_LENIENT, GrammarValidator.CLAUSE_PAST),
+		"speech interim: safe alias was not a strong pass")
+	_check(failures, not SpeechAttemptClassifier.is_strong_pass(
+		PackedStringArray(["it was stronk"]), "strong", "weak",
+		GrammarValidator.HEAR_LENIENT, GrammarValidator.CLAUSE_PAST),
+		"speech interim: fuzzy adjective incorrectly caused early pass")
 	_check(failures, TextNormalizer.protected_alias_violations().is_empty(),
 		"speech: alias table maps between protected words: %s" % TextNormalizer.protected_alias_violations())
+	_run_session_lifecycle_fixtures(failures)
+
+
+static func _run_session_lifecycle_fixtures(failures: Array[String]) -> void:
+	var service := SpeechService.new()
+	var injected := SpeechBackend.new()
+	service.install_backend_for_test(injected)
+	service.configure_attempt("strong", "weak", GrammarValidator.HEAR_LENIENT,
+		GrammarValidator.CLAUSE_PAST)
+	var results: Array[Dictionary] = []
+	service.attempt_completed.connect(func(result: Dictionary) -> void: results.append(result))
+
+	# A cancelled recogniser can still have a final queued in the browser event loop.
+	var cancelled_id := service.start()
+	service.cancel()
+	var current_id := service.start()
+	injected.final.emit(cancelled_id, PackedStringArray(["it was strong"]),
+		PackedFloat32Array([-1.0]))
+	_check(failures, results.is_empty(),
+		"session: late final from cancelled session completed the new attempt")
+	_check(failures, current_id > cancelled_id,
+		"session: IDs were not monotonically increasing")
+	service.cancel()
+
+	# A strong interim owns the one result slot; Chrome's later final is diagnostic only.
+	var interim_id := service.start()
+	injected.browser_started.emit(interim_id)
+	injected.interim.emit(interim_id, PackedStringArray(["it was strong"]),
+		PackedFloat32Array([-1.0]))
+	var after_interim := results.size()
+	injected.final.emit(interim_id, PackedStringArray(["it was strong"]),
+		PackedFloat32Array([-1.0]))
+	_check(failures, after_interim == 1 and results.size() == after_interim
+		and int(results[0]["outcome"]) == SpeechAttemptClassifier.Outcome.PASS,
+		"session: final completed a session already accepted on interim")
+	injected.browser_ended.emit(interim_id)
+
+	# onend without any usable result must make one neutral result, never return silently.
+	results.clear()
+	var empty_id := service.start()
+	injected.browser_started.emit(empty_id)
+	injected.browser_ended.emit(empty_id)
+	injected.browser_ended.emit(empty_id)
+	_check(failures, results.size() == 1
+		and int(results[0]["outcome"]) == SpeechAttemptClassifier.Outcome.UNCERTAIN,
+		"session: end-without-result did not produce exactly one UNCERTAIN")
+	service.free()
 
 
 static func _speechtest(main: Node) -> void:
@@ -2709,43 +2791,38 @@ static func _speechtest(main: Node) -> void:
 
 ## The retry ladder, driven through the real scene instead of asserted against constants.
 ##
-## Checked here rather than by reading AUTO_PASS_ATTEMPTS because the interesting question
+## Checked through the real scene because the interesting question
 ## is not what the number is, it is which utterances move the counter. A child gets a free
 ## pass on the third try, so anything that can be miscounted as a try - a cough, a burst of
 ## the next table's conversation, a microphone that returned nothing - is a way for the
 ## game to hand out the answer to a child who never spoke. That is the failure this guards.
 ##
-## Typed submissions are used as the transcripts. They enter through the same
-## SpeechService transcript path the microphone does, so the ladder under test is the real
-## one, and unlike a microphone they say the same thing every run.
+## Typed submissions enter the same classifier and attempt controller as microphone finals,
+## so the ladder under test is real while the inputs stay deterministic.
 static func _scaffoldtest(main: Node) -> void:
 	var tree := main.get_tree()
 	var failures: Array[String] = []
 
 	# 1: heard correctly the first time. The scaffold must stay out of the way.
 	await _scaffold_case(tree, failures, "1 normal success",
-		["it was hard"], true, false)
+		["it was hard"], true, false, 0)
 	# 2: wrong, then right. Succeeding on the second try is an ordinary success, not an
 	# assisted one - the child said it.
 	await _scaffold_case(tree, failures, "2 second try succeeds",
-		["it was soft", "it was hard"], true, false)
+		["it was soft", "it was hard"], true, false, 0)
 	# 3: three real tries, none of them correct. The third is taken.
 	await _scaffold_case(tree, failures, "3 third effort accepted",
-		["it was soft", "it was smooth", "it was rough"], true, true)
-	# 4: silence in the middle. Two real failures either side of it are still two.
-	await _scaffold_case(tree, failures, "4 silence is not a try",
-		["it was soft", "", "it was smooth"], false, false)
-	# 5: nothing but empty transcripts. A dead microphone must never reach the pass.
-	await _scaffold_case(tree, failures, "5 recogniser trouble never passes",
-		["", "", "", "", ""], false, false)
-	# 6: the same wrong adjective three times. Wrong is not the same as absent: the child
-	# is answering, and after two corrections the third answer is accepted.
-	await _scaffold_case(tree, failures, "6 wrong adjective on third effort",
-		["it was soft", "it was soft", "it was soft"], true, true)
-	# 7: a single stray word. One token carrying neither frame nor adjective is noise, and
-	# three of them are three pieces of noise, not three attempts.
-	await _scaffold_case(tree, failures, "7 lone noise token is not a try",
-		["hmm", "the", "yeah"], false, false)
+		["it was soft", "it was smooth", "it was rough"], true, true, 0)
+	# 4: uncertainty in the middle. Two effortful failures either side are still two.
+	await _scaffold_case(tree, failures, "4 uncertainty is not a try",
+		["it was soft", "thank you", "it was smooth"], false, false, 2)
+	# 5: unrelated classroom speech can repeat forever without buying an assisted pass.
+	await _scaffold_case(tree, failures, "5 unrelated speech never passes",
+		["thank you", "yes please", "teacher teacher", "hmm"], false, false, 0)
+	# 6: technical microphone failures are a fourth result and never touch the ladder.
+	await _scaffold_case(tree, failures, "6 microphone errors never pass",
+		["@technical", "@technical", "@technical", "@technical"], false, false, 0)
+	await _scaffold_reset_case(tree, failures)
 
 	if failures.is_empty():
 		print("[scaffoldtest] PASS")
@@ -2762,7 +2839,8 @@ static func _scaffoldtest(main: Node) -> void:
 ## recorded as helped - the flag the end-of-round report shows the teacher, and the only
 ## externally visible difference between "said it" and "was given it".
 static func _scaffold_case(tree: SceneTree, failures: Array[String], label: String,
-		said: Array, expect_filled: bool, expect_assisted: bool) -> void:
+		said: Array, expect_filled: bool, expect_assisted: bool,
+		expected_failures: int) -> void:
 	_goto("lab")
 	await tree.create_timer(1.4).timeout
 	var word_lab := _find_word_lab(Router.current_scene)
@@ -2772,7 +2850,13 @@ static func _scaffold_case(tree: SceneTree, failures: Array[String], label: Stri
 	word_lab.pair_selected.emit("HARDNESS", "hard", "soft")
 	await tree.create_timer(0.7).timeout
 	for text in said:
-		Speech.submit_typed(str(text))
+		if str(text) == "@technical":
+			var result := SpeechAttemptClassifier.technical_error("network")
+			result["session_id"] = 0
+			result["source"] = "test"
+			Speech.attempt_completed.emit(result)
+		else:
+			Speech.submit_typed(str(text))
 		# Long enough for a failure to finish modelling the sentence and re-enable input.
 		# A success takes longer, but nothing is submitted after one.
 		await tree.create_timer(0.8).timeout
@@ -2787,10 +2871,45 @@ static func _scaffold_case(tree: SceneTree, failures: Array[String], label: Stri
 		_check(failures, bool(entry["assisted"]) == expect_assisted,
 			"%s: recorded assisted=%s, expected %s"
 			% [label, entry["assisted"], expect_assisted])
-		# Case 7 of the spec: the count cannot bleed into whatever is asked next.
-		var attempts := int(Router.current_scene.get("_attempts"))
-		_check(failures, attempts == 0,
-			"%s: attempt counter left at %d after the sentence closed" % [label, attempts])
+	var attempts := int(Router.current_scene.get("_effortful_failures"))
+	_check(failures, attempts == expected_failures,
+		"%s: effortful counter was %d, expected %d" % [label, attempts, expected_failures])
+	if not filled:
+		# Keep the next case independent even though every case remains in the same global
+		# ANIMAL_SELECTION phase and therefore does not force a scene reload.
+		Router.current_scene._cancel_pending()
+		await tree.create_timer(0.2).timeout
+
+
+static func _scaffold_reset_case(tree: SceneTree, failures: Array[String]) -> void:
+	_goto("lab")
+	await tree.create_timer(1.4).timeout
+	var scene := Router.current_scene
+	var word_lab := _find_word_lab(scene)
+	if word_lab == null:
+		failures.append("7 target reset: no Word Lab")
+		return
+	word_lab.pair_selected.emit("HARDNESS", "hard", "soft")
+	await tree.create_timer(0.7).timeout
+	Speech.submit_typed("it was soft")
+	await tree.create_timer(0.8).timeout
+	_check(failures, int(scene.get("_effortful_failures")) == 1,
+		"7 target reset: first target did not count its effortful failure")
+	scene._cancel_pending()
+	await tree.create_timer(0.2).timeout
+	word_lab.pair_selected.emit("LENGTH", "long", "short")
+	await tree.create_timer(0.3).timeout
+	_check(failures, int(scene.get("_effortful_failures")) == 0,
+		"7 target reset: a new sentence inherited the previous target's failures")
+
+	# The present pass is a new clause even when it belongs to the same sentence entry.
+	scene._cancel_pending()
+	Game.record_sentence("HARDNESS", "hard", "soft")
+	scene.set("_effortful_failures", 2)
+	scene._enter_present()
+	await tree.create_timer(0.2).timeout
+	_check(failures, int(scene.get("_effortful_failures")) == 0,
+		"7 clause reset: present clause inherited past-clause failures")
 
 
 static func _check(failures: Array[String], condition: bool, message: String) -> void:

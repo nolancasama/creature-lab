@@ -17,6 +17,7 @@ const CONFIRM_TURN_MIN := 0.10
 const CONFIRM_TURN_MAX := 0.38 ## Formerly as long as 0.9s while the reaction had begun.
 const DRAG_TURN_SPEED := 0.012
 const UI_EXIT_TIME := 0.72
+const ASSIST_AFTER_EFFORTFUL_FAILURES := 3
 
 const PLATFORM_POS := Vector3(-0.5, 0.0, 0.6)
 
@@ -104,7 +105,7 @@ var _console: Control = null
 var _colour_preview := "" ## Temporary live Before colour; never written to CreatureState.
 
 var _pending := {}
-var _attempts := 0
+var _effortful_failures := 0
 var _busy := false
 var _dragging_view := false
 var _colour_speech_stage := ColourSpeechStage.NONE
@@ -133,7 +134,7 @@ func _ready() -> void:
 	if Game.current == null and not ids.is_empty():
 		_preview(ids[0])
 
-	Speech.heard.connect(_on_heard)
+	Speech.attempt_completed.connect(_on_attempt_completed)
 	Game.debug_action.connect(_on_debug_action)
 
 	# Re-entering with a creature already begun - a debug jump, or returning from
@@ -143,7 +144,7 @@ func _ready() -> void:
 
 
 func _exit_tree() -> void:
-	Speech.stop()
+	Speech.clear_attempt()
 	Audio.stop_animal_call()
 
 
@@ -669,7 +670,7 @@ func _turn_selected_right() -> float:
 ## button previously left the Word Lab on screen with Game.current already null, every
 ## adjective button silently dead against its own null guard.
 func _enter_picking() -> void:
-	Speech.stop()
+	Speech.clear_attempt()
 	_mode = Mode.PICKING
 	_confirming_selection = false
 	if _facing_tween != null and _facing_tween.is_valid():
@@ -679,7 +680,7 @@ func _enter_picking() -> void:
 	_dragging_view = false
 	_colour_preview = ""
 	_pending = {}
-	_attempts = 0
+	_effortful_failures = 0
 	_busy = false
 	_colour_speech_stage = ColourSpeechStage.NONE
 	_choosing_now_colour = false
@@ -718,7 +719,7 @@ func _enter_present() -> void:
 	_mode = Mode.PRESENT
 	_dragging_view = false
 	_present_index = 0
-	_attempts = 0
+	_effortful_failures = 0
 	_busy = false
 	_pending = {}
 	_colour_speech_stage = ColourSpeechStage.NONE
@@ -773,8 +774,8 @@ func _present_step() -> void:
 		"before": str(entry["before"]),
 		"after": str(entry["after"]),
 	}
-	_attempts = 0
-	_speech.show_target(str(entry["before"]), str(entry["after"]),
+	_effortful_failures = 0
+	_show_speech_target(str(entry["before"]), str(entry["after"]),
 		GrammarValidator.CLAUSE_PRESENT, 4 + _present_index)
 
 
@@ -1015,7 +1016,7 @@ func _on_pair_selected(category: String, before: String, after: String) -> void:
 		return
 	_colour_preview = ""
 	_pending = {"category": category, "before": before, "after": after}
-	_attempts = 0
+	_effortful_failures = 0
 	# A colour's past clause was already accepted before the Now wheel appeared. Full
 	# sentence mode still needs the present clause here; the split/past modes either gather
 	# it in their normal later pass or intentionally ask for past only.
@@ -1033,7 +1034,7 @@ func _on_pair_selected(category: String, before: String, after: String) -> void:
 		_punch()
 	_word_lab.set_locked(true)
 	_word_lab.visible = false
-	_speech.show_target(before, after, _clause(),
+	_show_speech_target(before, after, _clause(),
 		1 + (Game.current.slots_filled() if Game.current != null else 0))
 
 
@@ -1048,10 +1049,10 @@ func _on_before_colour_selected(word: String) -> void:
 	_colour_past_accepted = false
 	_colour_past_assisted = false
 	_pending = {"category": Content.COLOR_CATEGORY, "before": word, "after": ""}
-	_attempts = 0
+	_effortful_failures = 0
 	_word_lab.set_locked(true)
 	_word_lab.visible = false
-	_speech.show_target(word, "", GrammarValidator.CLAUSE_PAST,
+	_show_speech_target(word, "", GrammarValidator.CLAUSE_PAST,
 		1 + (Game.current.slots_filled() if Game.current != null else 0))
 
 
@@ -1086,10 +1087,11 @@ func _cancel_pending() -> void:
 		return
 	var cancelled_stage := _colour_speech_stage
 	_pending = {}
-	_attempts = 0
+	_effortful_failures = 0
 	_colour_speech_stage = ColourSpeechStage.NONE
 	_word_lab.set_locked(false)
 	_word_lab.visible = true
+	Speech.clear_attempt()
 	_speech.show_idle()
 	if cancelled_stage == ColourSpeechStage.PRESENT:
 		# The past answer is still valid; return to Now so only the present colour is changed.
@@ -1101,66 +1103,56 @@ func _cancel_pending() -> void:
 	_apply_traits(true)
 
 
-func _on_heard(alternatives: PackedStringArray, confidences: PackedFloat32Array,
-		is_final: bool) -> void:
+func _show_speech_target(before: String, after: String, clause: int,
+		completed_steps: int) -> void:
+	Speech.configure_attempt(before, after, Settings.strictness, clause)
+	_speech.show_target(before, after, clause, completed_steps)
+
+
+func _on_attempt_completed(result: Dictionary) -> void:
 	var speaking := _mode == Mode.RECORDING or _mode == Mode.PRESENT
-	if not speaking or not is_final or _busy or _pending.is_empty() or not _speech.is_armed():
-		# Five separate reasons a heard sentence goes nowhere, and from outside they all look
-		# identical: nothing happens. Typed answers reach _evaluate() through the same guard,
-		# so whichever of these is false for speech and true for typing is the difference.
-		Diagnostics.note("[speech]", "dropped: mode=%s final=%s busy=%s pending=%s armed=%s"
-			% [Mode.keys()[_mode], is_final, _busy, not _pending.is_empty(),
+	if not speaking or _busy or _pending.is_empty() or not _speech.is_armed():
+		Diagnostics.note("[speech]", "result dropped: mode=%s busy=%s pending=%s armed=%s"
+			% [Mode.keys()[_mode], _busy, not _pending.is_empty(),
 			_speech.is_armed()])
 		return
-	_evaluate(alternatives, confidences)
+	_evaluate(result)
 
 
-## Every alternative the recogniser offered gets a chance; the first that passes wins,
-## otherwise the best-diagnosed failure is what the student is shown.
-func _evaluate(alternatives: PackedStringArray, confidences := PackedFloat32Array()) -> void:
+## The controller owns only the pedagogical consequence of a classified attempt.
+func _evaluate(result: Dictionary) -> void:
 	var before := str(_pending["before"])
 	var after := str(_pending["after"])
 	var expected := GrammarValidator.expected_sentence(before, after)
-	var adjective := "%s -> %s" % [before, after]
 	if _clause() == GrammarValidator.CLAUSE_PAST:
 		expected = GrammarValidator.expected_past(before)
-		adjective = before
 	elif _clause() == GrammarValidator.CLAUSE_PRESENT:
 		expected = GrammarValidator.expected_present(after)
-		adjective = after
-	var tolerance: String = ["lenient", "standard", "strict"][clampi(Settings.strictness, 0, 2)]
-	Diagnostics.note("[speech]", "expected='%s' adjective='%s' tolerance=%s bias=%s"
-		% [expected, adjective, tolerance, Speech.biasing_status()])
-	var outcome := GrammarValidator.validate_alternatives(
-		alternatives, before, after, Settings.strictness, _clause())
-	var candidates: Array = outcome["candidates"]
-	for index in candidates.size():
-		var candidate: Dictionary = candidates[index]
-		var result: Dictionary = candidate["result"]
-		var confidence := "n/a"
-		if index < confidences.size() and confidences[index] >= 0.0:
-			confidence = "%.3f" % confidences[index]
-		Diagnostics.note("[speech]", "alt[%d] conf=%s raw='%s' normalized='%s' %s reason=%s evidence=%s"
-			% [index, confidence, candidate["transcript"], result["normalized"],
-			"PASS" if result["ok"] else "FAIL", result["reason"], result["match_evidence"]])
-	Diagnostics.note("[speech]", "selected=%d '%s' outcome=%s reason=%s"
-		% [outcome["selected_index"], outcome["selected_transcript"],
-		"PASS" if outcome["ok"] else ("UNCERTAIN" if outcome["uncertain"] else "WRONG"),
-		outcome["result"]["reason"]])
-	if bool(outcome["ok"]):
-		Diagnostics.note("[speech]", "success_type=normal attempts=%d" % _attempts)
-		_accept(false)
-		return
-	if bool(outcome["uncertain"]):
-		_speech.show_uncertain()
-		return
-	_attempts += 1
-	if _attempts >= SpeechPanel.AUTO_PASS_ATTEMPTS:
-		Diagnostics.note("[speech]", "success_type=assisted_third_attempt attempts=%d"
-			% _attempts)
-		_accept(true)
-		return
-	_speech.show_failure(outcome["result"], _attempts)
+	var outcome := int(result.get("outcome", SpeechAttemptClassifier.Outcome.UNCERTAIN))
+	var session_id := int(result.get("session_id", 0))
+	match outcome:
+		SpeechAttemptClassifier.Outcome.PASS:
+			Diagnostics.note("[speech]", "success_type=normal attempt_count=%d expected='%s'"
+				% [_effortful_failures, expected])
+			_accept(false)
+		SpeechAttemptClassifier.Outcome.EFFORTFUL_WRONG:
+			_effortful_failures += 1
+			Diagnostics.note("[speech]", "session=%d attempt_count=%d" % [
+				session_id, _effortful_failures])
+			if _effortful_failures >= ASSIST_AFTER_EFFORTFUL_FAILURES:
+				Diagnostics.note("[speech]", "success_type=assisted_third_attempt attempt_count=%d"
+					% _effortful_failures)
+				_accept(true)
+			else:
+				Voice.discard_session(session_id)
+				_speech.show_failure(str(result.get("normalized", "")),
+					_effortful_failures == 2)
+		SpeechAttemptClassifier.Outcome.TECHNICAL_ERROR:
+			Voice.discard_session(session_id)
+			_speech.show_technical_error(str(result.get("error_reason", "unknown")))
+		_:
+			Voice.discard_session(session_id)
+			_speech.show_uncertain()
 
 
 ## Take the sentence, whether it was heard correctly or granted by the scaffold.
@@ -1171,7 +1163,7 @@ func _accept(assisted: bool) -> void:
 	# Closed here rather than left to whatever asks the next question. Every later entry
 	# point does clear it, but "the sentence is over" is the reason it clears, and putting
 	# it anywhere else means a new path into the panel inherits the last child's failures.
-	_attempts = 0
+	_effortful_failures = 0
 	if _mode == Mode.PRESENT:
 		_present_advance()
 	else:
@@ -1270,7 +1262,7 @@ func _begin_pre_transformation() -> void:
 	_mode = Mode.PRE_TRANSFORMATION
 	_busy = true
 	_dragging_view = false
-	Speech.stop()
+	Speech.clear_attempt()
 	Audio.play("whoosh", 0.82)
 	var blocker := Control.new()
 	blocker.name = "PreTransformationInputBlocker"

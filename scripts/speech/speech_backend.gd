@@ -1,16 +1,14 @@
 class_name SpeechBackend
 extends RefCounted
-## Interface every recognition source implements. Gameplay only ever sees this shape,
-## so swapping typed input for Web Speech - or for a Whisper GDExtension later - touches
-## nothing above SpeechService.
+## Browser-recognition interface. Every callback carries the session that created the
+## recogniser, so an old JavaScript object can never answer a new classroom prompt.
 
-## Recognisers return ranked alternatives; all of them are forwarded so a young learner's
-## accent gets more than one chance at a match.
-signal transcript(alternatives: PackedStringArray, confidences: PackedFloat32Array, is_final: bool)
-signal listening_changed(is_listening: bool)
-signal failed(reason: String)
-
-var listening := false
+signal browser_started(session_id: int)
+signal interim(session_id: int, alternatives: PackedStringArray, confidences: PackedFloat32Array)
+signal final(session_id: int, alternatives: PackedStringArray, confidences: PackedFloat32Array)
+signal error(session_id: int, reason: String)
+signal no_match(session_id: int)
+signal browser_ended(session_id: int)
 
 
 func backend_id() -> String:
@@ -26,25 +24,15 @@ func is_supported() -> bool:
 	return false
 
 
-func start() -> void:
+func start(_session_id: int) -> void:
 	pass
 
 
-func stop() -> void:
+func stop(_session_id: int) -> void:
 	pass
 
 
-## Optional recogniser hints. Backends that do not support contextual biasing ignore them.
-func set_context(_phrases: PackedStringArray) -> void:
-	pass
-
-
-func biasing_status() -> Dictionary:
-	return {"available": false, "applied": false}
-
-
-## Typed backends receive text from the UI; microphone backends ignore this.
-func submit(_text: String) -> void:
+func abort(_session_id: int) -> void:
 	pass
 
 

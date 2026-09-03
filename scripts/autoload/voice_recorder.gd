@@ -35,6 +35,7 @@ const PRESENT_SLOT := 100
 
 var _supported := false
 var _armed := false
+var _capture_session_id := -1
 ## Every slot filed this round, recorded whether or not a browser is present.
 ##
 ## The recorder itself only exists in the web build, so nothing about it can be observed by
@@ -50,7 +51,8 @@ func _ready() -> void:
 	_install()
 	_supported = bool(JavaScriptBridge.eval("%s.supported()" % BRIDGE, true))
 	if _supported:
-		Speech.listening_changed.connect(_on_listening_changed)
+		Speech.session_capture_started.connect(_on_capture_started)
+		Speech.session_capture_finished.connect(_on_capture_finished)
 
 
 ## Defined once on the page. Kept as one object on window so repeated evals are cheap and
@@ -58,7 +60,7 @@ func _ready() -> void:
 func _install() -> void:
 	JavaScriptBridge.eval("""
 	if (!window.__creatureVoice) window.__creatureVoice = (function () {
-	  var stream = null, rec = null, chunks = [], mime = '', t0 = 0;
+	  var stream = null, rec = null, captureSerial = 0;
 	  var pending = null, pendingSlot = -1, lastLen = 0;
 	  var clips = {}, urls = {}, lens = {}, playing = null;
 	  var PREFERRED = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'];
@@ -75,32 +77,42 @@ func _install() -> void:
 	    clips[slot] = blob; urls[slot] = URL.createObjectURL(blob); lens[slot] = len;
 	  }
 	  function begin() {
-	    chunks = []; mime = pickMime();
-	    try { rec = new MediaRecorder(stream, mime ? { mimeType: mime } : {}); } catch (e) { return; }
-	    rec.ondataavailable = function (e) { if (e.data && e.data.size > 0) chunks.push(e.data); };
-	    rec.onstop = function () {
-	      pending = new Blob(chunks, { type: mime || 'audio/webm' });
-	      lastLen = (Date.now() - t0) / 1000;
+	    var segmentChunks = [], segmentMime = pickMime(), segment = null;
+	    try { segment = new MediaRecorder(stream, segmentMime ? { mimeType: segmentMime } : {}); } catch (e) { return; }
+	    rec = segment;
+	    var segmentT0 = Date.now();
+	    segment.ondataavailable = function (e) { if (e.data && e.data.size > 0) segmentChunks.push(e.data); };
+	    segment.onstop = function () {
+	      if (segment.__discard) { pending = null; pendingSlot = -1; return; }
+	      pending = new Blob(segmentChunks, { type: segmentMime || 'audio/webm' });
+	      lastLen = (Date.now() - segmentT0) / 1000;
 	      // The slot is only known once the sentence is accepted, which can land either
 	      // side of this event, so whichever arrives second does the filing.
 	      if (pendingSlot >= 0) { assign(pendingSlot, pending, lastLen); pending = null; pendingSlot = -1; }
 	    };
-	    t0 = Date.now();
-	    try { rec.start(); } catch (e) {}
+	    try { segment.start(); } catch (e) {}
 	  }
 	  return {
 	    supported: function () {
 	      return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
 	    },
 	    start: function () {
+	      var serial = ++captureSerial;
 	      pending = null; pendingSlot = -1;
 	      if (stream) { begin(); return; }
 	      // Opened on the tap that starts listening, which is a real user gesture - the
 	      // only moment a browser will grant this without a fight.
 	      navigator.mediaDevices.getUserMedia({ audio: true, video: false })
-	        .then(function (s) { stream = s; begin(); }).catch(function () {});
+	        .then(function (s) { stream = s; if (serial === captureSerial) begin(); }).catch(function () {});
 	    },
-	    stop: function () { if (rec && rec.state !== 'inactive') { try { rec.stop(); } catch (e) {} } },
+	    stop: function () {
+	      captureSerial++;
+	      if (rec && rec.state !== 'inactive') { try { rec.stop(); } catch (e) {} }
+	    },
+	    discard: function () {
+	      pending = null; pendingSlot = -1;
+	      if (rec) rec.__discard = true;
+	    },
 	    keep: function (slot) {
 	      // Which branch this takes is the answer to "was the present half captured?":
 	      // "now" means a finished take was waiting, "on stop" means the sentence was
@@ -167,18 +179,34 @@ func available() -> bool:
 
 # --- Capture -----------------------------------------------------------------
 
-func _on_listening_changed(is_listening: bool) -> void:
-	if is_listening:
-		_armed = true
-		JavaScriptBridge.eval("%s.start()" % BRIDGE, true)
-		# Reported because the whole question of "was this half recorded?" starts here: a
-		# pass that never arms can never file a take, and nothing outside the browser can
-		# see whether it armed.
-		report("armed")
-	elif _armed:
-		_armed = false
-		JavaScriptBridge.eval("%s.stop()" % BRIDGE, true)
-		report("stopped")
+func _on_capture_started(session_id: int) -> void:
+	_capture_session_id = session_id
+	_armed = true
+	JavaScriptBridge.eval("%s.start()" % BRIDGE, true)
+	# Capture begins on the tap, not on recognition's later onstart. The two browser APIs
+	# remain independent, but the kept take still includes the child's first word.
+	report("armed session=%d" % session_id)
+
+
+func _on_capture_finished(session_id: int, tail_seconds: float, discard: bool) -> void:
+	if not _armed or session_id != _capture_session_id:
+		return
+	if discard:
+		JavaScriptBridge.eval("%s.discard()" % BRIDGE, true)
+	if tail_seconds > 0.0:
+		await get_tree().create_timer(tail_seconds).timeout
+		# A delayed tail from an accepted interim must never stop a newer recording.
+		if not _armed or session_id != _capture_session_id:
+			return
+	_armed = false
+	JavaScriptBridge.eval("%s.stop()" % BRIDGE, true)
+	report("stopped session=%d" % session_id)
+
+
+func discard_session(session_id: int) -> void:
+	if not _supported or session_id != _capture_session_id:
+		return
+	JavaScriptBridge.eval("%s.discard()" % BRIDGE, true)
 
 
 ## Called when a sentence is accepted, so the take that is kept is the one that passed

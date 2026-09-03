@@ -69,20 +69,21 @@ Game (FSM + the one CreatureState)  ──phase_changed──▶  Router (swaps 
 LabController ◀── pair_selected ── WordLab              CreatureLab / Zoo / …
        │
        ├─▶ CreatureState ─▶ CreatureFactory ─▶ CreatureRig (assembled from data)
-       └─▶ Speech ─▶ SpeechBackend ─▶ GrammarValidator
+       └─▶ SpeechSession ─▶ SpeechAttemptClassifier ─▶ attempt controller
 ```
 
 `Game` owns *what is true*; `Router` owns *which scene shows it*; they only talk through a
 signal, so no scene reaches into another. The Word Lab never touches the animal — it
 reports a choice, `LabController` decides what that means, `CreatureState` records it, and
-the rig is rebuilt from that state. Speech never touches grammar: recognition,
-normalisation and validation are three separable stages.
+the rig is rebuilt from that state. Browser recognition, session lifecycle, attempt
+classification and scaffold counting are separate stages; typed input joins at
+classification without entering microphone state.
 
 ```
 content/            traits, colours, animals, fantasy parts (JSON)
 scripts/autoload/   Content, Settings, SaveService, Game, Router, Audio, Tts, Speech
 scripts/data/       typed Resource classes + CreatureState
-scripts/speech/     backends, normaliser, validator
+scripts/speech/     browser bridge, session state, normaliser, attempt classifier
 scripts/creature/   rig assembly, trait visuals, fantasy builder, namer, zoo AI
 scripts/scenes/     one controller per screen
 scripts/ui/         UiKit (2D theme), StageKit (3D staging), debug overlay

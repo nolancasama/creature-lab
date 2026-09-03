@@ -10,6 +10,7 @@ const CONTRACTIONS := {
 
 ## Recogniser aliases must never turn one real game answer into another.
 const HOMOPHONES := {
+	"wus": "was",
 	"blew": "blue", "bloo": "blue", "read": "red", "reed": "red", "grey": "gray",
 	"wight": "white", "wide": "white", "waite": "white", "block": "black", "blak": "black",
 	"gold": "cold", "called": "cold", "colt": "cold", "kold": "cold",
@@ -86,14 +87,15 @@ static func token_match(heard: String, expected: String, tolerance: int,
 		protected: Dictionary) -> Dictionary:
 	if heard == expected:
 		return {"ok": true, "quality": "exact", "near_fuzzy": false}
-	# Do not let the optional `it` become the required `is` through one-edit fuzziness.
-	if GRAMMAR_TOKENS.has(heard):
-		return {"ok": false, "quality": "grammar-conflict", "near_fuzzy": false}
+	if tolerance <= GrammarValidator.HEAR_NORMAL and str(HOMOPHONES.get(heard, "")) == expected:
+		return {"ok": true, "quality": "alias", "near_fuzzy": false}
 	# A clearly recognised game word is never reinterpreted as a different game word.
 	if protected.has(heard) and heard != expected:
 		return {"ok": false, "quality": "protected-conflict", "near_fuzzy": false}
-	if tolerance <= GrammarValidator.HEAR_NORMAL and str(HOMOPHONES.get(heard, "")) == expected:
-		return {"ok": true, "quality": "alias", "near_fuzzy": false}
+	# Do not let the optional `it` become the required `is` through one-edit fuzziness, or
+	# one grammar token become another and collapse the past/present distinction.
+	if GRAMMAR_TOKENS.has(heard) or GRAMMAR_TOKENS.has(expected):
+		return {"ok": false, "quality": "grammar-conflict", "near_fuzzy": false}
 	var distance := edit_distance(heard, expected)
 	var limit := 1 if expected.length() <= 4 else 2
 	if tolerance <= GrammarValidator.HEAR_LENIENT and distance <= limit:

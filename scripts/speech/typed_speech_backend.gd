@@ -19,18 +19,13 @@ func is_supported() -> bool:
 	return true
 
 
-func start() -> void:
-	listening = true
-	listening_changed.emit(true)
+func start(session_id: int) -> void:
+	browser_started.emit(session_id)
 
 
-func stop() -> void:
-	listening = false
-	listening_changed.emit(false)
+func stop(session_id: int) -> void:
+	browser_ended.emit(session_id)
 
 
-func submit(text: String) -> void:
-	if text.strip_edges().is_empty():
-		return
-	transcript.emit(PackedStringArray([text]), PackedFloat32Array([-1.0]), true)
-	stop()
+func abort(_session_id: int) -> void:
+	pass
