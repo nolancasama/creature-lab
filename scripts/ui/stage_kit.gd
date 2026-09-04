@@ -3,6 +3,15 @@ extends RefCounted
 ## Shared 3D staging: environment, lights, floors, cameras. Four scenes show creatures
 ## on a lit surface; only the mood differs, so the setup lives in one place.
 
+## Animal Selection hands off to the transformation chamber with the router's fade
+## skipped - request_seamless_next_swap() - specifically so the cut is invisible. That
+## only holds if the floor itself does not change: any radius or colour drift between
+## the two scenes' ground() calls becomes the one-frame pop the seamless swap exists to
+## avoid. Both call sites take the value from here rather than a literal so they cannot
+## drift apart again the way they had.
+const GROUND_RADIUS := 30.0
+const GROUND_COLOR := Color("#070b13")
+
 
 static func environment(sky_top: Color, sky_horizon: Color, ambient := 0.35) -> WorldEnvironment:
 	var sky_material := ProceduralSkyMaterial.new()

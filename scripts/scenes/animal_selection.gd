@@ -190,7 +190,10 @@ func _build_stage() -> void:
 	add_child(StageKit.environment(Color("#09111f"), Color("#152a45"), 0.5))
 	add_child(StageKit.key_light())
 	add_child(StageKit.fill_light(Color("#cfe6ff"), Vector3(-3.0, 3.2, 3.2), 1.1, 14.0))
-	add_child(StageKit.ground(9.0, Color("#080d16")))
+	# Radius and colour come from StageKit, not a literal: this ground has to be a pixel-for-
+	# pixel match for the transformation chamber's, since the seamless swap into it skips the
+	# router's fade and would show any mismatch as a one-frame pop.
+	add_child(StageKit.ground(StageKit.GROUND_RADIUS, StageKit.GROUND_COLOR))
 
 	_platform = StageKit.platform(1.8, Color("#22304a"), UiKit.ACCENT)
 	_platform.position = PLATFORM_POS

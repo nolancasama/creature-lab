@@ -34,7 +34,8 @@ func _ready() -> void:
 	add_child(StageKit.fill_light(UiKit.ACCENT, Vector3(-3.6, 4.2, 5.2), 2.4, 16.0))
 	add_child(StageKit.fill_light(UiKit.GOLD, Vector3(5.0, 2.4, 4.5), 1.8, 12.0))
 
-	var floor_disc := StageKit.ground(30.0, Color("#070b13"))
+	# Matches Animal Selection's ground exactly - see StageKit.GROUND_RADIUS.
+	var floor_disc := StageKit.ground(StageKit.GROUND_RADIUS, StageKit.GROUND_COLOR)
 	add_child(floor_disc)
 
 	# Pixel-for-pixel continuation of Animal Selection's Before platform. The room lighting

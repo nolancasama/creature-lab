@@ -1,5 +1,14 @@
 # Design decisions
 
+## Stage ground
+
+- `StageKit.GROUND_RADIUS` / `GROUND_COLOR` are shared constants, not per-scene literals.
+  Animal Selection hands off into the transformation chamber with the router's fade
+  skipped (`request_seamless_next_swap()`) specifically so the cut is invisible; a radius
+  or colour drift between the two scenes' `StageKit.ground()` calls (previously 9.0 vs
+  30.0) becomes the one-frame pop that swap exists to avoid. The camera and platform were
+  already hair-matched (`apply_before_view()`); the ground was the one thing that wasn't.
+
 ## Speech attempts
 
 - One microphone tap creates one monotonic `SpeechSession`. Browser callbacks carry its ID;
