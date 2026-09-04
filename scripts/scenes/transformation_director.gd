@@ -156,7 +156,10 @@ func run(state: CreatureState) -> void:
 		for i in entries.size():
 			if not _alive():
 				return
-			await _beat(i, entries.size(), str(entries[i]["sentence"]), entries[i], staged_traits)
+			var entry: Dictionary = entries[i]
+			var sentence := TargetLanguage.sentence(str(entry["category"]),
+				str(entry["before"]), str(entry["after"]))
+			await _beat(i, entries.size(), sentence, entry, staged_traits)
 
 	if not _alive():
 		return

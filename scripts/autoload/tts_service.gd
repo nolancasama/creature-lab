@@ -14,15 +14,24 @@ func _ready() -> void:
 
 
 func _pick_voice() -> void:
-	var voices: Array = DisplayServer.tts_get_voices_for_language("en")
-	if voices.is_empty():
-		voices = DisplayServer.tts_get_voices_for_language("en_US")
+	var voices: Array = []
+	for language in TargetLanguage.tts_voice_languages():
+		voices = DisplayServer.tts_get_voices_for_language(language)
+		if not voices.is_empty():
+			break
 	if voices.is_empty():
 		voices = DisplayServer.tts_get_voices()
 	if voices.is_empty():
 		return
 	_voice_id = str(voices[0])
 	_available = true
+
+
+func reconfigure_language() -> void:
+	stop()
+	_voice_id = ""
+	_available = false
+	_pick_voice()
 
 
 func available() -> bool:

@@ -51,6 +51,7 @@ var _cancel_label: Button = null
 
 var _before := ""
 var _after := ""
+var _category := ""
 var _armed := false
 var _checking := false
 var _checking_clock := 0.0
@@ -62,6 +63,7 @@ func _ready() -> void:
 	_build()
 	Speech.session_state_changed.connect(_on_session_state_changed)
 	Speech.backend_changed.connect(func(_id: String) -> void: _sync_input_mode())
+	Settings.changed.connect(_on_settings_changed)
 	show_idle()
 
 
@@ -126,7 +128,7 @@ func _build() -> void:
 	_input_shell.custom_minimum_size = Vector2(0, 64)
 	_input_shell.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	column.add_child(_input_shell)
-	_entry = UiKit.line_edit("英語の文を入力")
+	_entry = UiKit.line_edit(TargetLanguage.input_placeholder())
 	_entry.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_style_entry_for_embedded_submit()
 	_entry.text_submitted.connect(func(text: String) -> void: _submit_typed(text))
@@ -249,6 +251,7 @@ func show_idle(message := "") -> void:
 	_armed = false
 	_before = ""
 	_after = ""
+	_category = ""
 	visible = false
 	_sentence_label.text = "[center][color=#93a6bf]単語カードをえらぼう。[/color][/center]"
 	_feedback.text = message
@@ -260,9 +263,10 @@ func show_idle(message := "") -> void:
 
 
 func show_target(before: String, after: String, clause := GrammarValidator.CLAUSE_BOTH,
-		completed_steps := 0) -> void:
+		completed_steps := 0, category := "") -> void:
 	_before = before
 	_after = after
+	_category = category
 	_clause = clause
 	_set_completed_steps(completed_steps)
 	_armed = true
@@ -315,7 +319,10 @@ func _set_completed_steps(completed_steps: int) -> void:
 func show_failure(heard: String, model_sentence: bool) -> void:
 	# A result is on screen; the checking caption must not keep animating over it.
 	_checking = false
-	_feedback.text = "もう一度ためそう！" if heard.is_empty() \
+	# Japanese recognition forms may contain kanji the bundled display subset does not.
+	# They are evidence for matching, never student-facing copy.
+	var show_heard := not TargetLanguage.is_japanese() and not heard.is_empty()
+	_feedback.text = "もう一度ためそう！" if not show_heard \
 		else "もう一度ためそう。「%s」と聞こえました。" % heard
 	_feedback.visible = true
 	_feedback.add_theme_color_override("font_color", UiKit.GOLD if model_sentence else UiKit.BAD)
@@ -372,25 +379,25 @@ func is_armed() -> bool:
 func _target_sentence() -> String:
 	if _before.is_empty():
 		return ""
-	match _clause:
-		GrammarValidator.CLAUSE_PAST:
-			return CreatureState.past_sentence_for(_before)
-		GrammarValidator.CLAUSE_PRESENT:
-			return CreatureState.present_sentence_for(_after)
-	return CreatureState.sentence_for(_before, _after)
+	return TargetLanguage.sentence(_category, _before, _after, _clause)
 
 
 func _prompt_text() -> String:
 	if Settings.prompt_mode == Settings.PROMPT_HIDDEN:
 		return ""
 	if Settings.prompt_mode == Settings.PROMPT_GAPPED:
-		match _clause:
-			GrammarValidator.CLAUSE_PAST:
-				return _sentence_bbcode("It was ____ .")
-			GrammarValidator.CLAUSE_PRESENT:
-				return _sentence_bbcode("Now it is ____ .")
-		return _sentence_bbcode("It was ____ . Now it is ____ .")
+		return _sentence_bbcode(TargetLanguage.gapped_sentence(_clause))
 	return _sentence_bbcode(_target_sentence())
+
+
+func _on_settings_changed() -> void:
+	if _entry != null:
+		_entry.placeholder_text = TargetLanguage.input_placeholder()
+	if not _armed:
+		return
+	_sentence_label.text = _prompt_text()
+	_listen_button.visible = Tts.available() \
+		and Settings.prompt_mode != Settings.PROMPT_HIDDEN
 
 
 func _sentence_bbcode(text: String) -> String:

@@ -47,6 +47,14 @@ func _build() -> void:
 	scroll.add_child(column)
 
 	column.add_child(_choice_section(
+		"学習言語 / Target Language", "学習者が見て、話す言語をえらびます。",
+		# にほんご, not 日本語: 日 and 本 are not in the bundled font subset, and the same kana
+		# constraint already governs every student-facing word in the pack.
+		[["English", Settings.TARGET_ENGLISH], ["にほんご", Settings.TARGET_JAPANESE]],
+		func() -> String: return Settings.target_language_choice(),
+		func(value: String) -> void: Settings.set_target_language(value)))
+
+	column.add_child(_choice_section(
 		"単語をえらぶ人", "元のデザインの「かんたんモード」です。",
 		[["学習者が自由にえらぶ", Settings.CHOICE_FREE], ["ゲームが組み合わせを指定", Settings.CHOICE_GUIDED]],
 		func() -> String: return Settings.choice_mode,

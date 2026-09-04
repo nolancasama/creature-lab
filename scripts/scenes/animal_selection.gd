@@ -1087,8 +1087,9 @@ func _cancel_pending() -> void:
 
 func _show_speech_target(before: String, after: String, clause: int,
 		completed_steps: int) -> void:
-	Speech.configure_attempt(before, after, Settings.strictness, clause)
-	_speech.show_target(before, after, clause, completed_steps)
+	var category := str(_pending.get("category", ""))
+	Speech.configure_attempt(before, after, Settings.strictness, clause, category)
+	_speech.show_target(before, after, clause, completed_steps, category)
 
 
 func _on_attempt_completed(result: Dictionary) -> void:

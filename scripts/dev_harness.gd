@@ -1126,6 +1126,29 @@ static func _font_checks(failures: Array[String]) -> void:
 	_check(failures, missing.is_empty(),
 		"bundled font is missing %d glyph(s) the UI prints: %s" % [missing.length(), missing])
 
+	# Recognition arrays intentionally carry kanji that Chrome returns but the game never
+	# draws. Check only the pack's explicit display axis so kana regressions fail without
+	# turning speech-only forms into web-font requirements.
+	for display in TargetLanguage.japanese_display_strings():
+		var missing_display := ""
+		for index in display.length():
+			var ch := display[index]
+			if not font.has_char(ch.unicode_at(0)):
+				missing_display += ch
+		_check(failures, not display.is_empty(),
+			"Japanese language pack contains an empty display string")
+		_check(failures, missing_display.is_empty(),
+			"bundled font cannot render Japanese display '%s': %s" % [display, missing_display])
+	for sentence_form in TargetLanguage.japanese_sentence_display_forms():
+		var missing_sentence_form := ""
+		for index in sentence_form.length():
+			var ch := sentence_form[index]
+			if not font.has_char(ch.unicode_at(0)):
+				missing_sentence_form += ch
+		_check(failures, missing_sentence_form.is_empty(),
+			"bundled font cannot render Japanese sentence form '%s': %s" % [
+				sentence_form, missing_sentence_form])
+
 
 ## Every non-ASCII character inside a quoted string anywhere in the project's own scripts
 ## and content.
@@ -1150,6 +1173,10 @@ static func _scan_for_characters(dir_path: String, found: Dictionary) -> void:
 	for file in dir.get_files():
 		var name := file.trim_suffix(".remap")
 		if not name.get_extension() in ["gd", "json"]:
+			continue
+		# This pack has its own field-aware check above. Scanning every quoted JSON value
+		# would mistake speech-only kanji forms for strings the web build renders.
+		if name == "language_ja.json":
 			continue
 		var text := FileAccess.get_file_as_string("%s/%s" % [dir_path, name])
 		if text.is_empty():
@@ -1777,6 +1804,7 @@ static func _selftest(main: Node) -> void:
 		"STRONG/WEAK still appears in selectable adjective pairs")
 	_check(failures, Content.colors.size() >= 10, "expected 10 colours, got %d" % Content.colors.size())
 	_check(failures, Content.fantasy_parts.size() >= 10, "expected fantasy parts, got %d" % Content.fantasy_parts.size())
+	_language_pack_checks(failures)
 	Audio.play_ambience(true)
 	_check(failures, Audio._ambience == null or not Audio._ambience.playing,
 		"ambient laboratory hum still plays when requested")
@@ -2841,6 +2869,45 @@ static func _grammar_checks(failures: Array[String]) -> void:
 	_run_speech_fixtures(failures)
 
 
+## Vocabulary growth must fail here, not later on a Chromebook with one untranslated card.
+## CATEGORY/word is asserted explicitly because the two semantic `short` values are not the
+## same Japanese target.
+static func _language_pack_checks(failures: Array[String]) -> void:
+	_check(failures, TargetLanguage.japanese_locale("stt") == "ja-JP",
+		"Japanese STT locale is not ja-JP")
+	_check(failures, TargetLanguage.japanese_locale("tts") == "ja-JP",
+		"Japanese TTS locale is not ja-JP")
+	for tense in ["past", "present"]:
+		_check(failures, not TargetLanguage.japanese_frame_display(tense).is_empty(),
+			"Japanese language pack has no %s frame display" % tense)
+		_check(failures, not TargetLanguage.frame_accept(tense).is_empty(),
+			"Japanese language pack has no accepted %s frames" % tense)
+	for pair in Content.pairs:
+		for word in pair.words():
+			_check_language_entry(failures, pair.category, str(word))
+	for color in Content.colors:
+		_check_language_entry(failures, Content.COLOR_CATEGORY, color.word)
+	var height_short := TargetLanguage.japanese_entry("HEIGHT", "short")
+	var length_short := TargetLanguage.japanese_entry("LENGTH", "short")
+	_check(failures, not height_short.is_empty() and not length_short.is_empty()
+		and str(height_short.get("display", "")) != str(length_short.get("display", "")),
+		"Japanese pack collapsed HEIGHT/short and LENGTH/short")
+
+
+static func _check_language_entry(failures: Array[String], category: String, word: String) -> void:
+	var entry := TargetLanguage.japanese_entry(category, word)
+	var key := TargetLanguage.word_key(category, word)
+	_check(failures, not entry.is_empty(), "Japanese language pack is missing %s" % key)
+	if entry.is_empty():
+		return
+	_check(failures, not str(entry.get("display", "")).is_empty(),
+		"Japanese language pack has no display for %s" % key)
+	_check(failures, not PackedStringArray(entry.get("past_forms", [])).is_empty(),
+		"Japanese language pack has no past forms for %s" % key)
+	_check(failures, not PackedStringArray(entry.get("present_forms", [])).is_empty(),
+		"Japanese language pack has no present forms for %s" % key)
+
+
 ## Required fixture shape: clause, before, after, transcript, tolerance, outcome, note.
 static func _speech_cases() -> Array:
 	var cases := [
@@ -2887,6 +2954,8 @@ static func _speech_cases() -> Array:
 
 
 static func _run_speech_fixtures(failures: Array[String]) -> void:
+	var restore_language := Settings.target_language
+	Settings.target_language = Settings.TARGET_ENGLISH
 	for case in _speech_cases():
 		var result := SpeechAttemptClassifier.classify(PackedStringArray([str(case[3])]),
 			str(case[1]), str(case[2]), int(case[4]), int(case[0]))
@@ -2916,7 +2985,96 @@ static func _run_speech_fixtures(failures: Array[String]) -> void:
 		"speech interim: fuzzy adjective incorrectly caused early pass")
 	_check(failures, TextNormalizer.protected_alias_violations().is_empty(),
 		"speech: alias table maps between protected words: %s" % TextNormalizer.protected_alias_violations())
+	_run_japanese_speech_fixtures(failures)
+	Settings.target_language = Settings.TARGET_ENGLISH
 	_run_session_lifecycle_fixtures(failures)
+	Settings.target_language = restore_language
+
+
+## Required fixture shape: category, clause, before, after, transcript, tolerance, outcome,
+## note. Every accepted surface below is authored in language_ja.json.
+static func _run_japanese_speech_fixtures(failures: Array[String]) -> void:
+	Settings.target_language = Settings.TARGET_JAPANESE
+	var past_frame := str(TargetLanguage.frame_accept("past")[0])
+	var big_past := str(TargetLanguage.accepted_forms("SIZE", "big", "past")[0])
+	var big_past_bare := str(TargetLanguage.accepted_forms("SIZE", "big", "past")[2])
+	var big_present := str(TargetLanguage.accepted_forms("SIZE", "big", "present")[0])
+	var small_past := str(TargetLanguage.accepted_forms("SIZE", "small", "past")[0])
+	var green_present := TargetLanguage.accepted_forms("COLOR", "green", "present")
+	var green_bare := str(green_present[green_present.size() - 2])
+	var green_past := str(TargetLanguage.accepted_forms("COLOR", "green", "past")[0])
+	var purple_past_forms := TargetLanguage.accepted_forms("COLOR", "purple", "past")
+	var purple_past := str(purple_past_forms[purple_past_forms.size() - 1])
+	# AGE/old is the one verb phrase in the pack (としをとっています), so it is the case that
+	# proves ます/ました count as polite endings - a です-only rule would have failed the
+	# canonical answer in Challenge while still accepting the simpler 年寄り alternate.
+	var old_past_forms := TargetLanguage.accepted_forms("AGE", "old", "past")
+	var old_present_forms := TargetLanguage.accepted_forms("AGE", "old", "present")
+	var old_past_canonical := str(old_past_forms[0])
+	var old_past_kanji := str(old_past_forms[1])
+	var old_past_variant := str(old_past_forms[2])
+	var old_present_canonical := str(old_present_forms[0])
+	var old_present_kanji := str(old_present_forms[1])
+	var old_present_variant := str(old_present_forms[2])
+	var present_frame := str(TargetLanguage.frame_accept("present")[0])
+	var young_past := str(TargetLanguage.accepted_forms("AGE", "young", "past")[0])
+	var length_short_past := str(
+		TargetLanguage.accepted_forms("LENGTH", "short", "past")[0])
+	var height_short_past := str(
+		TargetLanguage.accepted_forms("HEIGHT", "short", "past")[0])
+	var cases := [
+		["COLOR", GrammarValidator.CLAUSE_PRESENT, "red", "green", green_bare, GrammarValidator.HEAR_LENIENT, SpeechAttemptClassifier.Outcome.PASS, "Easy accepts a listed bare noun"],
+		["SIZE", GrammarValidator.CLAUSE_PAST, "big", "small", big_past_bare, GrammarValidator.HEAR_NORMAL, SpeechAttemptClassifier.Outcome.PASS, "Standard accepts an inflected form without a frame"],
+		["SIZE", GrammarValidator.CLAUSE_PAST, "big", "small", past_frame + big_past, GrammarValidator.HEAR_EXACT, SpeechAttemptClassifier.Outcome.PASS, "Challenge accepts frame plus polite form"],
+		["SIZE", GrammarValidator.CLAUSE_PAST, "big", "small", String.chr(0x3000) + past_frame + " " + big_past + String.chr(0x3002), GrammarValidator.HEAR_EXACT, SpeechAttemptClassifier.Outcome.PASS, "Japanese whitespace and punctuation normalize"],
+		["SIZE", GrammarValidator.CLAUSE_PAST, "big", "small", past_frame + small_past, GrammarValidator.HEAR_EXACT, SpeechAttemptClassifier.Outcome.EFFORTFUL_WRONG, "paired opposite is effortful wrong"],
+		["SIZE", GrammarValidator.CLAUSE_PAST, "big", "small", "ありがとう", GrammarValidator.HEAR_LENIENT, SpeechAttemptClassifier.Outcome.UNCERTAIN, "unrelated thanks"],
+		["SIZE", GrammarValidator.CLAUSE_PAST, "big", "small", "せんせい", GrammarValidator.HEAR_NORMAL, SpeechAttemptClassifier.Outcome.UNCERTAIN, "unrelated teacher"],
+		["SIZE", GrammarValidator.CLAUSE_PAST, "big", "small", "", GrammarValidator.HEAR_EXACT, SpeechAttemptClassifier.Outcome.UNCERTAIN, "empty transcript"],
+		["SIZE", GrammarValidator.CLAUSE_PAST, "big", "small", past_frame + big_present, GrammarValidator.HEAR_EXACT, SpeechAttemptClassifier.Outcome.EFFORTFUL_WRONG, "wrong tense does not pass"],
+		["HEIGHT", GrammarValidator.CLAUSE_PAST, "short", "tall", past_frame + length_short_past, GrammarValidator.HEAR_EXACT, SpeechAttemptClassifier.Outcome.EFFORTFUL_WRONG, "LENGTH short cannot satisfy HEIGHT short"],
+		["LENGTH", GrammarValidator.CLAUSE_PAST, "short", "long", past_frame + height_short_past, GrammarValidator.HEAR_EXACT, SpeechAttemptClassifier.Outcome.EFFORTFUL_WRONG, "HEIGHT short cannot satisfy LENGTH short"],
+		["COLOR", GrammarValidator.CLAUSE_PRESENT, "red", "green", green_bare, GrammarValidator.HEAR_NORMAL, SpeechAttemptClassifier.Outcome.EFFORTFUL_WRONG, "Standard rejects a bare noun"],
+		["COLOR", GrammarValidator.CLAUSE_PRESENT, "red", "green", green_past, GrammarValidator.HEAR_LENIENT, SpeechAttemptClassifier.Outcome.EFFORTFUL_WRONG, "Easy does not pass a past noun by bare-form containment"],
+		["COLOR", GrammarValidator.CLAUSE_PAST, "purple", "yellow", purple_past, GrammarValidator.HEAR_NORMAL, SpeechAttemptClassifier.Outcome.PASS, "long purple form owns its embedded yellow characters"],
+		# The round's OTHER colour, not an unrelated word: with before=yellow/after=purple the
+		# student has said this round's vocabulary in the wrong slot, which is the same case
+		# as English "it was weak" against a STRONG target - a real attempt, wrongly worded.
+		["COLOR", GrammarValidator.CLAUSE_PAST, "yellow", "purple", purple_past, GrammarValidator.HEAR_NORMAL, SpeechAttemptClassifier.Outcome.EFFORTFUL_WRONG, "the round's other colour is effort, not noise"],
+		# A colour from no part of this round is the genuinely unrelated case.
+		["COLOR", GrammarValidator.CLAUSE_PAST, "yellow", "red", purple_past, GrammarValidator.HEAR_NORMAL, SpeechAttemptClassifier.Outcome.UNCERTAIN, "a colour outside this round is not effort"],
+		# AGE/old, settled by the teacher on 年を取っています. Canonical must pass in the
+		# strictest mode - it ends in ます, which is why the polite test cannot be です-only.
+		["AGE", GrammarValidator.CLAUSE_PAST, "old", "young", past_frame + old_past_canonical, GrammarValidator.HEAR_EXACT, SpeechAttemptClassifier.Outcome.PASS, "AGE old canonical past passes Challenge"],
+		["AGE", GrammarValidator.CLAUSE_PRESENT, "young", "old", present_frame + old_present_canonical, GrammarValidator.HEAR_EXACT, SpeechAttemptClassifier.Outcome.PASS, "AGE old canonical present passes Challenge"],
+		["AGE", GrammarValidator.CLAUSE_PAST, "old", "young", past_frame + old_past_kanji, GrammarValidator.HEAR_EXACT, SpeechAttemptClassifier.Outcome.PASS, "AGE old kanji past passes"],
+		["AGE", GrammarValidator.CLAUSE_PRESENT, "young", "old", present_frame + old_present_kanji, GrammarValidator.HEAR_EXACT, SpeechAttemptClassifier.Outcome.PASS, "AGE old kanji present passes"],
+		# The simpler toshiyori phrasing is still correct Japanese; a child who says it must
+		# not be marked wrong, including in Challenge.
+		["AGE", GrammarValidator.CLAUSE_PAST, "old", "young", past_frame + old_past_variant, GrammarValidator.HEAR_EXACT, SpeechAttemptClassifier.Outcome.PASS, "AGE old toshiyori past still accepted"],
+		["AGE", GrammarValidator.CLAUSE_PRESENT, "young", "old", present_frame + old_present_variant, GrammarValidator.HEAR_EXACT, SpeechAttemptClassifier.Outcome.PASS, "AGE old toshiyori present still accepted"],
+		# furui is for objects, never an animal, and is in no list, so it can never pass.
+		# Said inside the frame it is still a real attempt with the wrong word - the same
+		# case as English "it was smooth" against a STRONG target - so it counts as effort.
+		["AGE", GrammarValidator.CLAUSE_PAST, "old", "young", past_frame + "古かったです", GrammarValidator.HEAR_LENIENT, SpeechAttemptClassifier.Outcome.EFFORTFUL_WRONG, "furui never passes as AGE old"],
+		# Bare, with no frame and no game word, it is genuinely unrelated speech.
+		["AGE", GrammarValidator.CLAUSE_PAST, "old", "young", "古かったです", GrammarValidator.HEAR_LENIENT, SpeechAttemptClassifier.Outcome.UNCERTAIN, "bare furui is noise, not a counted failure"],
+		# The pair still protects itself: young is old's opposite, so it is effort, not a pass.
+		["AGE", GrammarValidator.CLAUSE_PAST, "old", "young", past_frame + young_past, GrammarValidator.HEAR_NORMAL, SpeechAttemptClassifier.Outcome.EFFORTFUL_WRONG, "AGE young stays distinct from AGE old"],
+		["SIZE", GrammarValidator.CLAUSE_PAST, "big", "small", past_frame + big_past + small_past, GrammarValidator.HEAR_EXACT, SpeechAttemptClassifier.Outcome.EFFORTFUL_WRONG, "protected word overrides a correct target"],
+	]
+	for case in cases:
+		var result := SpeechAttemptClassifier.classify(PackedStringArray([str(case[4])]),
+			str(case[2]), str(case[3]), int(case[5]), int(case[1]), str(case[0]))
+		_check(failures, int(result["outcome"]) == int(case[6]),
+			"Japanese speech: %s - '%s' gave %s, expected %s" % [case[7], case[4],
+			SpeechAttemptClassifier.outcome_name(int(result["outcome"])),
+			SpeechAttemptClassifier.outcome_name(int(case[6]))])
+	var fullwidth_probe := String.chr(0xff21) + " " + String.chr(0xff22) \
+		+ String.chr(0x3000) + String.chr(0xff23) + String.chr(0x3002) \
+		+ String.chr(0x3001) + String.chr(0xff01) + String.chr(0xff1f) + String.chr(0x30fb)
+	_check(failures, JapaneseSpeechMatcher.normalize(fullwidth_probe) == "ABC",
+		"Japanese speech: fullwidth ASCII or Japanese punctuation did not normalize")
 
 
 static func _run_session_lifecycle_fixtures(failures: Array[String]) -> void:

@@ -3,8 +3,6 @@ extends SpeechBackend
 ## Thin Chrome Web Speech bridge. It reports the browser's real lifecycle and raw ranked
 ## alternatives; SpeechService owns sessions and SpeechAttemptClassifier owns language.
 
-const LANGUAGE := "en-US"
-
 const JS_SETUP := """
 window.__godotSpeech = (function () {
 	var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -136,7 +134,7 @@ func start(session_id: int) -> void:
 		browser_ended.emit(session_id)
 		return
 	_bridge.eval("window.__godotSpeech.start(%d, %s);" % [
-		session_id, JSON.stringify(LANGUAGE)], true)
+		session_id, JSON.stringify(TargetLanguage.stt_locale())], true)
 
 
 func stop(session_id: int) -> void:

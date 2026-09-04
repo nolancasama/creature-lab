@@ -1,0 +1,164 @@
+{
+  "_comment": "Japanese target-language pack. Gameplay never reads this: CreatureState still stores the English semantic IDs ('big', 'small'), and this file only decides what the student sees and says. Keys are CATEGORY/word because English reuses one word across pairs - 'short' is HEIGHT/short (background legs) and LENGTH/short (a shorter body), which are two different Japanese words. Keying by word alone would collapse them.",
+
+  "_display_note": "Student-facing text is kana, spaced わかちがき, because the readers are beginners and because the bundled font subset carries every kana but only some kanji - see ui/noto_sans_jp_subset_ATTRIBUTION.txt. Recognition forms below are a separate field and DO carry kanji: Chrome's ja-JP recogniser returns 大きい whether or not we ever draw it, and a transcript is compared as a string, never rendered.",
+
+  "_forms_note": "past_forms / present_forms are surface forms accepted from the recogniser, most complete first. They deliberately include both the kanji and kana spellings and the bare inflected adjective without です, because Chrome returns short utterances unpredictably. The frame (前は / 今は) is matched separately, so it must NOT be repeated inside these.",
+
+  "locale": {"stt": "ja-JP", "tts": "ja-JP"},
+
+  "frames": {
+    "past": {"display": "まえは", "accept": ["前は", "まえは"]},
+    "present": {"display": "いまは", "accept": ["今は", "いまは"]}
+  },
+
+  "words": {
+    "SIZE/big": {
+      "display": "おおきい",
+      "past_forms": ["大きかったです", "おおきかったです", "大きかった", "おおきかった"],
+      "present_forms": ["大きいです", "おおきいです", "大きい", "おおきい"]
+    },
+    "SIZE/small": {
+      "display": "ちいさい",
+      "past_forms": ["小さかったです", "ちいさかったです", "小さかった", "ちいさかった"],
+      "present_forms": ["小さいです", "ちいさいです", "小さい", "ちいさい"]
+    },
+
+    "HEIGHT/tall": {
+      "_note": "HEIGHT changes the legs. 高い alone means expensive or high-up, so the body part is named.",
+      "display": "せが たかい",
+      "past_forms": ["背が高かったです", "せがたかかったです", "背が高かった", "せがたかかった"],
+      "present_forms": ["背が高いです", "せがたかいです", "背が高い", "せがたかい"]
+    },
+    "HEIGHT/short": {
+      "display": "せが ひくい",
+      "past_forms": ["背が低かったです", "せがひくかったです", "背が低かった", "せがひくかった"],
+      "present_forms": ["背が低いです", "せがひくいです", "背が低い", "せがひくい"]
+    },
+
+    "LENGTH/long": {
+      "display": "ながい",
+      "past_forms": ["長かったです", "ながかったです", "長かった", "ながかった"],
+      "present_forms": ["長いです", "ながいです", "長い", "ながい"]
+    },
+    "LENGTH/short": {
+      "_note": "The other 'short'. A shorter BODY, never height - see HEIGHT/short.",
+      "display": "みじかい",
+      "past_forms": ["短かったです", "みじかかったです", "短かった", "みじかかった"],
+      "present_forms": ["短いです", "みじかいです", "短い", "みじかい"]
+    },
+
+    "AGE/young": {
+      "display": "わかい",
+      "past_forms": ["若かったです", "わかかったです", "若かった", "わかかった"],
+      "present_forms": ["若いです", "わかいです", "若い", "わかい"]
+    },
+    "AGE/old": {
+      "_note": "The one pair with no adjectival antonym: 若い has none that fits an animal, and 古い is for objects and is deliberately absent from every list here. Settled by the teacher on 年を取っています - the canonical way to say an animal or person is old. 年寄り stays only as an accepted alternate, because a child who says the simpler correct thing must not be marked wrong. Canonical forms are first: _kana_polite_form() shows the first kana polite form it finds, so order decides what the learner is asked to say.",
+      "display": "としを とっている",
+      "past_forms": ["としをとっていました", "年を取っていました", "としよりでした", "年寄りでした"],
+      "present_forms": ["としをとっています", "年を取っています", "としよりです", "年寄りです"]
+    },
+
+    "HARDNESS/hard": {
+      "display": "かたい",
+      "past_forms": ["硬かったです", "固かったです", "かたかったです", "硬かった", "かたかった"],
+      "present_forms": ["硬いです", "固いです", "かたいです", "硬い", "かたい"]
+    },
+    "HARDNESS/soft": {
+      "display": "やわらかい",
+      "past_forms": ["柔らかかったです", "やわらかかったです", "柔らかかった", "やわらかかった"],
+      "present_forms": ["柔らかいです", "やわらかいです", "柔らかい", "やわらかい"]
+    },
+
+    "STRENGTH/strong": {
+      "_note": "Pair is hidden in the Word Lab but kept so saved creatures stay valid.",
+      "display": "つよい",
+      "past_forms": ["強かったです", "つよかったです", "強かった", "つよかった"],
+      "present_forms": ["強いです", "つよいです", "強い", "つよい"]
+    },
+    "STRENGTH/weak": {
+      "display": "よわい",
+      "past_forms": ["弱かったです", "よわかったです", "弱かった", "よわかった"],
+      "present_forms": ["弱いです", "よわいです", "弱い", "よわい"]
+    },
+
+    "SPEED/fast": {
+      "_note": "速い and 早い are both はやい and Chrome returns either; both accepted.",
+      "display": "はやい",
+      "past_forms": ["速かったです", "早かったです", "はやかったです", "速かった", "はやかった"],
+      "present_forms": ["速いです", "早いです", "はやいです", "速い", "はやい"]
+    },
+    "SPEED/slow": {
+      "display": "おそい",
+      "past_forms": ["遅かったです", "おそかったです", "遅かった", "おそかった"],
+      "present_forms": ["遅いです", "おそいです", "遅い", "おそい"]
+    },
+
+    "TEMPERATURE/hot": {
+      "_note": "熱い is hot-to-touch, which is the creature's trait; 暑い (weather) accepted because the recogniser picks it by sound.",
+      "display": "あつい",
+      "past_forms": ["熱かったです", "暑かったです", "あつかったです", "熱かった", "あつかった"],
+      "present_forms": ["熱いです", "暑いです", "あついです", "熱い", "あつい"]
+    },
+    "TEMPERATURE/cold": {
+      "_note": "冷たい (cold to touch), not 寒い (cold weather).",
+      "display": "つめたい",
+      "past_forms": ["冷たかったです", "つめたかったです", "冷たかった", "つめたかった"],
+      "present_forms": ["冷たいです", "つめたいです", "冷たい", "つめたい"]
+    },
+
+    "COLOR/red": {
+      "display": "あかい",
+      "past_forms": ["赤かったです", "あかかったです", "赤色でした", "赤かった", "あかかった"],
+      "present_forms": ["赤いです", "あかいです", "赤色です", "赤い", "あかい", "赤"]
+    },
+    "COLOR/blue": {
+      "display": "あおい",
+      "past_forms": ["青かったです", "あおかったです", "青色でした", "青かった", "あおかった"],
+      "present_forms": ["青いです", "あおいです", "青色です", "青い", "あおい", "青"]
+    },
+    "COLOR/yellow": {
+      "display": "きいろい",
+      "past_forms": ["黄色かったです", "きいろかったです", "黄色でした", "きいろでした"],
+      "present_forms": ["黄色いです", "きいろいです", "黄色です", "きいろです", "黄色", "きいろ"]
+    },
+    "COLOR/black": {
+      "display": "くろい",
+      "past_forms": ["黒かったです", "くろかったです", "黒色でした", "黒かった", "くろかった"],
+      "present_forms": ["黒いです", "くろいです", "黒色です", "黒い", "くろい", "黒"]
+    },
+    "COLOR/white": {
+      "display": "しろい",
+      "past_forms": ["白かったです", "しろかったです", "白色でした", "白かった", "しろかった"],
+      "present_forms": ["白いです", "しろいです", "白色です", "白い", "しろい", "白"]
+    },
+
+    "COLOR/green": {
+      "_note": "From here down the colours are NOUNS, not i-adjectives: でした / です, never かったです. This is the split the pack exists to make explicit.",
+      "display": "みどり",
+      "past_forms": ["緑でした", "みどりでした", "緑色でした", "みどりいろでした"],
+      "present_forms": ["緑です", "みどりです", "緑色です", "みどりいろです", "緑", "みどり"]
+    },
+    "COLOR/purple": {
+      "display": "むらさき",
+      "past_forms": ["紫でした", "むらさきでした", "紫色でした", "むらさきいろでした"],
+      "present_forms": ["紫です", "むらさきです", "紫色です", "むらさきいろです", "紫", "むらさき"]
+    },
+    "COLOR/brown": {
+      "display": "ちゃいろ",
+      "past_forms": ["茶色でした", "ちゃいろでした"],
+      "present_forms": ["茶色です", "ちゃいろです", "茶色", "ちゃいろ"]
+    },
+    "COLOR/pink": {
+      "display": "ピンク",
+      "past_forms": ["ピンクでした", "ぴんくでした"],
+      "present_forms": ["ピンクです", "ぴんくです", "ピンク"]
+    },
+    "COLOR/orange": {
+      "display": "オレンジ",
+      "past_forms": ["オレンジでした", "おれんじでした", "オレンジ色でした"],
+      "present_forms": ["オレンジです", "おれんじです", "オレンジ色です", "オレンジ"]
+    }
+  }
+}

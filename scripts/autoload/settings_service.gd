@@ -10,6 +10,9 @@ signal changed
 
 const PATH := "user://teacher_settings.cfg"
 
+const TARGET_ENGLISH := "en"
+const TARGET_JAPANESE := "ja"
+
 ## How pairs are chosen. "free" is the spec's Easy Mode.
 const CHOICE_FREE := "free"
 const CHOICE_GUIDED := "guided"
@@ -49,6 +52,7 @@ const ASSIST_AFTER := {HEAR_LENIENT: 3, HEAR_NORMAL: 4, HEAR_EXACT: 5}
 
 var choice_mode: String = CHOICE_FREE
 var prompt_mode: String = PROMPT_FULL
+var target_language := TARGET_ENGLISH
 ## Standard is the recommended classroom mode, so it is what a machine with no saved
 ## teacher configuration starts on. Only fresh installs are affected - load_settings()
 ## reads whatever an existing config already holds.
@@ -67,6 +71,7 @@ var debug_mode := OS.is_debug_build()
 ## Shows the speech diagnostics on screen. Off by default and reachable from Teacher
 ## Settings, because the browser console is not reachable on the machines this runs on.
 var speech_log := false
+var _pending_target_language := ""
 
 
 func _ready() -> void:
@@ -79,6 +84,10 @@ func load_settings() -> void:
 		return
 	choice_mode = str(cfg.get_value("game", "choice_mode", choice_mode))
 	prompt_mode = str(cfg.get_value("game", "prompt_mode", prompt_mode))
+	var stored_language := str(cfg.get_value("game", "target_language", TARGET_ENGLISH))
+	target_language = stored_language if stored_language in [TARGET_ENGLISH, TARGET_JAPANESE] \
+		else TARGET_ENGLISH
+	_pending_target_language = ""
 	strictness = int(cfg.get_value("game", "strictness", strictness))
 	graphics_quality = str(cfg.get_value("display", "graphics_quality", graphics_quality))
 	if not GraphicsQuality.is_valid_profile(graphics_quality):
@@ -101,6 +110,7 @@ func save_settings() -> void:
 	var cfg := ConfigFile.new()
 	cfg.set_value("game", "choice_mode", choice_mode)
 	cfg.set_value("game", "prompt_mode", prompt_mode)
+	cfg.set_value("game", "target_language", target_language_choice())
 	cfg.set_value("game", "strictness", strictness)
 	cfg.set_value("game", "persist_zoo", persist_zoo)
 	cfg.set_value("game", "speech_log", speech_log)
@@ -128,6 +138,46 @@ func assist_after_failures() -> int:
 func set_graphics_quality(value: String) -> void:
 	graphics_quality = value if GraphicsQuality.is_valid_profile(value) else GraphicsQuality.STANDARD
 	save_settings()
+
+
+## A recogniser keeps the locale it started with. Cancel before changing the shared target,
+## then rebuild input and voice selection so the next tap changes language without a reload.
+func set_target_language(value: String) -> void:
+	var requested := value if value in [TARGET_ENGLISH, TARGET_JAPANESE] else TARGET_ENGLISH
+	if requested == target_language and _pending_target_language.is_empty():
+		return
+	_pending_target_language = requested
+	if not Speech.session_state_changed.is_connected(_on_speech_state_for_language_change):
+		Speech.session_state_changed.connect(_on_speech_state_for_language_change)
+	Speech.cancel() # Safe before any session exists, including typed-only classrooms.
+	# CHECKING and FINISHING deliberately refuse cancellation. Keep the old language active
+	# until Chrome closes that recogniser rather than classifying its answer under a locale
+	# that did not produce it or detaching the onend the session still needs.
+	if Speech.is_active():
+		return
+	_apply_pending_target_language()
+
+
+func target_language_choice() -> String:
+	return _pending_target_language if not _pending_target_language.is_empty() \
+		else target_language
+
+
+func _on_speech_state_for_language_change(_session_id: int, state: int,
+		_restart_queued: bool) -> void:
+	if not _pending_target_language.is_empty() and state in [
+			SpeechSession.State.COMPLETE, SpeechSession.State.CANCELLED]:
+		call_deferred("_apply_pending_target_language")
+
+
+func _apply_pending_target_language() -> void:
+	if _pending_target_language.is_empty() or Speech.is_active():
+		return
+	target_language = _pending_target_language
+	_pending_target_language = ""
+	Speech.select_backend()
+	Tts.reconfigure_language()
+	changed.emit()
 
 
 func _apply_display() -> void:

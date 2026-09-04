@@ -53,6 +53,7 @@ func _ready() -> void:
 	_color_hint.visible = false
 	column.add_child(_color_hint)
 	column.add_child(_build_colors())
+	Settings.changed.connect(_refresh)
 
 
 func _build_pairs() -> Control:
@@ -74,7 +75,7 @@ func _build_pairs() -> Control:
 
 
 func _word_button(pair: TraitDefinition, word: String) -> Button:
-	var b := UiKit.button(word, UiKit.SMALL)
+	var b := UiKit.button(TargetLanguage.display_word(pair.category, word), UiKit.SMALL)
 	# Fixed, not stretched: PAIR_CARD_SIZE is built to hold exactly two of these plus
 	# PAIR_GAP between them, so there is never slack for size_flags to expand into.
 	b.custom_minimum_size = WORD_UNIT
@@ -82,7 +83,9 @@ func _word_button(pair: TraitDefinition, word: String) -> Button:
 	# A long press reads the pair aloud without selecting anything.
 	b.gui_input.connect(func(event: InputEvent) -> void:
 		if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_RIGHT:
-			Tts.speak("%s. %s." % [pair.word_a, pair.word_b]))
+			Tts.speak("%s. %s." % [
+				TargetLanguage.display_word(pair.category, pair.word_a),
+				TargetLanguage.display_word(pair.category, pair.word_b)]))
 	_pair_buttons["%s|%s" % [pair.category, word]] = b
 	return b
 
@@ -94,7 +97,8 @@ func _build_colors() -> Control:
 	grid.add_theme_constant_override("v_separation", 22)
 
 	for swatch in Content.enabled_colors():
-		var b := UiKit.button(swatch.word, UiKit.SMALL)
+		var b := UiKit.button(
+			TargetLanguage.display_word(Content.COLOR_CATEGORY, swatch.word), UiKit.SMALL)
 		b.custom_minimum_size = WORD_UNIT
 		UiKit.style_button(b, swatch.color)
 		b.add_theme_color_override("font_color", swatch.label_color())
@@ -195,9 +199,15 @@ func _blocked(category: String) -> bool:
 
 func _refresh() -> void:
 	for key in _pair_buttons:
-		var category := str(key).split("|")[0]
+		var parts := str(key).split("|", true, 1)
+		var category := str(parts[0])
+		var word := str(parts[1])
 		var b: Button = _pair_buttons[key]
+		b.text = TargetLanguage.display_word(category, word)
 		b.disabled = _blocked(category)
+	for word in _color_buttons:
+		(_color_buttons[word] as Button).text = TargetLanguage.display_word(
+			Content.COLOR_CATEGORY, str(word))
 	for category in _cards:
 		var card: PanelContainer = _cards[category]
 		var done: bool = _used.has(str(category))
@@ -224,6 +234,9 @@ func _refresh_colors() -> void:
 		_color_hint.text = "" ## Disabled swatches say this without a line of text.
 	elif _color_before.is_empty():
 		_color_hint.text = "" ## The standing prompt is gone; the swatches say it themselves.
+	elif TargetLanguage.is_japanese():
+		_color_hint.text = "%s いまの色をタップしてください。" % TargetLanguage.sentence(
+			Content.COLOR_CATEGORY, _color_before, "", GrammarValidator.CLAUSE_PAST)
 	else:
 		_color_hint.text = "It was %s... 今の色をタップしてください。" % _color_before
 	_color_hint.visible = not _color_hint.text.is_empty()

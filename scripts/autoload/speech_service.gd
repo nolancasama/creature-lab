@@ -20,6 +20,7 @@ var active_session: SpeechSession = null
 var _next_session_id := 0
 var _target_before := ""
 var _target_after := ""
+var _target_category := ""
 var _target_tolerance := GrammarValidator.HEAR_LENIENT
 var _target_clause := GrammarValidator.CLAUSE_BOTH
 var _target_configured := false
@@ -70,9 +71,11 @@ func _set_backend(candidate: SpeechBackend) -> void:
 	backend_changed.emit(backend.backend_id())
 
 
-func configure_attempt(before: String, after: String, tolerance: int, clause: int) -> void:
+func configure_attempt(before: String, after: String, tolerance: int, clause: int,
+		category := "") -> void:
 	_target_before = before
 	_target_after = after
+	_target_category = category
 	_target_tolerance = tolerance
 	_target_clause = clause
 	_target_configured = true
@@ -83,6 +86,7 @@ func clear_attempt() -> void:
 	_target_configured = false
 	_target_before = ""
 	_target_after = ""
+	_target_category = ""
 
 
 func mode() -> String:
@@ -180,7 +184,7 @@ func timeout() -> void:
 			SpeechSession.State.STARTING, SpeechSession.State.LISTENING]:
 		return
 	var result := SpeechAttemptClassifier.classify(PackedStringArray(), active_session.before,
-		active_session.after, active_session.tolerance, active_session.clause)
+		active_session.after, active_session.tolerance, active_session.clause, _target_category)
 	_complete_attempt(active_session, result, "timeout", 0.0, true)
 	if backend != null:
 		backend.stop(active_session.session_id)
@@ -192,7 +196,7 @@ func submit_typed(text: String) -> void:
 		Diagnostics.note("[speech]", "typed answer refused: no active target")
 		return
 	var result := SpeechAttemptClassifier.classify(PackedStringArray([text]), _target_before,
-		_target_after, _target_tolerance, _target_clause)
+		_target_after, _target_tolerance, _target_clause, _target_category)
 	result["session_id"] = 0
 	result["source"] = "typed"
 	_log_result(0, result)
@@ -224,14 +228,14 @@ func _on_interim(session_id: int, alternatives: PackedStringArray,
 	transcript_observed.emit(session_id, alternatives, false)
 	var strong_pass := SpeechAttemptClassifier.is_strong_pass(alternatives,
 		active_session.before, active_session.after, active_session.tolerance,
-		active_session.clause)
+		active_session.clause, _target_category)
 	if Settings.speech_log:
 		Diagnostics.note("[speech]", "session=%d interim strong_pass=%s alts=%s" % [
 			session_id, strong_pass, alternatives])
 	if not strong_pass:
 		return
 	var result := SpeechAttemptClassifier.classify(alternatives, active_session.before,
-		active_session.after, active_session.tolerance, active_session.clause)
+		active_session.after, active_session.tolerance, active_session.clause, _target_category)
 	_complete_attempt(active_session, result, "interim", INTERIM_RECORDING_TAIL, false)
 	if backend != null:
 		backend.stop(session_id)
@@ -250,7 +254,7 @@ func _on_final(session_id: int, alternatives: PackedStringArray,
 	if Settings.speech_log:
 		Diagnostics.note("[speech]", "session=%d final alts=%s" % [session_id, alternatives])
 	var result := SpeechAttemptClassifier.classify(alternatives, active_session.before,
-		active_session.after, active_session.tolerance, active_session.clause)
+		active_session.after, active_session.tolerance, active_session.clause, _target_category)
 	_complete_attempt(active_session, result, "final", 0.0,
 		int(result["outcome"]) in [SpeechAttemptClassifier.Outcome.UNCERTAIN,
 			SpeechAttemptClassifier.Outcome.TECHNICAL_ERROR])
@@ -276,7 +280,7 @@ func _on_no_match(session_id: int) -> void:
 	if not _is_current(session_id, "nomatch") or active_session.result_produced:
 		return
 	var result := SpeechAttemptClassifier.classify(PackedStringArray(), active_session.before,
-		active_session.after, active_session.tolerance, active_session.clause)
+		active_session.after, active_session.tolerance, active_session.clause, _target_category)
 	_complete_attempt(active_session, result, "nomatch", 0.0, true)
 	if backend != null:
 		backend.stop(session_id)
@@ -302,7 +306,7 @@ func _on_browser_ended(session_id: int) -> void:
 			SpeechSession.State.STARTING, SpeechSession.State.LISTENING,
 			SpeechSession.State.CHECKING]:
 		var result := SpeechAttemptClassifier.classify(PackedStringArray(), active_session.before,
-			active_session.after, active_session.tolerance, active_session.clause)
+			active_session.after, active_session.tolerance, active_session.clause, _target_category)
 		_complete_attempt(active_session, result, "end", 0.0, true)
 	var restart := active_session.queued_restart
 	if not active_session.browser_ended():

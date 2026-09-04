@@ -12,7 +12,14 @@ enum Outcome {
 
 
 static func classify(alternatives: PackedStringArray, before: String, after: String,
-		tolerance: int, clause := GrammarValidator.CLAUSE_BOTH) -> Dictionary:
+		tolerance: int, clause := GrammarValidator.CLAUSE_BOTH, category := "") -> Dictionary:
+	if TargetLanguage.is_japanese():
+		return _classify_japanese(alternatives, category, before, after, tolerance, clause)
+	return _classify_english(alternatives, before, after, tolerance, clause)
+
+
+static func _classify_english(alternatives: PackedStringArray, before: String, after: String,
+		tolerance: int, clause: int) -> Dictionary:
 	var protected := TextNormalizer.protected_vocabulary()
 	var candidates: Array[Dictionary] = []
 	var first_relevant := -1
@@ -44,7 +51,14 @@ static func classify(alternatives: PackedStringArray, before: String, after: Str
 ## known safe alias. Conservative fuzziness is useful feedback on a final, but too weak to
 ## clip a child's recording on a partial hypothesis.
 static func is_strong_pass(alternatives: PackedStringArray, before: String, after: String,
-		tolerance: int, clause := GrammarValidator.CLAUSE_BOTH) -> bool:
+		tolerance: int, clause := GrammarValidator.CLAUSE_BOTH, category := "") -> bool:
+	if TargetLanguage.is_japanese():
+		for transcript in alternatives:
+			var assessed := JapaneseSpeechMatcher.assess(str(transcript), category, before, after,
+				tolerance, clause)
+			if bool(assessed["pass"]):
+				return true
+		return false
 	var protected := TextNormalizer.protected_vocabulary()
 	for transcript in alternatives:
 		var normalized := TextNormalizer.strip_edge_filler(TextNormalizer.normalize(str(transcript)))
@@ -52,6 +66,33 @@ static func is_strong_pass(alternatives: PackedStringArray, before: String, afte
 		if _matches(words, before, after, tolerance, clause, protected, true):
 			return true
 	return false
+
+
+static func _classify_japanese(alternatives: PackedStringArray, category: String,
+		before: String, after: String, tolerance: int, clause: int) -> Dictionary:
+	var candidates: Array[Dictionary] = []
+	var first_relevant := -1
+	var first_usable := -1
+	for index in alternatives.size():
+		var transcript := str(alternatives[index])
+		var assessed := JapaneseSpeechMatcher.assess(transcript, category, before, after,
+			tolerance, clause)
+		var normalized := str(assessed["normalized"])
+		candidates.append({
+			"transcript": transcript,
+			"normalized": normalized,
+			"pass": bool(assessed["pass"]),
+			"relevant": bool(assessed["relevant"]),
+		})
+		if first_usable < 0 and not normalized.is_empty():
+			first_usable = index
+		if first_relevant < 0 and bool(assessed["relevant"]):
+			first_relevant = index
+		if bool(assessed["pass"]):
+			return _result(Outcome.PASS, index, candidates, alternatives)
+	if first_relevant >= 0:
+		return _result(Outcome.EFFORTFUL_WRONG, first_relevant, candidates, alternatives)
+	return _result(Outcome.UNCERTAIN, first_usable, candidates, alternatives)
 
 
 static func technical_error(reason: String) -> Dictionary:

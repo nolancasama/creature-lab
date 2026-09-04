@@ -1,5 +1,35 @@
 # Design decisions
 
+## Target language
+
+- Creature and save data remain English semantic IDs. `TargetLanguage` resolves
+  `CATEGORY/word` keys only at display, recognition, and TTS boundaries, so the two meanings
+  of `short` cannot collide and changing languages cannot change a creature fingerprint.
+- English keeps its existing sentence and token-matching path. Japanese uses exact
+  containment over authored surface forms after width, punctuation, and whitespace
+  normalization. Overlapping matches belong to the longest authored form, so `きいろ`
+  inside `むらさきいろ` cannot become a protected-word collision; difficulty changes
+  required sentence structure, never character fuzziness.
+- Student-facing Japanese is kana; recognition forms carry kanji. The bundled font subset
+  holds every kana but only some kanji, and Chrome's ja-JP recogniser returns 大きい whether
+  or not the game ever draws it - a transcript is compared as a string and never rendered.
+  So display and recognition are separate axes, and a fixture asserts every `display` string
+  is renderable, because the --selftest font check only scans source literals and would miss
+  text loaded from JSON.
+- Vocabulary is keyed CATEGORY/word because English reuses one word across two pairs:
+  HEIGHT/short (せがひくい, the legs) and LENGTH/short (みじかい, the body). Keyed by word
+  alone those collapse into one another, in display and in protected-vocabulary conflicts.
+- AGE/old is the one entry with no adjectival antonym - 若い has none that suits an animal
+  and 古い is for objects. Settled on 年を取っています; 年寄り stays an accepted alternate,
+  because a child saying the simpler correct thing must not be marked wrong. It is also the
+  pack's only verb phrase, so the polite-ending test covers ます/ました as well as です/でした
+  - a です-only rule would have failed the canonical answer in Challenge while accepting the
+  alternate, which is exactly backwards.
+- A language change cancels the live recogniser before rebuilding its backend and TTS voice.
+  CHECKING/FINISHING deliberately cannot be cancelled, so a change requested in that tail is
+  applied as soon as `onend` closes it. Browser sessions therefore finish under the locale
+  they started with, and the next tap uses the new locale without reloading the page.
+
 ## Creature continuity into the chamber
 
 - `CreatureRig._ready()` re-runs `deformer.apply()`. Traits are deliberately applied while
@@ -98,4 +128,3 @@
   `onend` each produce one neutral uncertainty; cancellation produces no result.
 - Effortful-failure counts reset for every target clause, including the separate past and
   present colour prompts.
-

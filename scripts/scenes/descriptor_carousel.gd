@@ -206,6 +206,7 @@ func _ready() -> void:
 		_views[view] = page
 	_build_category_view(_views[View.CATEGORY])
 	_build_colour_view(_views[View.COLOUR])
+	Settings.changed.connect(_on_settings_changed)
 	_show_view(View.CATEGORY)
 	_refresh()
 
@@ -405,7 +406,8 @@ func _slot_category(slot) -> String:
 
 func _slot_title(slot) -> String:
 	if slot is Dictionary:
-		return str((slot as Dictionary).get("word", "")).to_lower()
+		var word := str((slot as Dictionary).get("word", ""))
+		return TargetLanguage.display_word(_slot_category(slot), word).to_lower()
 	return "colors"
 
 
@@ -423,7 +425,7 @@ func _activate() -> void:
 	var pair := _slot_pair(slot)
 	if pair != null:
 		var before := str((slot as Dictionary).get("word", ""))
-		_audio_confirm_selection(before)
+		_audio_confirm_selection(pair.category, before)
 		pair_selected.emit(pair.category, before, pair.opposite_of(before))
 		return
 	Audio.play("select")
@@ -637,7 +639,7 @@ func _paint(swatch: Button, colour: ColorDefinition) -> void:
 	if swatch == null:
 		return
 	var shade := Content.color_of(colour.word, Color.WHITE)
-	swatch.text = colour.word
+	swatch.text = TargetLanguage.display_word(Content.COLOR_CATEGORY, colour.word)
 	for state in ["normal", "disabled"]:
 		swatch.add_theme_stylebox_override(state,
 			UiKit.stylebox(shade, 12, 2, shade.lightened(0.25), 6))
@@ -663,7 +665,8 @@ func _emit_before_preview() -> void:
 
 
 func _show_colour_confirmation(colour: ColorDefinition, step_name: String) -> void:
-	_colour_feedback.text = "「%s」を%sの色にえらびました。" % [colour.word, step_name]
+	_colour_feedback.text = "「%s」を%sの色にえらびました。" % [
+		TargetLanguage.display_word(Content.COLOR_CATEGORY, colour.word), step_name]
 	_colour_feedback.visible = true
 	_colour_feedback.add_theme_color_override("font_color", UiKit.OK)
 	var shade := Content.color_of(colour.word, Color.WHITE)
@@ -674,9 +677,9 @@ func _show_colour_confirmation(colour: ColorDefinition, step_name: String) -> vo
 
 ## A confirmation chime alone is easy to miss in a busy classroom. Saying the chosen word
 ## makes the feedback useful to an ESL learner as well as confirming that the tap landed.
-func _audio_confirm_selection(word: String) -> void:
+func _audio_confirm_selection(category: String, word: String) -> void:
 	Audio.play("select")
-	Tts.speak(word, 0.9)
+	Tts.speak(TargetLanguage.display_word(category, word), 0.9)
 
 
 func _confirm_colour() -> void:
@@ -687,7 +690,7 @@ func _confirm_colour() -> void:
 	_colour_committing = true
 	if _colour_step == ColourStep.BEFORE:
 		var selected_before: ColorDefinition = colours[_was_index]
-		_audio_confirm_selection(selected_before.word)
+		_audio_confirm_selection(Content.COLOR_CATEGORY, selected_before.word)
 		_emit_before_preview()
 		_colour_committing = false
 		before_colour_selected.emit(selected_before.word)
@@ -697,7 +700,7 @@ func _confirm_colour() -> void:
 	if was.word == now.word:
 		_colour_committing = false
 		return
-	_audio_confirm_selection(now.word)
+	_audio_confirm_selection(Content.COLOR_CATEGORY, now.word)
 	_show_colour_confirmation(now, "いま")
 	await get_tree().create_timer(COLOUR_CONFIRM_TIME).timeout
 	_colour_committing = false
@@ -919,6 +922,11 @@ func _show_view(view: int) -> void:
 	for key in _views:
 		(_views[key] as Control).visible = key == view
 	_refresh()
+
+
+func _on_settings_changed() -> void:
+	_refresh()
+	_sync_colour()
 
 
 ## The full grid, read-only. WordLab already draws every pair and colour at once and is
