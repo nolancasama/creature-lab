@@ -646,6 +646,12 @@ func set_model_offset(offset: Vector3) -> void:
 		_model_root.position = _base_model_pos + offset
 
 
+## Where the body-length re-centring currently has the model sitting. Exists so the
+## re-centring can be measured rather than eyeballed - see --recentretest.
+func model_offset() -> Vector3:
+	return Vector3.ZERO if _model_root == null else _model_root.position - _base_model_pos
+
+
 func attach_to_socket(socket_name: String, node: Node3D) -> void:
 	var host: Node3D = sockets.get(socket_name, body)
 	host.add_child(node)
@@ -1216,6 +1222,26 @@ func advance_selection_reaction(delta: float) -> void:
 
 
 # --- Idle life ---------------------------------------------------------------
+
+## Re-measure the body-length re-centring now that there is a skeleton the engine will
+## actually pose.
+##
+## Traits can be applied while the rig is still outside the tree: the chamber builds its
+## creature complete and only then adds it, which is deliberate - it is what stops a plain
+## animal being visible for a frame. But CreatureDeformer._recentre() measures how far the
+## body grew by reading get_bone_global_pose(), and an out-of-tree skeleton has no global
+## pose to report, so it measured a delta of zero and never slid the model back.
+##
+## A lengthened animal therefore arrived in the chamber sitting exactly where an ordinary
+## one would - up to 0.27 world units off, on a horse - and stayed there until some later
+## apply() happened to run inside the tree. The first LONG beat did precisely that, which
+## is why the creature appeared to snap back to normal and then jump into place at the
+## first "Now it is short". Re-running it here costs a few bone writes once. See
+## --recentretest.
+func _ready() -> void:
+	if deformer != null:
+		deformer.apply()
+
 
 func _process(delta: float) -> void:
 	_clock += delta * tempo * (pace.playback if pace != null and not movement_locked else 1.0)

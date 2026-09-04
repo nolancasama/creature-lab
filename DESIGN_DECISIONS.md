@@ -1,5 +1,25 @@
 # Design decisions
 
+## Creature continuity into the chamber
+
+- `CreatureRig._ready()` re-runs `deformer.apply()`. Traits are deliberately applied while
+  a rig is still outside the tree - the chamber builds its creature complete so no plain
+  animal is ever visible - but `CreatureDeformer._recentre()` measures how far the body
+  grew via `get_bone_global_pose()`, and an out-of-tree skeleton reports none. So a
+  lengthened animal was never slid back and arrived sitting where an ordinary one would:
+  0.245 units off on a dog, 0.275 on a horse, 0.011 on a penguin. It stayed wrong until
+  some later `apply()` ran inside the tree - which the first LONG beat did, hence a
+  creature that looked like it reset to normal and then jumped into place at the first
+  "Now it is short", and hence why it was only sometimes noticed.
+- The reported symptom was "the creature reverts to its base form", and the plan proposed
+  reparenting the live rig across the handoff to avoid reconstruction. Measurement showed
+  the reconstruction was fine - body length was already correct on frame one - and only
+  the model offset differed. The rig transfer was not needed and was not done.
+- `--recentretest` compares an in-tree lengthened rig against one lengthened before being
+  added, per animal. It asserts a real offset exists first, because a test that only
+  compared the two paths would pass with both at zero - which is exactly how the first
+  version of it passed against the bug.
+
 ## Teacher Settings
 
 - Settings is an overlay mounted above the live scene by `Main`, not a routed phase.

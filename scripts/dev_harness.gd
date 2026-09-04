@@ -43,6 +43,9 @@ extends RefCounted
 
 const SHOT_DELAY := 1.6
 
+const LONG_BODY := 1.95 ## The LENGTH pair's "long" value, as --splittest actually picks it.
+const RECENTRE_TOLERANCE := 0.005 ## World units. The observed jump was 0.245.
+
 const SPLIT_PICKS := [
 	["LENGTH", "long", "short"],
 	["HARDNESS", "hard", "soft"],
@@ -57,7 +60,7 @@ static func is_requested() -> bool:
 	for arg in OS.get_cmdline_user_args():
 		var text := str(arg)
 		if text in ["--selftest", "--speechtest", "--scaffoldtest", "--autoplay", "--backtest",
-				"--splittest", "--settingstest", "--youngflowtest",
+				"--splittest", "--settingstest", "--recentretest", "--youngflowtest",
 				"--tallflowtest", "--bones", "--gaittest", "--reverttest", "--stancetest",
 				"--extractanims", "--runtest", "--stridecheck"] \
 				or text.begins_with("--shot=") or text.begins_with("--phase=") or text.begins_with("--look="):
@@ -102,6 +105,8 @@ static func run_if_requested(main: Node) -> void:
 		_splittest(main)
 	elif args.has("--settingstest"):
 		_settingstest(main)
+	elif args.has("--recentretest"):
+		_recentretest(main)
 	elif args.has("--youngflowtest"):
 		_youngflowtest(main)
 	elif args.has("--tallflowtest"):
@@ -368,6 +373,83 @@ static func _splittest(main: Node) -> void:
 			% [past_slots, present_slots])
 		ok = false
 	print("[splittest] PASS" if ok else "[splittest] FAIL: expected NAMING")
+	tree.quit(0 if ok else 1)
+
+
+## A lengthened body must be re-centred on the frame it is lengthened, not the frame after.
+##
+## CreatureDeformer.apply() writes the body bone poses and then calls _recentre(), which
+## reads get_bone_global_pose() to measure how far the body grew. Writing a bone pose does
+## not recompute the global transforms derived from it - the animator says so in its own
+## comment, and every other place in this codebase that reads bone globals after writing
+## poses calls force_update_all_bone_transforms() first. _recentre() did not, so it measured
+## the PREVIOUS pose: zero on a rig's first application, which is exactly when a LONG animal
+## needs the correction most. The animal rendered un-recentred until some later apply()
+## happened to read a fresh skeleton, which is the intermittent pop.
+##
+## Measured rather than asserted structurally: the test lengthens a rig, records where the
+## model was put, then forces the skeleton and re-measures. A correct _recentre() has
+## nothing left to find.
+static func _recentretest(main: Node) -> void:
+	var tree := main.get_tree()
+	var ids := Content.animal_ids()
+	if ids.is_empty():
+		printerr("[recentretest] FAIL: no animals")
+		tree.quit(1)
+		return
+
+	var host := Node3D.new()
+	main.add_child(host)
+	var ok := true
+	var checked := 0
+	for animal_id in ids:
+		# In tree first, lengthened there: the reference value, and the one the Before screen
+		# actually shows the student.
+		var reference := CreatureFactory.build_plain(str(animal_id))
+		if reference == null:
+			continue
+		host.add_child(reference)
+		if reference.deformer == null:
+			reference.queue_free()
+			continue
+		await tree.process_frame
+		reference.deformer.set_state(LONG_BODY, 1.0)
+		var expected: Vector3 = reference.model_offset()
+		reference.queue_free()
+
+		# A lengthened body that is not slid back is the bug: it sits where an ordinary
+		# animal would, which is exactly what "it went back to normal" looks like.
+		if expected.length() < 0.01:
+			printerr("[recentretest] FAIL: %s re-centred by %.4f in tree; expected a real offset"
+				% [animal_id, expected.length()])
+			ok = false
+			continue
+
+		# The chamber's path: built and lengthened OUTSIDE the tree, then added. An
+		# out-of-tree skeleton reports no global pose, so _recentre() measured nothing and
+		# left the animal un-slid until the first transformation beat happened to re-apply.
+		var built := CreatureFactory.build_plain(str(animal_id))
+		if built == null:
+			continue
+		built.deformer.set_state(LONG_BODY, 1.0)
+		host.add_child(built)
+		await tree.process_frame
+		var landed: Vector3 = built.model_offset()
+
+		checked += 1
+		var drift := (landed - expected).length()
+		if drift > RECENTRE_TOLERANCE:
+			printerr("[recentretest] FAIL: %s landed at %.4f but the Before screen shows %.4f (jump of %.4f)"
+				% [animal_id, landed.length(), expected.length(), drift])
+			ok = false
+		built.queue_free()
+
+	if checked == 0:
+		printerr("[recentretest] FAIL: no rig could be measured")
+		ok = false
+	host.queue_free()
+	print("[recentretest] %d animals measured" % checked)
+	print("[recentretest] PASS" if ok else "[recentretest] FAIL")
 	tree.quit(0 if ok else 1)
 
 
