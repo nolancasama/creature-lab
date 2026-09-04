@@ -36,7 +36,9 @@ const HUD_TOP := 24 ## Top edge of the floating buttons, above the panel on both
 const PROGRESS_FONT := UiKit.SMALL * 3 ## Readable from the back of a classroom.
 const HUD_BUTTON := 78 ## 50% taller than the former 52px back control.
 const HUD_BACK_WIDTH := 138 ## Room for the chevron and the new Back label.
-const GEAR_BUTTON_SIZE := 70 ## 33% smaller than the former 104px settings gear.
+## 33% smaller than the former 104px settings gear. Shared with the zoo through UiKit so
+## the gear is the same control in the same corner wherever it appears.
+const GEAR_BUTTON_SIZE := UiKit.GEAR_SIZE
 const HUD_GAP := 24 ## Visible gap between the HUD row and the panel below it.
 ## Top edge for a HUD_BUTTON-sized control so its centre line matches the gear's. This is
 ## derived rather than typed so the two stay aligned when either control changes size.

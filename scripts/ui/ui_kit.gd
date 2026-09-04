@@ -215,6 +215,14 @@ static func icon_button(icon: String, size := 48) -> Button:
 
 const GEAR_ICON := preload("res://ui/gear.svg")
 
+## Every screen that offers the gear puts it the same size in the same corner, so a teacher
+## reaches for it without looking. Kept here with gear_button() rather than per scene: the
+## zoo's copy was sized to the button beside it and ended up a different control in a
+## different place from the picker's.
+const GEAR_SIZE := 70
+const GEAR_INSET_RIGHT := 32
+const GEAR_INSET_TOP := 24
+
 
 ## The Teacher Settings gear, identical on every screen that offers one. Callers position
 ## it and connect `pressed`; everything about how it looks lives here so the screens cannot

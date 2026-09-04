@@ -69,6 +69,12 @@ static func is_requested() -> bool:
 
 
 static func run_if_requested(main: Node) -> void:
+	# Every driven test types English, so pin the language rather than inheriting whatever
+	# this machine's teacher settings happen to hold. A real config with target_language="ja"
+	# made --autoplay re-record slot 0 three times and stop short of NAMING, which reads
+	# exactly like a gameplay regression and is not one. The Japanese fixtures set the
+	# language themselves; anything else that needs a specific setting should say so too.
+	Settings.target_language = Settings.TARGET_ENGLISH
 	var args := OS.get_cmdline_user_args()
 	var shot := ""
 	var phase := ""

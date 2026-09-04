@@ -1,7 +1,8 @@
 extends Node3D
 
-const GEAR_SIZE := 52.0 ## Matches the height of the "make another" button beside it.
-const GEAR_GAP := 16.0
+const AGAIN_SIZE := Vector2(180, 52)
+## Centred on the gear's band so the two top controls read as one row across the screen.
+const AGAIN_TOP := UiKit.GEAR_INSET_TOP + (UiKit.GEAR_SIZE - 52) / 2
 const INFO_CLOSE_SIZE := 52.0
 const INFO_NAME_GAP := 16.0
 const INFO_MIN_HEAD_WIDTH := 220.0
@@ -168,23 +169,25 @@ func _build_ui() -> void:
 	_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	root.add_child(_hint)
 
+	# Top-left, opposite the gear. Both used to sit in the right corner, which put the one
+	# control a student presses next to the one only a teacher should touch.
 	var again := UiKit.button("もう一度つくる", UiKit.BODY, true)
 	UiKit.style_primary(again)
-	again.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
-	again.custom_minimum_size = Vector2(180, 52)
-	again.offset_left = -208
-	again.offset_right = -28
-	again.offset_top = 26
-	again.offset_bottom = 78
+	again.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
+	again.custom_minimum_size = AGAIN_SIZE
+	again.offset_left = UiKit.GEAR_INSET_RIGHT ## Inset to match the gear's, mirrored.
+	again.offset_right = UiKit.GEAR_INSET_RIGHT + AGAIN_SIZE.x
+	again.offset_top = AGAIN_TOP
+	again.offset_bottom = AGAIN_TOP + AGAIN_SIZE.y
 	again.pressed.connect(func() -> void:
 		Audio.play("select")
 		Game.set_phase(Game.Phase.ANIMAL_SELECTION))
 	root.add_child(again)
 
-	# Sized to the band "もう一度つくる" already occupies rather than to the picker's larger
-	# gear: matching its neighbour here reads better than matching a button on another
-	# screen. Settings opens over the zoo now, so leaving it costs the teacher nothing.
-	var gear := UiKit.gear_button(GEAR_SIZE)
+	# The shared size and corner, so the gear is in the same place on every screen that has
+	# one. It was previously sized to the button beside it, which made it a different
+	# control in a different position from the picker's.
+	var gear := UiKit.gear_button(UiKit.GEAR_SIZE)
 	# Repainted for this screen only. The shared gear is near-white because every other
 	# screen that carries one sits on a dark stage; the zoo is a pale sky, where the same
 	# icon washes out beside a title already darkened for exactly that reason.
@@ -192,10 +195,10 @@ func _build_ui() -> void:
 	gear.add_theme_color_override("icon_hover_color", UiKit.ACCENT.darkened(0.45))
 	gear.add_theme_color_override("icon_pressed_color", UiKit.ACCENT.darkened(0.45))
 	gear.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
-	gear.offset_right = -208 - GEAR_GAP
-	gear.offset_left = gear.offset_right - GEAR_SIZE
-	gear.offset_top = 26
-	gear.offset_bottom = 26 + GEAR_SIZE
+	gear.offset_right = -UiKit.GEAR_INSET_RIGHT
+	gear.offset_left = gear.offset_right - UiKit.GEAR_SIZE
+	gear.offset_top = UiKit.GEAR_INSET_TOP
+	gear.offset_bottom = UiKit.GEAR_INSET_TOP + UiKit.GEAR_SIZE
 	gear.pressed.connect(func() -> void: Game.open_settings())
 	root.add_child(gear)
 

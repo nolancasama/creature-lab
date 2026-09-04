@@ -30,6 +30,12 @@ func _ready() -> void:
 
 	_body = UiKit.rich("", UiKit.SMALL)
 	_body.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# Every line wraps to two or three at this width, so the buffer has always been taller
+	# than the panel - and a label that simply overflows loses the BOTTOM, which is the
+	# newest line and the only one anybody reads. Following the tail keeps the most recent
+	# event on screen and lets the old ones fall off the top, where they belong.
+	_body.scroll_active = true
+	_body.scroll_following = true
 	panel.add_child(_body)
 
 
