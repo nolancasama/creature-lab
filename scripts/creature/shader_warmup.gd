@@ -22,6 +22,11 @@ extends Node
 ## compile cost is the same, but the title screen appears immediately and the stalls are
 ## small and staggered while the student is still reading it, instead of one long freeze.
 
+## Emitted once every variant has been drawn and the driver has had its settling frames.
+## The loading screen waits on this rather than on a timer: the compile cost is whatever
+## the machine's driver makes it, and a classroom's Chromebooks do not agree on that.
+signal finished()
+
 ## Warmed in this order; each entry is drawn on its own frame.
 const KINDS := [
 	"flame", "embers", "snow", "cold_mist", "breath", "frost_cling",
@@ -40,12 +45,17 @@ var _idle_frames := 0
 
 ## Call once, as early as there is a tree to attach to. Does nothing when there is no
 ## renderer (headless selftests) since there is nothing to compile.
-static func run(host: Node) -> void:
+##
+## Returns the running instance so a caller can wait on `finished`, or null when there was
+## nothing to warm - a caller waiting on that must treat null as "already done".
+static func run(host: Node) -> ShaderWarmup:
 	if host == null or not host.is_inside_tree():
-		return
+		return null
 	if DisplayServer.get_name() == "headless":
-		return
-	host.add_child(ShaderWarmup.new())
+		return null
+	var warmup := ShaderWarmup.new()
+	host.add_child(warmup)
+	return warmup
 
 
 func _ready() -> void:
@@ -87,6 +97,8 @@ func _process(_delta: float) -> void:
 	# Give the driver a few more drawn frames to finish before tearing the viewport down.
 	_idle_frames += 1
 	if _idle_frames > 3:
+		# Emitted before the free so a listener still has a live object to hear it from.
+		finished.emit()
 		queue_free()
 
 

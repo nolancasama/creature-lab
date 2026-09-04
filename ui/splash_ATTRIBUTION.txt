@@ -1,0 +1,10 @@
+splash.jpg — Creature Lab loading screen art
+
+Generated with ChatGPT (OpenAI) by the project owner, September 2026, and supplied for
+use as this game's loading screen. Re-encoded here from the delivered 1536x1024 PNG to
+progressive JPEG (quality 86) to cut 1.83 MB down to ~208 KB: the file is downloaded on a
+school network before the game can start, so its size is part of the wait it exists to
+cover.
+
+Depicts the Matsubara Zoo / Creature Lab title over a tiger on the lab platform, in the
+game's own palette (cyan accent, gold, dark navy).

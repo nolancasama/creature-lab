@@ -23,7 +23,12 @@ func _ready() -> void:
 	# while the animal picker is up, not when a student taps HOT or COLD. See ShaderWarmup
 	# for the measurements - on the web renderer this is the difference between a first
 	# HOT pick taking ten seconds and taking a frame.
-	ShaderWarmup.run(self)
+	var warmup := ShaderWarmup.run(self)
+	# Those warmup frames block, so the picker underneath spends the first seconds of a
+	# session stuttering. Cover it with the splash until the warmup says it is done. Not
+	# under the harness: it would sit over every --shot= capture and every driven test.
+	if not DevHarness.is_requested():
+		LoadingScreen.show_over(self, warmup)
 	DevHarness.run_if_requested(self)
 
 
