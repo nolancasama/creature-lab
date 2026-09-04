@@ -55,6 +55,27 @@
   30.0) becomes the one-frame pop that swap exists to avoid. The camera and platform were
   already hair-matched (`apply_before_view()`); the ground was the one thing that wasn't.
 
+## Speech difficulty and the checking state
+
+- The assisted-pass threshold belongs to the mode, not the scene: Easy 3, Standard 4,
+  Challenge 5 (`Settings.ASSIST_AFTER`). Tolerance and patience move together, because a
+  recogniser that is harder to satisfy owes the student more tries. One flat threshold of
+  three gave the strictest mode the fewest real chances, which is backwards. From
+  classroom use: students enjoyed the challenge and several retried past three of their
+  own accord, and an assisted pass arriving too early took that away.
+- Standard is the default for a machine with no saved teacher configuration. Existing
+  configs are untouched - `load_settings()` reads whatever key is already there.
+- `きびしい` became `チャレンジ`: the mode is a harder game, not a harsher judgement of the
+  child, and it now also grants the most retries.
+- `SpeechSession.State.CHECKING` covers the gap between Chrome's `onspeechend` and the
+  transcript returning from its server. It is a real state, not a caption, because the
+  microphone must be shut to taps for its duration - a second attempt started there races
+  the first one's result. `timeout()` deliberately still excludes it: timing out while a
+  result is in flight would discard an answer the student already gave.
+- Adding it meant admitting CHECKING to the `final`, `interim`, `start` and `browser_ended`
+  guards. Missing `final` alone would have ignored every utterance in a real browser,
+  since `speechend` always precedes `final`; the injected-backend fixtures caught that.
+
 ## Speech attempts
 
 - One microphone tap creates one monotonic `SpeechSession`. Browser callbacks carry its ID;

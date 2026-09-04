@@ -2962,6 +2962,46 @@ static func _run_session_lifecycle_fixtures(failures: Array[String]) -> void:
 	_check(failures, results.size() == 1
 		and int(results[0]["outcome"]) == SpeechAttemptClassifier.Outcome.UNCERTAIN,
 		"session: end-without-result did not produce exactly one UNCERTAIN")
+
+	# Chrome hears the student stop well before it returns a transcript. That gap is the
+	# Checking state, and the microphone is shut for its duration: a second attempt started
+	# there would race the result already coming back for the first.
+	results.clear()
+	var checking_id := service.start()
+	injected.browser_started.emit(checking_id)
+	injected.speech_ended.emit(checking_id)
+	_check(failures, service.session_state() == SpeechSession.State.CHECKING,
+		"session: speech end did not enter Checking")
+	_check(failures, results.is_empty(),
+		"session: Checking decided the attempt before the transcript arrived")
+	service.toggle()
+	_check(failures, service.session_state() == SpeechSession.State.CHECKING
+		and service.active_session != null
+		and service.active_session.session_id == checking_id
+		and not service.active_session.queued_restart,
+		"session: a tap during Checking started or queued another attempt")
+	# The transcript lands and the attempt resolves normally out of Checking.
+	injected.final.emit(checking_id, PackedStringArray(["it was strong"]),
+		PackedFloat32Array([-1.0]))
+	_check(failures, results.size() == 1
+		and int(results[0]["outcome"]) == SpeechAttemptClassifier.Outcome.PASS,
+		"session: a result arriving during Checking did not resolve the attempt")
+	injected.browser_ended.emit(checking_id)
+
+	# A strong interim can accept the answer before Chrome ever reports speech ending, so
+	# Checking must not be a required step on the way to a result.
+	results.clear()
+	var early_id := service.start()
+	injected.browser_started.emit(early_id)
+	injected.interim.emit(early_id, PackedStringArray(["it was strong"]),
+		PackedFloat32Array([-1.0]))
+	_check(failures, results.size() == 1
+		and int(results[0]["outcome"]) == SpeechAttemptClassifier.Outcome.PASS,
+		"session: a strong interim was blocked by skipping Checking")
+	injected.speech_ended.emit(early_id)
+	_check(failures, results.size() == 1,
+		"session: speech end after an accepted interim produced a second result")
+	injected.browser_ended.emit(early_id)
 	service.free()
 
 
@@ -2998,9 +3038,26 @@ static func _scaffoldtest(main: Node) -> void:
 	# assisted one - the child said it.
 	await _scaffold_case(tree, failures, "2 second try succeeds",
 		["it was soft", "it was hard"], true, false, 0)
-	# 3: three real tries, none of them correct. The third is taken.
-	await _scaffold_case(tree, failures, "3 third effort accepted",
-		["it was soft", "it was smooth", "it was rough"], true, true, 0)
+	# 3: three real tries on Easy, none correct. The third is taken.
+	await _scaffold_case(tree, failures, "3 easy third effort accepted",
+		["it was soft", "it was smooth", "it was rough"], true, true, 0,
+		Settings.HEAR_LENIENT)
+	# 3b: the same three tries on Standard buy nothing - it allows four. This is the whole
+	# point of the change: students were retrying past three of their own accord and an
+	# assisted pass arriving on the third took the challenge away from them.
+	await _scaffold_case(tree, failures, "3b standard still retries at three",
+		["it was soft", "it was smooth", "it was rough"], false, false, 3,
+		Settings.HEAR_NORMAL)
+	await _scaffold_case(tree, failures, "3c standard accepts the fourth",
+		["it was soft", "it was smooth", "it was rough", "it was bumpy"], true, true, 0,
+		Settings.HEAR_NORMAL)
+	# 3d/3e: Challenge is stricter to satisfy, so it owes the student the most tries.
+	await _scaffold_case(tree, failures, "3d challenge still retries at four",
+		["it was soft", "it was smooth", "it was rough", "it was bumpy"], false, false, 4,
+		Settings.HEAR_EXACT)
+	await _scaffold_case(tree, failures, "3e challenge accepts the fifth",
+		["it was soft", "it was smooth", "it was rough", "it was bumpy", "it was coarse"],
+		true, true, 0, Settings.HEAR_EXACT)
 	# 4: uncertainty in the middle. Two effortful failures either side are still two.
 	await _scaffold_case(tree, failures, "4 uncertainty is not a try",
 		["it was soft", "thank you", "it was smooth"], false, false, 2)
@@ -3028,7 +3085,10 @@ static func _scaffoldtest(main: Node) -> void:
 ## externally visible difference between "said it" and "was given it".
 static func _scaffold_case(tree: SceneTree, failures: Array[String], label: String,
 		said: Array, expect_filled: bool, expect_assisted: bool,
-		expected_failures: int) -> void:
+		expected_failures: int, strictness := Settings.HEAR_LENIENT) -> void:
+	# The mode owns how many tries the student gets, so every case has to state which mode
+	# it is describing. Restored by the caller-independent default above.
+	Settings.strictness = strictness
 	_goto("lab")
 	await tree.create_timer(1.4).timeout
 	var word_lab := _find_word_lab(Router.current_scene)

@@ -59,10 +59,18 @@ func _build() -> void:
 		func() -> String: return Settings.prompt_mode,
 		func(value: String) -> void: Settings.prompt_mode = value))
 
+	# きびしい became チャレンジ: the mode is not a harsher judgement of the child, it is a
+	# harder game, and it now also gives them the most tries before the sentence is handed
+	# to them. The label a student might glimpse should say that.
 	column.add_child(_choice_section(
 		"発音判定",
-		"発音の違いを広く認識します。",
-		[["やさしい", str(Settings.HEAR_LENIENT)], ["標準", str(Settings.HEAR_NORMAL)], ["きびしい", str(Settings.HEAR_EXACT)]],
+		# Worded from the kanji the bundled subset actually carries: 多 and 数 are not in it,
+		# and the font check catches that rather than letting tofu boxes reach a classroom.
+		"きびしい設定ほど、やりなおせるチャンスがふえます。（%d / %d / %d）" % [
+			Settings.ASSIST_AFTER[Settings.HEAR_LENIENT],
+			Settings.ASSIST_AFTER[Settings.HEAR_NORMAL],
+			Settings.ASSIST_AFTER[Settings.HEAR_EXACT]],
+		[["やさしい", str(Settings.HEAR_LENIENT)], ["標準", str(Settings.HEAR_NORMAL)], ["チャレンジ", str(Settings.HEAR_EXACT)]],
 		func() -> String: return str(Settings.strictness),
 		func(value: String) -> void: Settings.strictness = int(value)))
 

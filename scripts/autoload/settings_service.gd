@@ -34,9 +34,25 @@ const HEAR_LENIENT := 0
 const HEAR_NORMAL := 1
 const HEAR_EXACT := 2
 
+## How many counted EFFORTFUL_WRONG attempts before the scaffold grants an assisted pass.
+##
+## Tolerance and patience move together: a recogniser that is harder to satisfy owes the
+## student more tries before the game steps in and hands them the sentence. One flat
+## threshold of three meant the strictest mode gave the fewest real chances, which is
+## backwards.
+##
+## From classroom use: students enjoyed the challenge and several retried past three of
+## their own accord, and because other students were passing normally the recogniser never
+## read as broken. An assisted pass arriving too early takes that away, so the number is
+## now the mode's own.
+const ASSIST_AFTER := {HEAR_LENIENT: 3, HEAR_NORMAL: 4, HEAR_EXACT: 5}
+
 var choice_mode: String = CHOICE_FREE
 var prompt_mode: String = PROMPT_FULL
-var strictness: int = HEAR_LENIENT
+## Standard is the recommended classroom mode, so it is what a machine with no saved
+## teacher configuration starts on. Only fresh installs are affected - load_settings()
+## reads whatever an existing config already holds.
+var strictness: int = HEAR_NORMAL
 var graphics_quality := GraphicsQuality.STANDARD
 var enabled_pairs := PackedStringArray() ## Empty = all.
 var enabled_colors := PackedStringArray() ## Empty = all.
@@ -101,6 +117,12 @@ func save_settings() -> void:
 	_apply_display()
 	GraphicsQuality.set_profile(graphics_quality)
 	changed.emit()
+
+
+## Counted effortful failures the current mode allows before an assisted pass. Read through
+## here rather than copied into the scene, so the three modes stay one table.
+func assist_after_failures() -> int:
+	return int(ASSIST_AFTER.get(strictness, ASSIST_AFTER[HEAR_NORMAL]))
 
 
 func set_graphics_quality(value: String) -> void:

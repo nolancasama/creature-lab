@@ -8,6 +8,10 @@ signal interim(session_id: int, alternatives: PackedStringArray, confidences: Pa
 signal final(session_id: int, alternatives: PackedStringArray, confidences: PackedFloat32Array)
 signal error(session_id: int, reason: String)
 signal no_match(session_id: int)
+## The recogniser heard the student stop talking. It still owes a transcript - Chrome sends
+## the audio away and waits on a server - so this marks the start of the gap the student
+## would otherwise spend looking at a screen that appears to have ignored them.
+signal speech_ended(session_id: int)
 signal browser_ended(session_id: int)
 
 

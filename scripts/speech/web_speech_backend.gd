@@ -19,6 +19,7 @@ window.__godotSpeech = (function () {
 		r.onerror = null;
 		r.onend = null;
 		r.onnomatch = null;
+		r.onspeechend = null;
 	}
 	function abandon(r) {
 		if (!r) return;
@@ -52,6 +53,10 @@ window.__godotSpeech = (function () {
 		};
 		r.onerror = function (e) { send('error', id, e.error || 'unknown'); };
 		r.onnomatch = function () { send('nomatch', id, ''); };
+		// Fires when Chrome decides the student has stopped talking, which is well before
+		// the transcript comes back from the server. That gap is what the Checking state
+		// covers.
+		r.onspeechend = function () { send('speechend', id, ''); };
 		r.onend = function () {
 			if (api.rec === r) api.rec = null;
 			send('end', id, '');
@@ -171,6 +176,8 @@ func _on_js_event(args: Array) -> void:
 			error.emit(session_id, payload)
 		"nomatch":
 			no_match.emit(session_id)
+		"speechend":
+			speech_ended.emit(session_id)
 		"end":
 			browser_ended.emit(session_id)
 

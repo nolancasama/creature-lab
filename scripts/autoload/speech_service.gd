@@ -65,6 +65,7 @@ func _set_backend(candidate: SpeechBackend) -> void:
 	backend.final.connect(_on_final)
 	backend.error.connect(_on_error)
 	backend.no_match.connect(_on_no_match)
+	backend.speech_ended.connect(_on_speech_ended)
 	backend.browser_ended.connect(_on_browser_ended)
 	backend_changed.emit(backend.backend_id())
 
@@ -115,7 +116,8 @@ func start() -> int:
 			_emit_state(active_session)
 		return active_session.session_id
 	if active_session != null and active_session.state in [
-			SpeechSession.State.STARTING, SpeechSession.State.LISTENING]:
+			SpeechSession.State.STARTING, SpeechSession.State.LISTENING,
+			SpeechSession.State.CHECKING]:
 		return active_session.session_id
 	if not _target_configured or backend == null:
 		Diagnostics.note("[speech]", "start refused: no active target or backend")
@@ -143,6 +145,11 @@ func toggle() -> void:
 	match active_session.state:
 		SpeechSession.State.STARTING, SpeechSession.State.LISTENING:
 			cancel()
+		SpeechSession.State.CHECKING:
+			# Ignored, not queued. The student's answer is already on its way to the
+			# recogniser; starting another attempt here would race its own result, and
+			# queuing one would fire an unwanted recording the moment it lands.
+			pass
 		SpeechSession.State.FINISHING:
 			start() # Queues the tap; onend consumes it.
 		_:
@@ -210,7 +217,8 @@ func _on_interim(session_id: int, alternatives: PackedStringArray,
 	if not _is_current(session_id, "interim"):
 		return
 	if active_session.result_produced or active_session.state not in [
-			SpeechSession.State.STARTING, SpeechSession.State.LISTENING]:
+			SpeechSession.State.STARTING, SpeechSession.State.LISTENING,
+			SpeechSession.State.CHECKING]:
 		_log_ignored(session_id, "interim")
 		return
 	transcript_observed.emit(session_id, alternatives, false)
@@ -234,7 +242,8 @@ func _on_final(session_id: int, alternatives: PackedStringArray,
 	if not _is_current(session_id, "final"):
 		return
 	if active_session.result_produced or active_session.state not in [
-			SpeechSession.State.STARTING, SpeechSession.State.LISTENING]:
+			SpeechSession.State.STARTING, SpeechSession.State.LISTENING,
+			SpeechSession.State.CHECKING]:
 		_log_ignored(session_id, "final")
 		return
 	transcript_observed.emit(session_id, alternatives, true)
@@ -273,12 +282,25 @@ func _on_no_match(session_id: int) -> void:
 		backend.stop(session_id)
 
 
+## Chrome heard the student stop talking; the transcript is still in flight. Nothing about
+## the attempt has been decided, so this only moves the state - which is what shuts the
+## microphone to taps and puts "checking" on screen for the length of the round trip.
+func _on_speech_ended(session_id: int) -> void:
+	if not _is_current(session_id, "speechend"):
+		return
+	if not active_session.speech_ended():
+		return
+	_log_event(session_id, "speech_end")
+	_emit_state(active_session)
+
+
 func _on_browser_ended(session_id: int) -> void:
 	if not _is_current(session_id, "end"):
 		return
 	_log_event(session_id, "browser_end")
 	if not active_session.result_produced and active_session.state in [
-			SpeechSession.State.STARTING, SpeechSession.State.LISTENING]:
+			SpeechSession.State.STARTING, SpeechSession.State.LISTENING,
+			SpeechSession.State.CHECKING]:
 		var result := SpeechAttemptClassifier.classify(PackedStringArray(), active_session.before,
 			active_session.after, active_session.tolerance, active_session.clause)
 		_complete_attempt(active_session, result, "end", 0.0, true)

@@ -6,10 +6,16 @@ extends RefCounted
 ## machine, and only legal transitions are accepted. That distinction is what prevents a
 ## late final or duplicate onend from turning into a second classroom attempt.
 
+## CHECKING sits between the student finishing and the recogniser answering. Chrome sends
+## the audio to a server and waits, and on a classroom network that wait is long enough
+## that a screen which still says "speak" reads as a microphone that never heard them.
+## It is a real state rather than a label because the microphone must be shut to taps
+## while it lasts: a second attempt started here would race the first one's result.
 enum State {
 	IDLE,
 	STARTING,
 	LISTENING,
+	CHECKING,
 	FINISHING,
 	COMPLETE,
 	CANCELLED,
@@ -58,8 +64,17 @@ func browser_started(now_msec: int) -> bool:
 	return true
 
 
+## Chrome heard the student stop. A result may still arrive from STARTING or LISTENING if
+## it never fires - it is advisory, not a gate.
+func speech_ended() -> bool:
+	if state != State.LISTENING:
+		return false
+	state = State.CHECKING
+	return true
+
+
 func begin_result(source: String, now_msec: int) -> bool:
-	if result_produced or state not in [State.STARTING, State.LISTENING]:
+	if result_produced or state not in [State.STARTING, State.LISTENING, State.CHECKING]:
 		return false
 	result_produced = true
 	saw_final = source == "final"
@@ -79,12 +94,15 @@ func queue_restart() -> bool:
 
 
 func browser_ended() -> bool:
-	if state not in [State.STARTING, State.LISTENING, State.FINISHING]:
+	if state not in [State.STARTING, State.LISTENING, State.CHECKING, State.FINISHING]:
 		return false
 	state = State.COMPLETE
 	return true
 
 
+## Deliberately not cancellable from CHECKING. The student has already given their answer
+## and the recogniser is fetching it; a tap there would throw away a result that is about
+## to arrive, which from the student's side looks like the game losing their attempt.
 func cancel() -> bool:
 	if state not in [State.STARTING, State.LISTENING]:
 		return false
@@ -94,4 +112,4 @@ func cancel() -> bool:
 
 
 func is_active() -> bool:
-	return state in [State.STARTING, State.LISTENING, State.FINISHING]
+	return state in [State.STARTING, State.LISTENING, State.CHECKING, State.FINISHING]

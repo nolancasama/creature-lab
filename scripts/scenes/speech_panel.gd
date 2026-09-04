@@ -15,6 +15,8 @@ const MIC_IDLE := "タップして話す"
 const MIC_STARTING := "マイクを準備しています… タップで停止"
 const MIC_LISTENING := "聞いています… タップで停止"
 const MIC_QUEUED := "次のマイクを準備しています…"
+## No "tap to stop" on this one: the button is disabled while the answer is being checked.
+const MIC_CHECKING := "チェック中…"
 ## Said in words, above the button, as well as shown on it.
 ##
 ## The button already changed colour and caption, but both live ON the control the student
@@ -26,6 +28,13 @@ const STATUS_IDLE := "マイクは とまっています"
 const STATUS_STARTING := "マイクを じゅんびしています…"
 const STATUS_LISTENING := "● ろくおん中… はなしてください"
 const STATUS_QUEUED := "つぎの ろくおんを じゅんびしています…"
+## The gap between the student finishing and Chrome answering. Without a line of its own it
+## reads as the microphone having missed them, and the next thing they do is press again.
+## The dots are appended by _process so the wait visibly moves; "checking", never
+## "thinking", because the game is checking their English, not having a think about it.
+const STATUS_CHECKING := "チェック中"
+const CHECKING_DOT_CYCLE := 0.45 ## Seconds per dot.
+const CHECKING_DOTS := 3
 const LISTEN_TIMEOUT := 10.0 ## Seconds before an unanswered microphone closes itself.
 
 var _sentence_label: RichTextLabel = null
@@ -43,6 +52,8 @@ var _cancel_label: Button = null
 var _before := ""
 var _after := ""
 var _armed := false
+var _checking := false
+var _checking_clock := 0.0
 var _clause := GrammarValidator.CLAUSE_BOTH
 
 
@@ -233,6 +244,8 @@ func _sync_input_mode() -> void:
 
 ## Hides the panel entirely: nothing to say means nothing to show.
 func show_idle(message := "") -> void:
+	# A result is on screen; the checking caption must not keep animating over it.
+	_checking = false
 	_armed = false
 	_before = ""
 	_after = ""
@@ -269,6 +282,8 @@ func show_target(before: String, after: String, clause := GrammarValidator.CLAUS
 
 ## The sound and pop begin together; callers await this before closing or advancing.
 func show_success(completed_steps: int) -> void:
+	# A result is on screen; the checking caption must not keep animating over it.
+	_checking = false
 	_armed = false
 	visible = true
 	_feedback.text = "できました！  %s" % _target_sentence()
@@ -298,6 +313,8 @@ func _set_completed_steps(completed_steps: int) -> void:
 
 
 func show_failure(heard: String, model_sentence: bool) -> void:
+	# A result is on screen; the checking caption must not keep animating over it.
+	_checking = false
 	_feedback.text = "もう一度ためそう！" if heard.is_empty() \
 		else "もう一度ためそう。「%s」と聞こえました。" % heard
 	_feedback.visible = true
@@ -317,6 +334,8 @@ func show_failure(heard: String, model_sentence: bool) -> void:
 ## Silence and inconclusive recognition are microphone uncertainty, not language failure.
 ## They do not play the fail sound or advance the scaffold ladder.
 func show_uncertain() -> void:
+	# A result is on screen; the checking caption must not keep animating over it.
+	_checking = false
 	_feedback.text = "もう一度言ってみよう！"
 	_feedback.visible = true
 	_feedback.add_theme_color_override("font_color", UiKit.MUTED)
@@ -327,6 +346,8 @@ func show_uncertain() -> void:
 
 
 func show_technical_error(reason: String) -> void:
+	# A result is on screen; the checking caption must not keep animating over it.
+	_checking = false
 	var message := "もう一度言ってみよう！"
 	match reason:
 		"not-allowed", "service-not-allowed":
@@ -406,6 +427,17 @@ func _on_listen_timeout() -> void:
 	Speech.timeout()
 
 
+## Only ever appends to the checking caption, and only while that state is live. Plain
+## text rather than a spinner or a shader on purpose: this waits on a network round trip,
+## and the indicator must not be the thing that stutters while the browser is busy.
+func _process(delta: float) -> void:
+	if not _checking or _status == null:
+		return
+	_checking_clock += delta
+	var shown := int(_checking_clock / CHECKING_DOT_CYCLE) % (CHECKING_DOTS + 1)
+	_status.text = STATUS_CHECKING + ".".repeat(shown)
+
+
 func _on_session_state_changed(_session_id: int, state: int, restart_queued: bool) -> void:
 	if not Speech.uses_microphone():
 		return
@@ -415,11 +447,20 @@ func _on_session_state_changed(_session_id: int, state: int, restart_queued: boo
 		_listen_timer.stop()
 	var armed := state in [SpeechSession.State.STARTING, SpeechSession.State.LISTENING] \
 		or restart_queued
+	if state == SpeechSession.State.CHECKING and not _checking:
+		_checking_clock = 0.0
+	_checking = state == SpeechSession.State.CHECKING
+	# The one state that shuts the button rather than re-labelling it. A tap here would
+	# race the result already on its way back, and a six-year-old who thinks nothing
+	# happened will press again - which is exactly the case this state exists to prevent.
+	_mic_button.disabled = _checking
 	match state:
 		SpeechSession.State.STARTING:
 			_mic_button.text = MIC_STARTING
 		SpeechSession.State.LISTENING:
 			_mic_button.text = MIC_LISTENING
+		SpeechSession.State.CHECKING:
+			_mic_button.text = MIC_CHECKING
 		SpeechSession.State.FINISHING:
 			_mic_button.text = MIC_QUEUED if restart_queued else MIC_IDLE
 		_:
@@ -430,11 +471,14 @@ func _on_session_state_changed(_session_id: int, state: int, restart_queued: boo
 				_status.text = STATUS_STARTING
 			SpeechSession.State.LISTENING:
 				_status.text = STATUS_LISTENING
+			SpeechSession.State.CHECKING:
+				_status.text = STATUS_CHECKING
 			SpeechSession.State.FINISHING:
 				_status.text = STATUS_QUEUED if restart_queued else STATUS_IDLE
 			_:
 				_status.text = STATUS_IDLE
-		_status.add_theme_color_override("font_color", UiKit.OK if armed else UiKit.MUTED)
+		var tone := UiKit.OK if armed else UiKit.MUTED
+		_status.add_theme_color_override("font_color", UiKit.GOLD if _checking else tone)
 		# Only meaningful when the microphone is the input; a typed round has no state to
 		# report and the line would just be noise under the text field.
 		_status.visible = Speech.uses_microphone()

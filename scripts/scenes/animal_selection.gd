@@ -17,7 +17,6 @@ const CONFIRM_TURN_MIN := 0.10
 const CONFIRM_TURN_MAX := 0.38 ## Formerly as long as 0.9s while the reaction had begun.
 const DRAG_TURN_SPEED := 0.012
 const UI_EXIT_TIME := 0.72
-const ASSIST_AFTER_EFFORTFUL_FAILURES := 3
 
 const PLATFORM_POS := Vector3(-0.5, 0.0, 0.6)
 
@@ -1122,7 +1121,9 @@ func _evaluate(result: Dictionary) -> void:
 			_effortful_failures += 1
 			Diagnostics.note("[speech]", "session=%d attempt_count=%d" % [
 				session_id, _effortful_failures])
-			if _effortful_failures >= ASSIST_AFTER_EFFORTFUL_FAILURES:
+			# The teacher's mode owns this number, not the scene: a stricter recogniser is
+			# harder to satisfy, so it owes the student more tries first.
+			if _effortful_failures >= Settings.assist_after_failures():
 				Diagnostics.note("[speech]", "success_type=assisted_third_attempt attempt_count=%d"
 					% _effortful_failures)
 				_accept(true)
