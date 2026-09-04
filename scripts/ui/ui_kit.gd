@@ -213,6 +213,37 @@ static func icon_button(icon: String, size := 48) -> Button:
 	return b
 
 
+const GEAR_ICON := preload("res://ui/gear.svg")
+
+
+## The Teacher Settings gear, identical on every screen that offers one. Callers position
+## it and connect `pressed`; everything about how it looks lives here so the screens cannot
+## drift apart.
+##
+## A drawn gear, not the "⚙" character: the export bundles only Godot's default font, which
+## has no U+2699, and the web build has no system font to fall back on the way the desktop
+## editor silently did - so the glyph arrived as a tofu box of hex digits. Same trap the
+## pair separator hit; see the note in word_lab.gd.
+##
+## The gear alone, with no plate behind it. icon_button's panel-coloured box is right for
+## the back arrow, which sits on flat 2D chrome, but this one sits over a lit 3D stage and
+## read as a floating tile there. Feedback moves onto the icon itself so it still answers a
+## hover and a press without a box to draw them on.
+static func gear_button(size := 70) -> Button:
+	var gear := icon_button("", size)
+	gear.name = "SettingsGear"
+	gear.icon = GEAR_ICON
+	gear.expand_icon = true
+	for state in ["normal", "hover", "pressed", "disabled"]:
+		gear.add_theme_stylebox_override(state, StyleBoxEmpty.new())
+	gear.add_theme_stylebox_override("focus", stylebox(Color.TRANSPARENT, 12, 3, GOLD, 2))
+	gear.tooltip_text = "先生用設定"
+	gear.add_theme_color_override("icon_normal_color", TEXT)
+	gear.add_theme_color_override("icon_hover_color", ACCENT)
+	gear.add_theme_color_override("icon_pressed_color", ACCENT)
+	return gear
+
+
 ## Full-screen background wash used by the 2D screens.
 static func backdrop() -> ColorRect:
 	var rect := ColorRect.new()

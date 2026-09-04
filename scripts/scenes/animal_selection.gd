@@ -38,7 +38,6 @@ const PROGRESS_FONT := UiKit.SMALL * 3 ## Readable from the back of a classroom.
 const HUD_BUTTON := 78 ## 50% taller than the former 52px back control.
 const HUD_BACK_WIDTH := 138 ## Room for the chevron and the new Back label.
 const GEAR_BUTTON_SIZE := 70 ## 33% smaller than the former 104px settings gear.
-const GEAR_ICON := preload("res://ui/gear.svg")
 const HUD_GAP := 24 ## Visible gap between the HUD row and the panel below it.
 ## Top edge for a HUD_BUTTON-sized control so its centre line matches the gear's. This is
 ## derived rather than typed so the two stay aligned when either control changes size.
@@ -548,26 +547,7 @@ func _clear_overlays() -> void:
 ## so moving only one edge leaves a rect narrower than the button, which renders clipped
 ## off the screen edge.
 func _add_gear_button() -> void:
-	# A drawn gear, not the "⚙" character: the export bundles only Godot's default font,
-	# which has no U+2699, and the web build has no system font to fall back on the way
-	# the desktop editor silently did - so the glyph arrived as a tofu box of hex digits.
-	# Same trap the pair separator hit; see the note in word_lab.gd.
-	var gear := UiKit.icon_button("", GEAR_BUTTON_SIZE)
-	gear.name = "SettingsGear"
-	gear.icon = GEAR_ICON
-	gear.expand_icon = true
-	# The gear alone, with no plate behind it. icon_button's panel-coloured box is right for
-	# the back arrow, which sits on flat 2D chrome, but this one sits over the lit 3D stage
-	# and read as a floating tile there. Feedback moves onto the icon itself so it still
-	# answers a hover and a press without a box to draw them on.
-	for state in ["normal", "hover", "pressed", "disabled"]:
-		gear.add_theme_stylebox_override(state, StyleBoxEmpty.new())
-	gear.add_theme_stylebox_override("focus",
-		UiKit.stylebox(Color.TRANSPARENT, 12, 3, UiKit.GOLD, 2))
-	gear.tooltip_text = "先生用設定"
-	gear.add_theme_color_override("icon_normal_color", UiKit.TEXT)
-	gear.add_theme_color_override("icon_hover_color", UiKit.ACCENT)
-	gear.add_theme_color_override("icon_pressed_color", UiKit.ACCENT)
+	var gear := UiKit.gear_button(GEAR_BUTTON_SIZE)
 	gear.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
 	gear.offset_right = PANEL_RIGHT
 	gear.offset_left = PANEL_RIGHT - GEAR_BUTTON_SIZE

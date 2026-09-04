@@ -1,5 +1,7 @@
 extends Node3D
 
+const GEAR_SIZE := 52.0 ## Matches the height of the "make another" button beside it.
+const GEAR_GAP := 16.0
 const INFO_CLOSE_SIZE := 52.0
 const INFO_NAME_GAP := 16.0
 const INFO_MIN_HEAD_WIDTH := 220.0
@@ -178,6 +180,24 @@ func _build_ui() -> void:
 		Audio.play("select")
 		Game.set_phase(Game.Phase.ANIMAL_SELECTION))
 	root.add_child(again)
+
+	# Sized to the band "もう一度つくる" already occupies rather than to the picker's larger
+	# gear: matching its neighbour here reads better than matching a button on another
+	# screen. Settings opens over the zoo now, so leaving it costs the teacher nothing.
+	var gear := UiKit.gear_button(GEAR_SIZE)
+	# Repainted for this screen only. The shared gear is near-white because every other
+	# screen that carries one sits on a dark stage; the zoo is a pale sky, where the same
+	# icon washes out beside a title already darkened for exactly that reason.
+	gear.add_theme_color_override("icon_normal_color", TITLE_COLOR)
+	gear.add_theme_color_override("icon_hover_color", UiKit.ACCENT.darkened(0.45))
+	gear.add_theme_color_override("icon_pressed_color", UiKit.ACCENT.darkened(0.45))
+	gear.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
+	gear.offset_right = -208 - GEAR_GAP
+	gear.offset_left = gear.offset_right - GEAR_SIZE
+	gear.offset_top = 26
+	gear.offset_bottom = 26 + GEAR_SIZE
+	gear.pressed.connect(func() -> void: Game.open_settings())
+	root.add_child(gear)
 
 	_info = UiKit.panel(Color(0.05, 0.09, 0.15, 0.95), 16, 2, UiKit.GOLD)
 	_info.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
