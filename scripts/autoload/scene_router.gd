@@ -28,8 +28,9 @@ func _ready() -> void:
 		Game.Phase.TRANSFORMATION: "res://scenes/CreatureLab.tscn",
 		Game.Phase.NAMING: "res://scenes/NamingScreen.tscn",
 		Game.Phase.ZOO: "res://scenes/Zoo.tscn",
-		Game.Phase.TEACHER_SETTINGS: "res://scenes/TeacherSettings.tscn",
 	}
+	# TeacherSettings is deliberately absent: it is mounted over the live scene by Main,
+	# not routed to. Routing it freed whatever the student was in the middle of.
 
 
 func attach(container: Node, fade: ColorRect) -> void:

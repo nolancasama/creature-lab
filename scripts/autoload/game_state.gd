@@ -9,21 +9,24 @@ signal creature_updated(state: CreatureState)
 signal zoo_changed
 ## Debug tools talk to whichever scene is listening rather than reaching into it.
 signal debug_action(action: String)
+## Teacher Settings is an overlay, not a phase - see open_settings(). Main listens and
+## mounts it above the live scene; nothing about `phase` changes while it is up.
+signal settings_opened
+signal settings_closed
 
-enum Phase { TITLE, ANIMAL_SELECTION, CREATURE_LAB, TRANSFORMATION, NAMING, ZOO, TEACHER_SETTINGS }
+enum Phase { TITLE, ANIMAL_SELECTION, CREATURE_LAB, TRANSFORMATION, NAMING, ZOO }
 
 const ZOO_CAPACITY := 30
 
 ## Legal transitions. Anything else is a bug and gets rejected loudly rather than
 ## quietly leaving the game in an impossible state.
 const ALLOWED := {
-	Phase.TITLE: [Phase.ANIMAL_SELECTION, Phase.ZOO, Phase.TEACHER_SETTINGS],
-	Phase.ANIMAL_SELECTION: [Phase.CREATURE_LAB, Phase.TITLE, Phase.ZOO, Phase.TEACHER_SETTINGS],
-	Phase.CREATURE_LAB: [Phase.TRANSFORMATION, Phase.ANIMAL_SELECTION, Phase.TITLE, Phase.TEACHER_SETTINGS],
+	Phase.TITLE: [Phase.ANIMAL_SELECTION, Phase.ZOO],
+	Phase.ANIMAL_SELECTION: [Phase.CREATURE_LAB, Phase.TITLE, Phase.ZOO],
+	Phase.CREATURE_LAB: [Phase.TRANSFORMATION, Phase.ANIMAL_SELECTION, Phase.TITLE],
 	Phase.TRANSFORMATION: [Phase.NAMING, Phase.TITLE],
 	Phase.NAMING: [Phase.ZOO, Phase.TITLE, Phase.ANIMAL_SELECTION],
-	Phase.ZOO: [Phase.ANIMAL_SELECTION, Phase.TITLE, Phase.TEACHER_SETTINGS],
-	Phase.TEACHER_SETTINGS: [Phase.TITLE, Phase.ANIMAL_SELECTION, Phase.ZOO],
+	Phase.ZOO: [Phase.ANIMAL_SELECTION, Phase.TITLE],
 }
 
 var phase: Phase = Phase.TITLE
@@ -33,7 +36,9 @@ var zoo: Array[CreatureState] = []
 ## its final subject-relative camera and animal angle; the chamber consumes it once.
 var _transformation_handoff := {}
 
-var _return_phase: Phase = Phase.TITLE
+## True while the Teacher Settings overlay is up. Not a phase: the screen underneath is
+## still the current one and is still alive, only frozen.
+var settings_open := false
 
 
 func _ready() -> void:
@@ -53,14 +58,30 @@ func set_phase(next: Phase) -> bool:
 	return true
 
 
-## Teacher Settings can be opened from several places; remember where to go back to.
+## Teacher Settings opens OVER the running screen instead of replacing it.
+##
+## It used to be a phase of its own, which meant the router freed the live scene to show
+## it and built a fresh one on the way back. Everything the screen was in the middle of -
+## which of the two speech passes was running, how far through it, the pending sentence,
+## the colour sub-step - lives in that instance and died with it, and the rebuilt scene
+## could only ever resume into the Before pass. A teacher who changed a setting during the
+## present-tense pass sent the student back to adjective recording.
+##
+## The alternative was copying that transient state onto Game so it could be restored,
+## which is a growing pile of fields describing UI that never stopped existing. Not
+## destroying the scene is cheaper and cannot drift out of date.
 func open_settings() -> void:
-	_return_phase = phase
-	set_phase(Phase.TEACHER_SETTINGS)
+	if settings_open:
+		return
+	settings_open = true
+	settings_opened.emit()
 
 
 func close_settings() -> void:
-	set_phase(_return_phase if ALLOWED[Phase.TEACHER_SETTINGS].has(_return_phase) else Phase.TITLE)
+	if not settings_open:
+		return
+	settings_open = false
+	settings_closed.emit()
 
 
 # --- Creature lifecycle ------------------------------------------------------

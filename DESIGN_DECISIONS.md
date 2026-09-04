@@ -1,5 +1,31 @@
 # Design decisions
 
+## Teacher Settings
+
+- Settings is an overlay mounted above the live scene by `Main`, not a routed phase.
+  `Phase.TEACHER_SETTINGS` is gone. Routing it freed the running scene and built a fresh
+  one on return, and a fresh Animal Selection only knows how to resume into the Before
+  pass - so adjusting a setting during the present-tense pass dropped the student back
+  into adjective recording. Restoring that state onto `Game` instead would have meant a
+  growing set of fields describing UI that never needed to stop existing.
+- The scene underneath is frozen with `PROCESS_MODE_DISABLED` rather than covered by an
+  input blocker: one move stops processing, input, timers and tweens across the subtree,
+  so the turntable stops rather than spinning behind an opaque panel. Autoloads are
+  untouched, so audio and saving keep working. Any live microphone session is cancelled on
+  open, because `_exit_tree()` used to do that and nothing leaves the tree now.
+- `--settingstest` asserts the scene's *instance ID* is unchanged across a settings visit,
+  not merely that the mode looks right afterwards - a rebuild-and-restore implementation
+  would satisfy a mode check and still be the architecture this replaced.
+
+## Loading screen
+
+- The splash waits on `ShaderWarmup.finished`, not a duration. The compile cost is
+  whatever a given driver makes it and a classroom's Chromebooks disagree; `MINIMUM` only
+  stops it flashing and `MAXIMUM` only stops it looking hung. Dots rather than a bar: the
+  per-item compile cost ranges from 17ms to 3.2s, so a determinate bar would visibly
+  stall, and a stalled bar reads as broken. The stalls block the main thread, so any
+  indicator stutters - dots are the one whose stutter still reads as working.
+
 ## Stage ground
 
 - `StageKit.GROUND_RADIUS` / `GROUND_COLOR` are shared constants, not per-scene literals.

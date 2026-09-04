@@ -27,6 +27,8 @@ extends RefCounted
 ##   godot --path . -- --shot=say          the recording screen with a card chosen
 ##   godot --path . -- --backtest          abandon a half-finished round, then restart it
 ##   godot --path . -- --splittest         the present-tense pass, end to end
+##   godot --path . -- --settingstest      Teacher Settings opened mid-lesson returns to
+##                                         the same live screen, on the same sentence
 ##   godot --path . -- --youngflowtest     SHORT + YOUNG through transformation/comparison
 ##   godot --path . -- --tallflowtest      tiger SHORT -> TALL machine-clearance regression
 ##   godot --path . -- --shot=present      the centred present-tense panel
@@ -55,7 +57,7 @@ static func is_requested() -> bool:
 	for arg in OS.get_cmdline_user_args():
 		var text := str(arg)
 		if text in ["--selftest", "--speechtest", "--scaffoldtest", "--autoplay", "--backtest",
-				"--splittest", "--youngflowtest",
+				"--splittest", "--settingstest", "--youngflowtest",
 				"--tallflowtest", "--bones", "--gaittest", "--reverttest", "--stancetest",
 				"--extractanims", "--runtest", "--stridecheck"] \
 				or text.begins_with("--shot=") or text.begins_with("--phase=") or text.begins_with("--look="):
@@ -98,6 +100,8 @@ static func run_if_requested(main: Node) -> void:
 		_backtest(main)
 	elif args.has("--splittest"):
 		_splittest(main)
+	elif args.has("--settingstest"):
+		_settingstest(main)
 	elif args.has("--youngflowtest"):
 		_youngflowtest(main)
 	elif args.has("--tallflowtest"):
@@ -364,6 +368,108 @@ static func _splittest(main: Node) -> void:
 			% [past_slots, present_slots])
 		ok = false
 	print("[splittest] PASS" if ok else "[splittest] FAIL: expected NAMING")
+	tree.quit(0 if ok else 1)
+
+
+## Opening Teacher Settings mid-lesson must not cost the student their place.
+##
+## It used to. Settings was a routed phase, so the router freed the live Animal Selection
+## scene to show it and built a fresh one on the way back - and a fresh one only knows how
+## to resume into the Before pass. A teacher who adjusted a setting during the present
+## tense pass sent the student back to adjective recording, mid-sentence.
+##
+## The assertion that matters is the instance ID: not "a screen in the right mode
+## afterwards" but the SAME screen, never having been torn down. Anything that rebuilt and
+## restored state would pass a mode check and still be the architecture this replaced.
+static func _settingstest(main: Node) -> void:
+	var tree := main.get_tree()
+	_goto("lab")
+	await tree.create_timer(1.4).timeout
+
+	var recorded: bool = await _drive_past_pass(tree, "settingstest")
+	if not recorded:
+		tree.quit(1)
+		return
+
+	await tree.create_timer(1.0).timeout
+	# One present sentence in, so the reopened screen has a position to lose: partway
+	# through the second pass rather than at the start of it.
+	Speech.submit_typed(GrammarValidator.expected_present(str(SPLIT_PICKS[0][2])))
+	await tree.create_timer(2.4).timeout
+
+	var scene := Router.current_scene
+	if scene == null:
+		printerr("[settingstest] FAIL: no scene before opening settings")
+		tree.quit(1)
+		return
+	var before_id := scene.get_instance_id()
+	var before_mode: int = scene.get("_mode")
+	var before_index: int = scene.get("_present_index")
+	var before_entries := Game.current.entries.size()
+	print("[settingstest] present pass at mode=%d index=%d, %d sentences recorded"
+		% [before_mode, before_index, before_entries])
+
+	Game.open_settings()
+	await tree.create_timer(0.8).timeout
+
+	if Router.current_scene == null or Router.current_scene.get_instance_id() != before_id:
+		printerr("[settingstest] FAIL: opening settings replaced the gameplay scene")
+		tree.quit(1)
+		return
+	if not Game.settings_open:
+		printerr("[settingstest] FAIL: settings did not report itself open")
+		tree.quit(1)
+		return
+	# Frozen, not merely covered: a turntable still spinning behind the panel means input
+	# and timers are live behind it too.
+	if Router.current_scene.process_mode != Node.PROCESS_MODE_DISABLED:
+		printerr("[settingstest] FAIL: gameplay scene still processing under settings")
+		tree.quit(1)
+		return
+	print("[settingstest] gameplay scene survived and is frozen")
+
+	Game.close_settings()
+	await tree.create_timer(0.8).timeout
+
+	var after := Router.current_scene
+	var ok := true
+	if after == null or after.get_instance_id() != before_id:
+		printerr("[settingstest] FAIL: closing settings rebuilt the gameplay scene")
+		ok = false
+	else:
+		if int(after.get("_mode")) != before_mode:
+			printerr("[settingstest] FAIL: mode %d on return, expected %d"
+				% [int(after.get("_mode")), before_mode])
+			ok = false
+		if int(after.get("_present_index")) != before_index:
+			printerr("[settingstest] FAIL: present index %d on return, expected %d"
+				% [int(after.get("_present_index")), before_index])
+			ok = false
+		if after.process_mode == Node.PROCESS_MODE_DISABLED:
+			printerr("[settingstest] FAIL: gameplay scene left frozen after closing settings")
+			ok = false
+	if Game.current == null or Game.current.entries.size() != before_entries:
+		printerr("[settingstest] FAIL: recorded sentences changed across settings")
+		ok = false
+
+	# Repeated visits must not stack overlays or leave one behind - the failure a teacher
+	# would hit is a settings panel that will not close because two are mounted.
+	for i in 3:
+		Game.open_settings()
+		await tree.create_timer(0.35).timeout
+		Game.close_settings()
+		await tree.create_timer(0.35).timeout
+	var layer := main.get_node_or_null("SettingsLayer")
+	var left_mounted := layer.get_child_count() if layer != null else -1
+	if left_mounted != 0:
+		printerr("[settingstest] FAIL: %d settings overlay(s) still mounted after closing"
+			% left_mounted)
+		ok = false
+	if Router.current_scene == null or Router.current_scene.get_instance_id() != before_id:
+		printerr("[settingstest] FAIL: repeated settings visits replaced the scene")
+		ok = false
+
+	print("[settingstest] PASS" if ok else "[settingstest] FAIL")
 	tree.quit(0 if ok else 1)
 
 

@@ -8,6 +8,10 @@ extends Control
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	# This is mounted over the live gameplay screen rather than replacing it, so it has to
+	# swallow anything aimed at what is still underneath. Main also freezes that scene;
+	# this is the half that stops a stray tap landing on a button behind the backdrop.
+	mouse_filter = Control.MOUSE_FILTER_STOP
 	add_child(UiKit.backdrop())
 	_build()
 
