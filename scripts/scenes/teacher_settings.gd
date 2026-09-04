@@ -4,6 +4,23 @@ extends Control
 ## The three dials at the top are what replaced the spec's undefined "Easy Mode": how
 ## much choice the student gets, how tolerant recognition is, and how much of the
 ## sentence is printed for them.
+##
+## Target Language lives behind a tap gesture on the title. It is the one setting that
+## changes what a student is asked to speak, so a child who wanders in here and flips it
+## has changed the lesson rather than a preference. Five taps is not security and is not
+## meant to be - it is a latch that a curious seven-year-old will not find by accident,
+## and no teacher has to remember a password to open.
+
+const ADVANCED_TAPS := 5
+## Measured between taps rather than as a total budget. A whole-gesture timer punishes the
+## teacher who starts tapping, gets interrupted by a child, and then has to wait for an
+## invisible countdown to lapse before the gesture will take; a per-gap reset just lets
+## them begin again.
+const ADVANCED_TAP_GAP_MSEC := 1500
+
+var _advanced_host: VBoxContainer = null
+var _advanced_taps := 0
+var _last_tap_msec := 0
 
 
 func _ready() -> void:
@@ -14,6 +31,7 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	add_child(UiKit.backdrop())
 	_build()
+
 
 
 func _build() -> void:
@@ -27,7 +45,13 @@ func _build() -> void:
 
 	var header := UiKit.hbox(12)
 	frame.add_child(header)
-	header.add_child(UiKit.label("先生用設定", UiKit.H2, UiKit.ACCENT))
+	var title := UiKit.label("先生用設定", UiKit.H2, UiKit.ACCENT)
+	# A Label ignores the mouse in Godot by default, so it has to be told to accept one.
+	# Nothing else about it changes: no button styling, no hover, no pointer cursor and no
+	# tooltip, because a title that advertises itself as tappable is a title a student taps.
+	title.mouse_filter = Control.MOUSE_FILTER_STOP
+	title.gui_input.connect(_on_title_input)
+	header.add_child(title)
 	header.add_child(UiKit.expander())
 	var back := UiKit.button("完了", UiKit.H3, true)
 	UiKit.style_navigation(back)
@@ -46,13 +70,10 @@ func _build() -> void:
 	column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(column)
 
-	column.add_child(_choice_section(
-		"学習言語 / Target Language", "学習者が見て、話す言語をえらびます。",
-		# にほんご, not 日本語: 日 and 本 are not in the bundled font subset, and the same kana
-		# constraint already governs every student-facing word in the pack.
-		[["English", Settings.TARGET_ENGLISH], ["にほんご", Settings.TARGET_JAPANESE]],
-		func() -> String: return Settings.target_language_choice(),
-		func(value: String) -> void: Settings.set_target_language(value)))
+	# Empty until the gesture fills it, and first in the column so the revealed section lands
+	# directly under the title the teacher just tapped - no hunting, no scrolling.
+	_advanced_host = UiKit.vbox(14)
+	column.add_child(_advanced_host)
 
 	column.add_child(_choice_section(
 		"単語をえらぶ人", "元のデザインの「かんたんモード」です。",
@@ -88,6 +109,40 @@ func _build() -> void:
 	column.add_child(_toggles_section())
 	column.add_child(_audio_section())
 	column.add_child(_zoo_section())
+
+
+## Five deliberate taps on the title. Counted here rather than on a button because the
+## control must not look like one, and the count lives on this node, which Main frees when
+## settings closes - so reopening always starts hidden again with nothing to reset.
+func _on_title_input(event: InputEvent) -> void:
+	if not (event is InputEventMouseButton):
+		return
+	var button := event as InputEventMouseButton
+	if not button.pressed or button.button_index != MOUSE_BUTTON_LEFT:
+		return
+	if _advanced_host == null or _advanced_host.get_child_count() > 0:
+		return # Already open; further taps do nothing.
+	var now := Time.get_ticks_msec()
+	_advanced_taps = _advanced_taps + 1 if now - _last_tap_msec <= ADVANCED_TAP_GAP_MSEC else 1
+	_last_tap_msec = now
+	if _advanced_taps >= ADVANCED_TAPS:
+		_reveal_advanced()
+
+
+func _reveal_advanced() -> void:
+	Audio.play("select")
+	var section := _choice_section(
+		# しょうさい, not 詳細: neither kanji is in the bundled font subset, the same reason
+		# 日本語 is written にほんご two lines below.
+		"しょうさい設定 / Advanced", "学習者が見て、話す言語をえらびます。",
+		# にほんご, not 日本語: 日 and 本 are not in the bundled font subset, and the same kana
+		# constraint already governs every student-facing word in the pack.
+		[["English", Settings.TARGET_ENGLISH], ["にほんご", Settings.TARGET_JAPANESE]],
+		func() -> String: return Settings.target_language_choice(),
+		func(value: String) -> void: Settings.set_target_language(value))
+	_advanced_host.add_child(section)
+	section.modulate.a = 0.0
+	create_tween().tween_property(section, "modulate:a", 1.0, 0.22)
 
 
 func _section(title: String, subtitle := "") -> VBoxContainer:
